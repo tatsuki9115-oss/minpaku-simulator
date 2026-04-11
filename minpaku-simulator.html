@@ -1367,11 +1367,11 @@ function updateCost(pi, type, ci, field, val) {
 }
 function addCostRow(pi, type) {
   getCostList(pi, type).push({ name: '', amount: 0 });
-  renderSettings();
+  renderSettingsKeepOpen();
 }
 function removeCostRow(pi, type, ci) {
   getCostList(pi, type).splice(ci, 1);
-  renderSettings();
+  renderSettingsKeepOpen();
 }
 function updateCleaningStaff(pi, si, field, val) {
   if (!properties[pi].cleaningStaff) properties[pi].cleaningStaff = [];
@@ -1380,11 +1380,11 @@ function updateCleaningStaff(pi, si, field, val) {
 function addCleaningStaff(pi) {
   if (!properties[pi].cleaningStaff) properties[pi].cleaningStaff = [];
   properties[pi].cleaningStaff.push({ name: '', phone: '' });
-  renderSettings();
+  renderSettingsKeepOpen();
 }
 function removeCleaningStaff(pi, si) {
   properties[pi].cleaningStaff.splice(si, 1);
-  renderSettings();
+  renderSettingsKeepOpen();
 }
 
 function addProperty() {
@@ -1407,6 +1407,22 @@ function saveSettings() {
 }
 function escHtml(str) {
   return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderSettingsKeepOpen() {
+  // 現在開いているアコーディオンのIDを保存
+  const openIds = properties.map(p => p.id).filter(id => {
+    const body = document.getElementById('prop-body-' + id);
+    return body && body.style.display !== 'none';
+  });
+  renderSettings();
+  // 同じアコーディオンを再び開く
+  openIds.forEach(id => {
+    const body = document.getElementById('prop-body-' + id);
+    const chevron = document.getElementById('prop-chevron-' + id);
+    if (body) body.style.display = 'block';
+    if (chevron) chevron.style.transform = 'rotate(180deg)';
+  });
 }
 
 function togglePropertyAccordion(propId) {
