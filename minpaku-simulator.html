@@ -329,6 +329,7 @@
 <div class="tabs">
   <button class="tab active" onclick="showTab('sim')">試算</button>
   <button class="tab" onclick="showTab('monthly')">月別</button>
+  <button class="tab" style="flex:0.7" onclick="showTab('calendar')">📅</button>
   <button class="tab" onclick="showTab('annual')">実績</button>
   <button class="tab" style="flex:0.5" onclick="showTab('settings')">⚙️</button>
 </div>
@@ -388,12 +389,15 @@
       <input type="month" id="month-input" onchange="renderMonthly()">
     </div>
   </div>
-  <div id="monthly-calendar"></div>
   <div id="monthly-bookings"></div>
   <button class="btn-add-booking" onclick="addMonthlyBooking()">＋ 予約を追加</button>
   <div id="monthly-summary"></div>
 </div>
 
+<!-- カレンダー -->
+<div class="page" id="page-calendar">
+  <div id="calendar-content"></div>
+</div>
 
 <!-- 年間管理 -->
 <div class="page" id="page-annual">
@@ -483,6 +487,9 @@ let currentAnnualYear = new Date().getFullYear();
 let pendingListings = [];
 let annualPropFilter = 'all';
 let monthlyPropFilter = 'all';
+let calendarPropFilter = 'all';
+let calendarYear = new Date().getFullYear();
+let calendarMonth = new Date().getMonth() + 1;
 let bookingChecks = loadBookingChecks();
 
 // ==================== Firebase ====================
@@ -673,7 +680,7 @@ function initFirebaseSync() {
 
 // ==================== タブ ====================
 function showTab(tab) {
-  const tabs = ['sim','monthly','annual','settings'];
+  const tabs = ['sim','monthly','calendar','annual','settings'];
   document.querySelectorAll('.tab').forEach((t, i) => {
     t.classList.toggle('active', tabs[i] === tab);
   });
@@ -682,6 +689,7 @@ function showTab(tab) {
   });
   if (tab === 'sim') { renderSimPropertySelect(); renderHistory(); }
   if (tab === 'monthly') { initMonthlyTab(); }
+  if (tab === 'calendar') { initCalendarTab(); }
   if (tab === 'annual') { initAnnualTab(); }
   if (tab === 'settings') renderSettings();
 }
@@ -1124,13 +1132,104 @@ function renderMonthly() {
     }
   }
 
-  // カレンダービューを描画
-  const calEl = document.getElementById('monthly-calendar');
-  if (calEl) calEl.innerHTML = renderCalendar(year, month);
+}
+
+// ==================== カレンダータブ ====================
+function initCalendarTab() {
+  renderCalendarTab();
+}
+
+function calendarMove(delta) {
+  calendarMonth += delta;
+  if (calendarMonth > 12) { calendarMonth = 1; calendarYear++; }
+  if (calendarMonth < 1) { calendarMonth = 12; calendarYear--; }
+  renderCalendarTab();
+}
+
+function renderCalendarTab() {
+  const fmt = n => n.toLocaleString('ja-JP');
+  const fmtS = n => { const a = Math.abs(n); return (a >= 10000 ? (n/10000).toFixed(1)+'万' : n.toLocaleString('ja-JP')) + '円'; };
+  const y = calendarYear, m = calendarMonth;
+  const daysInMonth = new Date(y, m, 0).getDate();
+
+  // この月の予約（フィルター適用）
+  const monthBooks = airbnbBookings.filter(b => {
+    if (!b.checkin) return false;
+    if (calendarPropFilter !== 'all' && getBookingPropId(b) !== parseInt(calendarPropFilter)) return false;
+    const coStr = getCheckout(b);
+    const cin = parseDateStr(b.checkin), cout = parseDateStr(coStr);
+    return cin < new Date(y, m, 1) && cout > new Date(y, m - 1, 1);
+  });
+
+  // チェック済み件数
+  const formDoneCount = monthBooks.filter(b => b.code && bookingChecks[b.code]?.formDone).length;
+  const cleanDoneCount = monthBooks.filter(b => b.code && bookingChecks[b.code]?.cleaningDone).length;
+  const totalBookings = monthBooks.length;
+
+  // 物件フィルター
+  const filterHtml = `<div class="prop-filter">
+    <button class="prop-filter-btn${calendarPropFilter==='all'?' active':''}" onclick="calendarPropFilter='all';renderCalendarTab()">全物件</button>
+    ${properties.map(p => `<button class="prop-filter-btn${calendarPropFilter===String(p.id)?' active':''}" onclick="calendarPropFilter='${p.id}';renderCalendarTab()">${p.name}</button>`).join('')}
+  </div>`;
+
+  // チェック状況サマリー
+  const checkSummary = totalBookings > 0 ? `
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <div style="flex:1;background:white;border-radius:12px;padding:10px;box-shadow:0 1px 6px rgba(0,0,0,.06);text-align:center">
+        <div style="font-size:10px;color:#aaa;font-weight:700;margin-bottom:4px">📋 フォーム確認</div>
+        <div style="font-size:18px;font-weight:900;color:${formDoneCount===totalBookings?'#2e7d32':'#e65100'}">${formDoneCount}/${totalBookings}</div>
+      </div>
+      <div style="flex:1;background:white;border-radius:12px;padding:10px;box-shadow:0 1px 6px rgba(0,0,0,.06);text-align:center">
+        <div style="font-size:10px;color:#aaa;font-weight:700;margin-bottom:4px">🧹 清掃手配</div>
+        <div style="font-size:18px;font-weight:900;color:${cleanDoneCount===totalBookings?'#2e7d32':'#e65100'}">${cleanDoneCount}/${totalBookings}</div>
+      </div>
+    </div>` : '';
+
+  // 予約リスト（チェック状況付き）
+  const sortedBooks = [...monthBooks].sort((a, b) => {
+    const ad = parseDateStr(a.checkin), bd = parseDateStr(b.checkin);
+    return (ad||0) - (bd||0);
+  });
+  const bookListHtml = sortedBooks.length === 0 ? '' : `
+    <div class="card" style="padding:0;overflow:hidden;margin-top:12px">
+      ${sortedBooks.map(b => {
+        const prop = properties.find(p => p.id === getBookingPropId(b));
+        const chk = b.code ? (bookingChecks[b.code] || {}) : {};
+        const coStr = getCheckout(b);
+        const fmtD = s => { if (!s) return '?'; const p = s.split('/'); return `${parseInt(p[1])}/${parseInt(p[2])}`; };
+        return `<div style="padding:10px 14px;border-bottom:1px solid #f5f5f5;display:flex;align-items:center;gap:10px">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:700;color:#2c5f8a">${prop ? prop.name : '⚠️ 未設定'}</div>
+            <div style="font-size:13px;font-weight:700;color:#1a1a2e;margin:2px 0">${escHtml(b.guestName||'ゲスト')}</div>
+            <div style="font-size:10px;color:#aaa">${fmtD(b.checkin)} → ${fmtD(coStr)}（${b.nights}泊）</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;align-items:flex-end">
+            <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:${chk.formDone?'#e8f5e9':'#f5f5f5'};color:${chk.formDone?'#2e7d32':'#aaa'}">📋 ${chk.formDone?'済':'未'}</span>
+            <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:${chk.cleaningDone?'#e0f7fa':'#f5f5f5'};color:${chk.cleaningDone?'#00796b':'#aaa'}">🧹 ${chk.cleaningDone?'済':'未'}${chk.cleaningStaffName?' · '+escHtml(chk.cleaningStaffName):''}</span>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+
+  document.getElementById('calendar-content').innerHTML = `
+    <div class="card" style="padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between">
+      <button onclick="calendarMove(-1)" style="background:none;border:none;font-size:22px;color:#2c5f8a;cursor:pointer;padding:4px 10px;border-radius:8px;line-height:1">‹</button>
+      <div style="text-align:center">
+        <div style="font-size:17px;font-weight:800;color:#1a1a2e">${y}年${m}月</div>
+        <div style="font-size:10px;color:#aaa;margin-top:1px">${totalBookings}件の予約</div>
+      </div>
+      <button onclick="calendarMove(1)" style="background:none;border:none;font-size:22px;color:#2c5f8a;cursor:pointer;padding:4px 10px;border-radius:8px;line-height:1">›</button>
+    </div>
+    ${filterHtml}
+    ${checkSummary}
+    ${renderCalendar(y, m)}
+    ${bookListHtml}
+  `;
 }
 
 // ==================== カレンダービュー (Airbnb風バー表示) ====================
-function renderCalendar(year, month) {
+function renderCalendar(year, month, propFilter) {
+  const activeFilter = propFilter !== undefined ? propFilter : (document.getElementById('page-calendar').classList.contains('active') ? calendarPropFilter : monthlyPropFilter);
   const daysInMonth = new Date(year, month, 0).getDate();
   const firstDay = new Date(year, month - 1, 1).getDay(); // 0=Sun
   const today = new Date();
@@ -1141,7 +1240,7 @@ function renderCalendar(year, month) {
   const monthBookings = airbnbBookings.filter(b => {
     if (!b.checkin) return false;
     // 物件フィルター連動
-    if (monthlyPropFilter !== 'all' && getBookingPropId(b) !== parseInt(monthlyPropFilter)) return false;
+    if (activeFilter !== 'all' && getBookingPropId(b) !== parseInt(activeFilter)) return false;
     const coStr = getCheckout(b);
     const cinParts = b.checkin.split('/').map(Number);
     const coutParts = coStr.split('/').map(Number);
@@ -2771,12 +2870,10 @@ function setCleaningStaff(code, staffName, year, month, day) {
 }
 
 function _refreshCalendarDots() {
-  const calEl = document.getElementById('monthly-calendar');
-  if (!calEl) return;
-  const inp = document.getElementById('month-input');
-  if (!inp || !inp.value) return;
-  const [cy, cm] = inp.value.split('-').map(Number);
-  calEl.innerHTML = renderCalendar(cy, cm);
+  // カレンダータブが開いていれば再描画
+  if (document.getElementById('page-calendar').classList.contains('active')) {
+    renderCalendarTab();
+  }
 }
 </script>
 </body>
