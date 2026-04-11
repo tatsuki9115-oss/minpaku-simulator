@@ -1198,11 +1198,6 @@ function renderCalendarTab() {
         const coStr = getCheckout(b);
         const fmtD = s => { if (!s) return '?'; const p = s.split('/'); return `${parseInt(p[1])}/${parseInt(p[2])}`; };
         const staffList = prop ? (prop.cleaningStaff || []) : [];
-        const staffSelectHtml = staffList.length > 0
-          ? `<select style="font-size:11px;border:1.5px solid #e8e8e8;border-radius:8px;padding:4px 6px;background:white;margin-top:4px;width:100%;color:#555" onchange="toggleCheckStaffFromList('${b.code}',this.value)">
-              <option value="">担当スタッフ</option>
-              ${staffList.map(s => `<option value="${escHtml(s.name)}" ${chk.cleaningStaffName===s.name?'selected':''}>${escHtml(s.name)}</option>`).join('')}
-            </select>` : '';
         return `<div style="padding:10px 14px;border-bottom:1px solid #f5f5f5">
           <div style="display:flex;align-items:center;gap:10px">
             <div style="flex:1;min-width:0">
@@ -1210,14 +1205,18 @@ function renderCalendarTab() {
               <div style="font-size:13px;font-weight:700;color:#1a1a2e;margin:2px 0">${escHtml(b.guestName||'ゲスト')}</div>
               <div style="font-size:10px;color:#aaa">${fmtD(b.checkin)} → ${fmtD(coStr)}（${b.nights}泊）</div>
             </div>
-            <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;align-items:flex-end">
-              ${b.code ? `
-              <button onclick="toggleCheckFromList('${b.code}','formDone')" style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:10px;border:none;cursor:pointer;background:${chk.formDone?'#e8f5e9':'#f0f0f0'};color:${chk.formDone?'#2e7d32':'#aaa'}">📋 ${chk.formDone?'✅ 済':'未確認'}</button>
-              <button onclick="toggleCheckFromList('${b.code}','cleaningDone')" style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:10px;border:none;cursor:pointer;background:${chk.cleaningDone?'#e0f7fa':'#f0f0f0'};color:${chk.cleaningDone?'#00796b':'#aaa'}">🧹 ${chk.cleaningDone?'✅ 済':'未手配'}</button>
-              ` : ''}
-            </div>
+            ${b.code ? `<button onclick="toggleCheckFromList('${b.code}','formDone')" style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:10px;border:none;cursor:pointer;flex-shrink:0;background:${chk.formDone?'#e8f5e9':'#f0f0f0'};color:${chk.formDone?'#2e7d32':'#aaa'}">📋 ${chk.formDone?'✅ 済':'未確認'}</button>` : ''}
           </div>
-          ${b.code && staffList.length > 0 ? `<div style="margin-top:6px">${staffSelectHtml}${chk.cleaningStaffName?'<div style="font-size:10px;color:#888;margin-top:3px">担当: <strong>'+escHtml(chk.cleaningStaffName)+'</strong></div>':''}</div>` : ''}
+          ${b.code ? `
+          <div style="display:flex;align-items:center;gap:6px;margin-top:7px">
+            ${staffList.length > 0
+              ? `<select style="flex:1;font-size:12px;border:1.5px solid ${chk.cleaningDone?'#80cbc4':'#e8e8e8'};border-radius:8px;padding:5px 8px;background:white;color:#555;min-width:0" onchange="toggleCheckStaffFromList('${b.code}',this.value)">
+                  <option value="">👤 担当スタッフを選択</option>
+                  ${staffList.map(s => `<option value="${escHtml(s.name)}" ${chk.cleaningStaffName===s.name?'selected':''}>${escHtml(s.name)}</option>`).join('')}
+                </select>`
+              : `<span style="flex:1;font-size:11px;color:#bbb">（設定タブでスタッフ登録可）</span>`}
+            <button onclick="toggleCheckFromList('${b.code}','cleaningDone')" style="font-size:11px;font-weight:700;padding:5px 12px;border-radius:10px;border:none;cursor:pointer;flex-shrink:0;background:${chk.cleaningDone?'#e0f7fa':'#f0f0f0'};color:${chk.cleaningDone?'#00796b':'#aaa'}">🧹 ${chk.cleaningDone?'✅ 済':'未手配'}</button>
+          </div>` : ''}
         </div>`;
       }).join('')}
     </div>`;
