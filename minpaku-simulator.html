@@ -1261,7 +1261,6 @@ function renderSettings() {
     <div class="property-item" id="prop-item-${p.id}">
       <div class="property-header" style="cursor:pointer" onclick="togglePropertyAccordion(${p.id})">
         <input class="property-name-input" type="text" value="${escHtml(p.name)}" placeholder="物件名" oninput="updateName(${pi},this.value)" onclick="event.stopPropagation()">
-        <button class="btn-delete" onclick="event.stopPropagation();deleteProperty(${pi})">削除</button>
         <span id="prop-chevron-${p.id}" style="color:rgba(255,255,255,.6);margin-left:8px;transition:transform .2s;flex-shrink:0">▼</span>
       </div>
       <div class="cost-section" id="prop-body-${p.id}" style="display:none">
@@ -1325,6 +1324,9 @@ function renderSettings() {
             <button class="btn-remove-row" onclick="removeCostRow(${pi},'initial',${ci})">×</button>
           </div>`).join('')}
         <button class="btn-add-row" onclick="addCostRow(${pi},'initial')">＋ 項目を追加</button>
+        <div style="margin-top:20px;padding-top:14px;border-top:1px solid #f0f0f0;text-align:center">
+          <button onclick="deleteProperty(${pi})" style="background:none;border:1.5px solid #ffcdd2;border-radius:8px;padding:8px 20px;color:#e53935;font-size:12px;font-weight:700;cursor:pointer">🗑 この物件を削除</button>
+        </div>
       </div>
     </div>`).join('');
 
