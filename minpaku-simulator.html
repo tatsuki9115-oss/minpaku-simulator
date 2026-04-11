@@ -305,6 +305,18 @@
   .scenario-label { font-size: 10px; font-weight: 700; margin-bottom: 4px; }
   .scenario-occ { font-size: 11px; color: #888; margin-bottom: 6px; }
   .scenario-profit { font-size: 16px; font-weight: 900; }
+
+  /* チェック管理 */
+  .check-section { margin-top: 10px; padding-top: 10px; border-top: 1px solid #eee; }
+  .check-section-title { font-size: 10px; font-weight: 700; color: #aaa; letter-spacing: .06em; margin-bottom: 8px; }
+  .check-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; gap: 8px; }
+  .check-label { font-size: 13px; color: #555; flex: 1; }
+  .check-btn { display: flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 20px; border: none; cursor: pointer; font-size: 12px; font-weight: 700; transition: all .15s; flex-shrink: 0; }
+  .check-btn.done { background: #e8f5e9; color: #2e7d32; }
+  .check-btn.pending { background: #f5f5f5; color: #aaa; }
+  .check-btn:active { opacity: 0.7; }
+  .staff-select { flex: 1; border: 1.5px solid #e8e8e8; border-radius: 8px; padding: 6px 8px; font-size: 12px; background: white; min-width: 0; }
+  .phone-link { display: flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: 20px; background: #e3f2fd; color: #1565c0; font-size: 11px; font-weight: 700; text-decoration: none; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -471,6 +483,7 @@ let currentAnnualYear = new Date().getFullYear();
 let pendingListings = [];
 let annualPropFilter = 'all';
 let monthlyPropFilter = 'all';
+let bookingChecks = loadBookingChecks();
 
 // ==================== Firebase ====================
 const firebaseConfig = {
@@ -493,6 +506,7 @@ const KEYS = {
   airbnb: 'minpaku_airbnb_v1',
   forecast: 'minpaku_forecast_v1',
   listingMap: 'minpaku_listing_map_v1',
+  bookingChecks: 'minpaku_booking_checks_v1',
 };
 
 function fbSave(key, data) {
@@ -511,6 +525,7 @@ function loadData() {
         if (!p.operationStart && def) p.operationStart = def.operationStart || '';
         if (!p.licenseType) p.licenseType = def ? (def.licenseType || 'minpaku') : 'minpaku';
         if (p.maxAnnualNights === undefined) p.maxAnnualNights = def ? (def.maxAnnualNights !== undefined ? def.maxAnnualNights : 180) : 180;
+        if (!p.cleaningStaff) p.cleaningStaff = [];
       });
       return loaded;
     }
@@ -564,6 +579,12 @@ function loadListingMap() {
 }
 function saveListingMap() { fbSave(KEYS.listingMap, listingMap); }
 
+function loadBookingChecks() {
+  try { const s = localStorage.getItem(KEYS.bookingChecks); if (s) return JSON.parse(s); } catch(e) {}
+  return {};
+}
+function saveBookingChecks() { fbSave(KEYS.bookingChecks, bookingChecks); }
+
 // ==================== Firebase リアルタイム同期 ====================
 let _fbSyncInit = false;
 function initFirebaseSync() {
@@ -580,6 +601,7 @@ function initFirebaseSync() {
       if (!p.operationStart && def) p.operationStart = def.operationStart || '';
       if (!p.licenseType) p.licenseType = def ? (def.licenseType || 'minpaku') : 'minpaku';
       if (p.maxAnnualNights === undefined) p.maxAnnualNights = def ? (def.maxAnnualNights !== undefined ? def.maxAnnualNights : 180) : 180;
+      if (!p.cleaningStaff) p.cleaningStaff = [];
     });
     try { localStorage.setItem(KEYS.properties, JSON.stringify(val)); } catch(e) {}
     properties = val;
@@ -626,6 +648,14 @@ function initFirebaseSync() {
     if (JSON.stringify(val) === JSON.stringify(monthlyData)) return;
     try { localStorage.setItem(KEYS.monthly, JSON.stringify(val)); } catch(e) {}
     monthlyData = val;
+  });
+
+  fbdb.ref(KEYS.bookingChecks).on('value', snap => {
+    const val = snap.val();
+    if (!val || typeof val !== 'object') return;
+    if (JSON.stringify(val) === JSON.stringify(bookingChecks)) return;
+    try { localStorage.setItem(KEYS.bookingChecks, JSON.stringify(val)); } catch(e) {}
+    bookingChecks = val;
   });
 
   // 既存 localStorage データを Firebase に移行（初回のみ）
@@ -1200,9 +1230,16 @@ function renderCalendar(year, month) {
         const perNight = b.nights > 0 ? Math.round(b.revenue / b.nights) : 0;
         const fmtY = n => n >= 10000 ? '¥'+(n/10000).toFixed(1)+'万' : '¥'+n.toLocaleString('ja-JP');
 
+        // チェック状態ドット
+        const chk = b.code ? (bookingChecks[b.code] || {}) : {};
+        const formDot = `<span style="width:6px;height:6px;border-radius:50%;background:${chk.formDone?'#a5d6a7':'rgba(255,255,255,.3)'};flex-shrink:0;display:inline-block" title="Googleフォーム${chk.formDone?'済':'未'}"></span>`;
+        const cleanDot = `<span style="width:6px;height:6px;border-radius:50%;background:${chk.cleaningDone?'#80cbc4':'rgba(255,255,255,.3)'};flex-shrink:0;display:inline-block" title="清掃手配${chk.cleaningDone?'済':'未'}"></span>`;
+        const statusDots = isStart && b.code ? `<span style="display:flex;gap:2px;flex-shrink:0">${formDot}${cleanDot}</span>` : '';
+
         html += '<div style="margin-left:'+leftPct+'%;width:'+widthPct+'%;box-sizing:border-box;background:'+bgColor+';border-radius:'+br+';height:24px;display:flex;align-items:center;gap:5px;padding:0 '+(isStart?'8px':'4px')+' 0 '+(isStart?'6px':'4px')+';cursor:pointer;overflow:hidden;white-space:nowrap" onclick="showDayDetail('+year+','+month+','+clipStart+')">'
           + (isStart ? '<div style="width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,.25);color:white;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+initial+'</div>'
             + '<span style="font-size:10px;font-weight:600;color:white;overflow:hidden;text-overflow:ellipsis;flex:1">'+escHtml(b.guestName||'ゲスト')+(prop?' · '+prop.name:'')+'</span>'
+            + statusDots
             : '')
           + '</div>';
       });
@@ -1268,6 +1305,16 @@ function renderSettings() {
           </div>`).join('')}
         <button class="btn-add-row" onclick="addCostRow(${pi},'booking')">＋ 項目を追加</button>
         <div class="divider"></div>
+        <div class="cost-section-title" style="color:#2e7d32">🧹 清掃スタッフ（物件ごとに登録）</div>
+        <div style="font-size:11px;color:#bbb;margin-bottom:8px">チェックイン後の清掃を担当するスタッフ候補を登録してください</div>
+        ${(p.cleaningStaff||[]).map((s,si) => `
+          <div class="cost-row" style="margin-bottom:6px">
+            <input class="cost-name" type="text" value="${escHtml(s.name)}" placeholder="スタッフ名（例: 田中さん）" oninput="updateCleaningStaff(${pi},${si},'name',this.value)">
+            <input class="cost-amount" type="tel" value="${escHtml(s.phone||'')}" placeholder="090-xxxx-xxxx" style="width:130px;font-size:12px;text-align:left" oninput="updateCleaningStaff(${pi},${si},'phone',this.value)">
+            <button class="btn-remove-row" onclick="removeCleaningStaff(${pi},${si})">×</button>
+          </div>`).join('')}
+        <button class="btn-add-row" onclick="addCleaningStaff(${pi})">＋ スタッフを追加</button>
+        <div class="divider"></div>
         <div class="cost-section-title" style="color:#e65100">初期費用（開業時の一時費用）</div>
         <div style="font-size:11px;color:#bbb;margin-bottom:8px">合計: ${(p.initialCosts||[]).reduce((s,c)=>s+c.amount,0).toLocaleString('ja-JP')}円</div>
         ${(p.initialCosts||[]).map((c,ci) => `
@@ -1326,6 +1373,20 @@ function removeCostRow(pi, type, ci) {
   getCostList(pi, type).splice(ci, 1);
   renderSettings();
 }
+function updateCleaningStaff(pi, si, field, val) {
+  if (!properties[pi].cleaningStaff) properties[pi].cleaningStaff = [];
+  properties[pi].cleaningStaff[si][field] = val;
+}
+function addCleaningStaff(pi) {
+  if (!properties[pi].cleaningStaff) properties[pi].cleaningStaff = [];
+  properties[pi].cleaningStaff.push({ name: '', phone: '' });
+  renderSettings();
+}
+function removeCleaningStaff(pi, si) {
+  properties[pi].cleaningStaff.splice(si, 1);
+  renderSettings();
+}
+
 function addProperty() {
   const template = properties[0] || { monthlyFixedCosts: [], perBookingCosts: [] };
   properties.push({ id: Date.now(), name: '新しい物件', monthlyFixedCosts: JSON.parse(JSON.stringify(template.monthlyFixedCosts)), perBookingCosts: JSON.parse(JSON.stringify(template.perBookingCosts)) });
@@ -2601,6 +2662,46 @@ function showDayDetail(year, month, day) {
     const prop = properties.find(p => p.id === getBookingPropId(b));
     const profit = calcAirbnbProfit(b);
     const coStr = getCheckout(b);
+    const chk = b.code ? (bookingChecks[b.code] || {}) : {};
+    const staffList = prop ? (prop.cleaningStaff || []) : [];
+    const selectedStaff = staffList.find(s => s.name === chk.cleaningStaffName);
+
+    // スタッフ選択 + 電話リンク
+    const staffSelectHtml = staffList.length > 0
+      ? `<select class="staff-select" onchange="setCleaningStaff('${b.code}',this.value,${year},${month},${day})">
+          <option value="">担当スタッフを選択</option>
+          ${staffList.map(s => `<option value="${escHtml(s.name)}" ${chk.cleaningStaffName===s.name?'selected':''}>${escHtml(s.name)}</option>`).join('')}
+        </select>`
+      : `<span style="font-size:11px;color:#bbb">スタッフ未登録（設定タブで追加）</span>`;
+
+    const phoneHtml = selectedStaff && selectedStaff.phone
+      ? `<a href="tel:${selectedStaff.phone.replace(/[^\d+]/g,'')}" class="phone-link">📞 ${escHtml(selectedStaff.phone)}</a>`
+      : '';
+
+    const checkSection = b.code ? `
+      <div class="check-section">
+        <div class="check-section-title">チェック管理</div>
+        <div class="check-row">
+          <span class="check-label">📋 Googleフォーム提出確認</span>
+          <button class="check-btn ${chk.formDone?'done':'pending'}" onclick="toggleBookingCheck('${b.code}','formDone',${year},${month},${day})">
+            ${chk.formDone ? '✅ 提出済' : '○ 未確認'}
+          </button>
+        </div>
+        <div style="margin-bottom:8px">
+          <div class="check-row" style="margin-bottom:6px">
+            <span class="check-label">🧹 清掃手配確認</span>
+            <button class="check-btn ${chk.cleaningDone?'done':'pending'}" onclick="toggleBookingCheck('${b.code}','cleaningDone',${year},${month},${day})">
+              ${chk.cleaningDone ? '✅ 手配済' : '○ 未手配'}
+            </button>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            ${staffSelectHtml}
+            ${phoneHtml}
+          </div>
+          ${chk.cleaningStaffName ? `<div style="font-size:11px;color:#888;margin-top:4px">担当: <strong>${escHtml(chk.cleaningStaffName)}</strong></div>` : ''}
+        </div>
+      </div>` : '';
+
     return `<div class="day-modal-booking">
       <div class="day-modal-prop">${prop ? prop.name : '物件未設定'}</div>
       <div class="day-modal-guest">${b.guestName || 'ゲスト名なし'}</div>
@@ -2610,11 +2711,18 @@ function showDayDetail(year, month, day) {
       <div class="day-modal-row"><span>売上</span><span>${fmtS(b.revenue)}</span></div>
       ${profit !== null ? `<div class="day-modal-row"><span>利益</span><span style="color:${profit>=0?'#2e7d32':'#c62828'}">${profit<0?'▲':''}${fmtS(Math.abs(profit))}</span></div>` : ''}
       ${b.listing ? `<div class="day-modal-row"><span>リスティング</span><span style="font-size:11px">${b.listing}</span></div>` : ''}
+      ${checkSection}
     </div>`;
   }).join('');
 
+  // 既存モーダルを削除してから再作成
+  document.querySelectorAll('.day-modal-overlay').forEach(el => el.remove());
+
   const overlay = document.createElement('div');
   overlay.className = 'day-modal-overlay';
+  overlay.dataset.y = year;
+  overlay.dataset.m = month;
+  overlay.dataset.d = day;
   overlay.innerHTML = `<div class="day-modal">
     <div class="day-modal-title">
       <span>📅 ${dateLabel}の宿泊情報</span>
@@ -2624,6 +2732,33 @@ function showDayDetail(year, month, day) {
   </div>`;
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
   document.body.appendChild(overlay);
+}
+
+function toggleBookingCheck(code, field, year, month, day) {
+  if (!bookingChecks[code]) bookingChecks[code] = {};
+  bookingChecks[code][field] = !bookingChecks[code][field];
+  saveBookingChecks();
+  // カレンダーのドットを更新
+  _refreshCalendarDots();
+  // モーダルを再描画
+  showDayDetail(year, month, day);
+}
+
+function setCleaningStaff(code, staffName, year, month, day) {
+  if (!bookingChecks[code]) bookingChecks[code] = {};
+  bookingChecks[code].cleaningStaffName = staffName;
+  saveBookingChecks();
+  _refreshCalendarDots();
+  showDayDetail(year, month, day);
+}
+
+function _refreshCalendarDots() {
+  const calEl = document.getElementById('monthly-calendar');
+  if (!calEl) return;
+  const inp = document.getElementById('month-input');
+  if (!inp || !inp.value) return;
+  const [cy, cm] = inp.value.split('-').map(Number);
+  calEl.innerHTML = renderCalendar(cy, cm);
 }
 </script>
 </body>
