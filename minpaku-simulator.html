@@ -1,0 +1,2630 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>民泊利益シミュレーター</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif; background: #f0f2f5; color: #1a1a2e; min-height: 100vh; }
+
+  .header {
+    background: linear-gradient(135deg, #1e3a5f 0%, #2c5f8a 100%);
+    color: white; padding: 14px 20px;
+    padding-top: calc(14px + env(safe-area-inset-top));
+    display: flex; align-items: center; gap: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.2);
+  }
+  .header h1 { font-size: 17px; font-weight: 700; letter-spacing: -.3px; }
+
+  .tabs {
+    background: linear-gradient(135deg, #1e3a5f 0%, #2c5f8a 100%);
+    padding: 0 12px 12px; display: flex; gap: 6px;
+  }
+  .tab {
+    flex: 1; padding: 9px 6px; text-align: center; font-size: 12px; font-weight: 600;
+    cursor: pointer; color: rgba(255,255,255,.6); border-radius: 20px;
+    transition: all .2s; border: none; background: none;
+  }
+  .tab.active { color: #2c5f8a; background: white; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+
+  .page { display: none; padding: 14px; max-width: 640px; margin: 0 auto; padding-bottom: 20px; }
+  .page.active { display: block; }
+  .page#page-settings { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+
+  .card { background: white; border-radius: 16px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 6px rgba(0,0,0,.06); }
+  .card-title { font-size: 11px; font-weight: 700; color: #999; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 10px; }
+
+  /* 物件選択 */
+  .prop-select { width: 100%; border: 2px solid #e8e8e8; border-radius: 10px; padding: 11px 14px; font-size: 16px; font-weight: 600; background: white; color: #1a1a2e; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; }
+  .prop-select:focus { outline: none; border-color: #2c5f8a; }
+
+  /* 入力 */
+  .input-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .input-group label { font-size: 11px; font-weight: 700; color: #999; display: block; margin-bottom: 4px; letter-spacing: .04em; }
+  .input-group input { width: 100%; border: 2px solid #e8e8e8; border-radius: 10px; padding: 10px 10px; font-size: 20px; font-weight: 800; text-align: right; color: #1a1a2e; transition: border-color .15s; }
+  .input-group input:focus { outline: none; border-color: #2c5f8a; }
+  .input-unit { font-size: 11px; color: #bbb; text-align: right; margin-top: 3px; font-weight: 600; }
+  .sub-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-top: 12px; border-top: 1px solid #f0f0f0; }
+  .sub-input-group label { font-size: 11px; font-weight: 700; color: #bbb; display: block; margin-bottom: 4px; }
+  .sub-input-group input { width: 100%; border: 1.5px solid #e8e8e8; border-radius: 8px; padding: 8px 10px; font-size: 16px; font-weight: 700; text-align: right; color: #555; background: #fafafa; }
+  .sub-input-group input:focus { outline: none; border-color: #2c5f8a; background: white; }
+  .sub-unit { font-size: 10px; color: #ccc; text-align: right; margin-top: 2px; font-weight: 600; }
+  .btn-reset { display: block; width: 100%; padding: 8px; border: none; background: none; color: #bbb; font-size: 12px; cursor: pointer; margin-top: 4px; border-radius: 8px; }
+  .btn-reset:active { background: #f5f5f5; }
+
+  /* 結果カード */
+  .result-card { border-radius: 20px; padding: 18px 18px 14px; margin-bottom: 12px; }
+  .result-card.profit { background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); }
+  .result-card.loss { background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%); }
+  .result-main { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 14px; }
+  .result-label { font-size: 11px; font-weight: 700; color: #777; letter-spacing: .06em; margin-bottom: 3px; }
+  .result-amount { font-size: 42px; font-weight: 900; line-height: 1; letter-spacing: -1px; }
+  .result-amount.profit { color: #1b5e20; }
+  .result-amount.loss { color: #b71c1c; }
+  .yen { font-size: 18px; font-weight: 500; }
+  .en { font-size: 18px; font-weight: 500; margin-left: 2px; }
+  .result-margin { text-align: right; }
+  .result-margin-label { font-size: 10px; font-weight: 700; color: #888; margin-bottom: 2px; }
+  .result-margin-value { font-size: 32px; font-weight: 900; line-height: 1; }
+  .result-margin-value.profit { color: #1b5e20; }
+  .result-margin-value.loss { color: #b71c1c; }
+
+  /* 損益分岐点 */
+  .breakeven-box { border-top: 1px solid rgba(0,0,0,.08); padding-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .be-full { grid-column: 1 / -1; }
+  .be-item { background: rgba(255,255,255,.5); border-radius: 10px; padding: 8px 10px; }
+  .be-label { font-size: 10px; font-weight: 700; color: #888; margin-bottom: 3px; }
+  .be-value { font-size: 15px; font-weight: 800; color: #1a1a2e; }
+  .be-value.ok { color: #2e7d32; }
+  .be-value.ng { color: #c62828; }
+
+  /* 内訳 */
+  .breakdown-card { background: white; border-radius: 16px; box-shadow: 0 1px 6px rgba(0,0,0,.06); overflow: hidden; margin-bottom: 12px; }
+  .breakdown-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 13px 16px; border: none; background: none; cursor: pointer; font-size: 13px; font-weight: 700; color: #555; }
+  .breakdown-toggle .chevron { transition: transform .2s; color: #bbb; font-size: 11px; }
+  .breakdown-toggle.open .chevron { transform: rotate(180deg); }
+  .breakdown-body { padding: 0 16px 14px; display: none; }
+  .breakdown-body.open { display: block; }
+  .bd-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 7px 0; border-bottom: 1px solid #f5f5f5; gap: 8px; }
+  .bd-row:last-child { border-bottom: none; }
+  .bd-name { font-size: 13px; color: #444; flex: 1; }
+  .bd-sub { font-size: 10px; color: #bbb; margin-top: 1px; }
+  .bd-amount { font-size: 13px; font-weight: 700; white-space: nowrap; }
+  .bd-amount.blue { color: #1565c0; }
+  .bd-amount.red { color: #c62828; }
+  .bd-section-label { font-size: 10px; font-weight: 700; color: #bbb; letter-spacing: .06em; padding: 8px 0 4px; }
+  .bd-total-row { display: flex; justify-content: space-between; padding: 10px 0 0; border-top: 2px solid #eee; margin-top: 4px; font-weight: 700; font-size: 14px; }
+
+  /* 履歴 */
+  .history-card { background: white; border-radius: 16px; box-shadow: 0 1px 6px rgba(0,0,0,.06); overflow: hidden; margin-bottom: 12px; }
+  .history-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 13px 16px; border: none; background: none; cursor: pointer; font-size: 13px; font-weight: 700; color: #555; }
+  .history-toggle .chevron { transition: transform .2s; color: #bbb; font-size: 11px; }
+  .history-toggle.open .chevron { transform: rotate(180deg); }
+  .history-body { display: none; }
+  .history-body.open { display: block; }
+  .history-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-top: 1px solid #f5f5f5; gap: 8px; cursor: pointer; }
+  .history-item:active { background: #f9f9f9; }
+  .history-meta { font-size: 11px; color: #aaa; margin-top: 2px; }
+  .history-name { font-size: 13px; font-weight: 600; color: #444; }
+  .history-profit { font-size: 14px; font-weight: 800; }
+  .history-profit.profit { color: #2e7d32; }
+  .history-profit.loss { color: #c62828; }
+  .history-clear { width: 100%; padding: 10px; border: none; background: none; color: #ccc; font-size: 12px; cursor: pointer; border-top: 1px solid #f5f5f5; }
+  .history-empty { text-align: center; color: #ccc; font-size: 13px; padding: 16px; }
+
+  /* 月次サマリー */
+  .month-selector { display: flex; align-items: center; gap: 10px; }
+  .month-selector input { flex: 1; border: 2px solid #e8e8e8; border-radius: 10px; padding: 10px 12px; font-size: 15px; font-weight: 600; color: #333; }
+  .month-selector input:focus { outline: none; border-color: #2c5f8a; }
+  .monthly-booking { background: #f9f9fb; border-radius: 12px; padding: 12px; margin-bottom: 8px; position: relative; }
+  .monthly-booking-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .monthly-booking-name { font-size: 13px; font-weight: 700; color: #2c5f8a; }
+  .monthly-booking-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .mb-field label { font-size: 10px; font-weight: 700; color: #aaa; display: block; margin-bottom: 3px; }
+  .mb-field input { width: 100%; border: 1.5px solid #e8e8e8; border-radius: 8px; padding: 7px 8px; font-size: 15px; font-weight: 700; text-align: right; background: white; }
+  .mb-field input:focus { outline: none; border-color: #2c5f8a; }
+  .mb-field select { width: 100%; border: 1.5px solid #e8e8e8; border-radius: 8px; padding: 7px 8px; font-size: 13px; font-weight: 600; background: white; }
+  .mb-profit { text-align: right; margin-top: 8px; font-size: 13px; font-weight: 700; color: #555; }
+  .btn-remove-booking { background: none; border: none; color: #ddd; font-size: 18px; cursor: pointer; padding: 2px 6px; }
+  .btn-remove-booking:active { color: #e53935; }
+  .btn-add-booking { width: 100%; padding: 14px; border: 2px dashed #ddd; border-radius: 12px; background: white; color: #aaa; font-size: 13px; font-weight: 700; cursor: pointer; margin-bottom: 12px; }
+  .btn-add-booking:active { border-color: #2c5f8a; color: #2c5f8a; }
+  .monthly-summary { background: linear-gradient(135deg, #1e3a5f, #2c5f8a); color: white; border-radius: 16px; padding: 16px; }
+  .ms-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.1); font-size: 14px; }
+  .ms-row:last-child { border-bottom: none; }
+  .ms-label { color: rgba(255,255,255,.7); }
+  .ms-value { font-weight: 700; }
+  .ms-total { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; margin-top: 4px; border-top: 2px solid rgba(255,255,255,.2); }
+  .ms-total-label { font-size: 13px; color: rgba(255,255,255,.8); }
+  .ms-total-value { font-size: 28px; font-weight: 900; }
+  .ms-total-value.profit { color: #a5d6a7; }
+  .ms-total-value.loss { color: #ef9a9a; }
+
+  /* 物件フィルター */
+  .prop-filter { display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+  .prop-filter::-webkit-scrollbar { display: none; }
+  .prop-filter-btn { padding: 7px 14px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; background: white; color: #555; box-shadow: 0 1px 4px rgba(0,0,0,.08); flex-shrink: 0; }
+  .prop-filter-btn.active { background: #2c5f8a; color: white; }
+
+  /* KPIカード */
+  .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .kpi-card { background: white; border-radius: 14px; padding: 12px 14px; box-shadow: 0 1px 6px rgba(0,0,0,.06); }
+  .kpi-label { font-size: 10px; font-weight: 700; color: #aaa; letter-spacing: .06em; margin-bottom: 4px; }
+  .kpi-value { font-size: 18px; font-weight: 900; color: #1a1a2e; line-height: 1.2; }
+  .kpi-value.profit { color: #2e7d32; }
+  .kpi-value.loss { color: #c62828; }
+  .kpi-sub { font-size: 11px; color: #aaa; margin-top: 3px; }
+
+  /* 棒グラフ */
+  .chart-wrap { background: white; border-radius: 14px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 6px rgba(0,0,0,.06); }
+  .chart-title { font-size: 11px; font-weight: 700; color: #aaa; letter-spacing: .06em; margin-bottom: 10px; }
+
+  /* 月別テーブル */
+  .month-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .month-table th { font-size: 10px; font-weight: 700; color: #aaa; padding: 6px 4px; text-align: right; border-bottom: 1.5px solid #eee; }
+  .month-table th:first-child { text-align: left; }
+  .month-table td { padding: 8px 4px; border-bottom: 1px solid #f5f5f5; text-align: right; font-size: 12px; }
+  .month-table td:first-child { text-align: left; font-weight: 700; color: #555; }
+  .month-table .total-row td { border-top: 2px solid #eee; border-bottom: none; font-weight: 800; }
+  .td-profit.profit { color: #2e7d32; font-weight: 700; }
+  .td-profit.loss { color: #c62828; font-weight: 700; }
+
+  /* 月次統計 */
+  .month-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .month-stat { background: white; border-radius: 12px; padding: 10px 10px 8px; box-shadow: 0 1px 6px rgba(0,0,0,.06); text-align: center; }
+  .month-stat-label { font-size: 10px; color: #aaa; font-weight: 700; margin-bottom: 4px; }
+  .month-stat-value { font-size: 16px; font-weight: 900; color: #1a1a2e; }
+
+  /* 稼働率バー */
+  .occ-bar-wrap { background: #f0f2f5; border-radius: 4px; height: 5px; margin-top: 5px; }
+  .occ-bar-fill { height: 5px; border-radius: 4px; background: #2c5f8a; transition: width .3s; }
+
+  /* 物件設定 */
+  .property-item { background: white; border-radius: 16px; margin-bottom: 14px; box-shadow: 0 1px 6px rgba(0,0,0,.06); overflow: hidden; }
+  .property-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; background: linear-gradient(135deg, #1e3a5f 0%, #2c5f8a 100%); }
+  .property-name-input { background: transparent; border: none; border-bottom: 1.5px solid rgba(255,255,255,.4); color: white; font-size: 16px; font-weight: 700; flex: 1; padding: 2px 6px; }
+  .property-name-input::placeholder { color: rgba(255,255,255,.5); }
+  .property-name-input:focus { outline: none; border-bottom-color: white; }
+  .btn-delete { background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.3); color: white; padding: 6px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; font-weight: 600; white-space: nowrap; }
+  .btn-delete:active { background: rgba(220,50,50,.5); }
+  .cost-section { padding: 14px 16px; }
+  .cost-section-title { font-size: 11px; font-weight: 700; color: #aaa; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 10px; }
+  .cost-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+  .cost-name { flex: 1; border: 1.5px solid #eee; border-radius: 8px; padding: 9px 10px; font-size: 13px; min-width: 0; }
+  .cost-amount { width: 90px; border: 1.5px solid #eee; border-radius: 8px; padding: 9px 10px; font-size: 13px; text-align: right; flex-shrink: 0; }
+  .cost-unit { font-size: 11px; color: #bbb; white-space: nowrap; flex-shrink: 0; }
+  .cost-name:focus, .cost-amount:focus { outline: none; border-color: #2c5f8a; }
+  .btn-remove-row { background: none; border: none; color: #ddd; font-size: 20px; cursor: pointer; line-height: 1; padding: 2px 4px; flex-shrink: 0; }
+  .btn-remove-row:active { color: #e53935; }
+  .btn-add-row { background: none; border: 1.5px dashed #ddd; border-radius: 8px; padding: 8px; font-size: 12px; color: #bbb; cursor: pointer; width: 100%; margin-top: 2px; font-weight: 600; }
+  .btn-add-row:active { border-color: #2c5f8a; color: #2c5f8a; }
+  .divider { height: 1px; background: #f5f5f5; margin: 12px 0; }
+  .btn-add-property { width: 100%; padding: 16px; border: 2px dashed #ddd; border-radius: 16px; background: white; color: #bbb; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .btn-add-property:active { border-color: #2c5f8a; color: #2c5f8a; }
+  .save-bar { position: fixed; bottom: 0; left: 0; right: 0; background: white; border-top: 1px solid #eee; padding: 12px 16px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .btn-save { width: 100%; max-width: 640px; margin: 0 auto; display: block; background: linear-gradient(135deg, #1e3a5f 0%, #2c5f8a 100%); color: white; border: none; border-radius: 12px; padding: 15px; font-size: 15px; font-weight: 700; cursor: pointer; transition: all .1s; box-shadow: 0 4px 0 #1a3d5c; }
+  .btn-save:active { transform: translateY(3px); box-shadow: 0 1px 0 #1a3d5c; }
+  .btn-save.saved { background: linear-gradient(135deg, #2e7d32, #388e3c); box-shadow: 0 4px 0 #1b5e20; }
+  .empty-state { text-align: center; color: #ccc; padding: 40px 20px; font-size: 14px; }
+
+  /* 年間管理 */
+  .csv-drop-area { border: 2px dashed #d0d8e4; border-radius: 14px; padding: 32px 20px; text-align: center; cursor: pointer; transition: all .2s; background: #f8fafc; }
+  .csv-drop-area:active, .csv-drop-area.dragover { border-color: #2c5f8a; background: #eef4fb; }
+  .csv-drop-icon { font-size: 32px; margin-bottom: 8px; }
+  .csv-drop-text { font-size: 14px; font-weight: 700; color: #2c5f8a; margin-bottom: 4px; }
+  .csv-drop-sub { font-size: 11px; color: #aaa; }
+  .year-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+  .year-tab { flex: 1; padding: 9px 6px; border-radius: 10px; border: none; font-size: 13px; font-weight: 700; cursor: pointer; background: white; color: #555; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .year-tab.active { background: #2c5f8a; color: white; }
+  .annual-summary { background: linear-gradient(135deg, #1e3a5f, #2c5f8a); color: white; border-radius: 16px; padding: 16px; margin-bottom: 12px; }
+  .annual-prop-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.1); font-size: 13px; }
+  .annual-prop-row:last-child { border-bottom: none; }
+  .annual-total-row { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; margin-top: 4px; border-top: 2px solid rgba(255,255,255,.2); }
+  .annual-total-value { font-size: 28px; font-weight: 900; }
+  .annual-total-value.profit { color: #a5d6a7; }
+  .annual-total-value.loss { color: #ef9a9a; }
+  .month-card { background: white; border-radius: 16px; margin-bottom: 10px; box-shadow: 0 1px 6px rgba(0,0,0,.06); overflow: hidden; }
+  .month-card-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-bottom: 1px solid #f5f5f5; }
+  .month-label { font-size: 15px; font-weight: 800; color: #1a1a2e; }
+  .month-profit { text-align: right; }
+  .month-profit-rev { font-size: 11px; color: #aaa; }
+  .month-profit-val { font-size: 17px; font-weight: 800; }
+  .booking-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 14px; border-bottom: 1px solid #f9f9f9; gap: 8px; }
+  .booking-row:last-child { border-bottom: none; }
+  .booking-info { min-width: 0; }
+  .booking-prop { font-size: 12px; font-weight: 700; color: #2c5f8a; }
+  .booking-guest { font-size: 11px; color: #aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .booking-amounts { text-align: right; flex-shrink: 0; }
+  .booking-rev { font-size: 11px; color: #aaa; }
+  .booking-profit { font-size: 13px; font-weight: 700; }
+  .map-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; background: #f8fafc; border-radius: 10px; padding: 10px; }
+  .map-listing { font-size: 11px; color: #555; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .map-select { border: 1.5px solid #e8e8e8; border-radius: 8px; padding: 7px 8px; font-size: 13px; font-weight: 600; background: white; flex-shrink: 0; width: 140px; }
+
+  /* 月別詳細折りたたみ */
+  .month-detail-body { display: none; }
+  .month-detail-body.open { display: block; }
+  .month-card-header { cursor: pointer; user-select: none; }
+  .month-card-header:active { background: #fafafa; }
+  .mchev { color: #bbb; font-size: 11px; transition: transform .2s; flex-shrink: 0; }
+
+  /* セクション見出し */
+  .section-label { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; }
+  .section-label span { font-size: 10px; font-weight: 700; color: #bbb; letter-spacing: .06em; white-space: nowrap; }
+  .section-label::before, .section-label::after { content: ''; flex: 1; height: 1px; background: #eee; }
+
+  /* 投資回収 */
+  .recovery-card { background: white; border-radius: 16px; margin-bottom: 12px; box-shadow: 0 1px 6px rgba(0,0,0,.06); overflow: hidden; }
+  .recovery-header { background: linear-gradient(135deg, #1e3a5f, #2c5f8a); color: white; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; }
+  .recovery-header-title { font-size: 13px; font-weight: 700; }
+  .recovery-header-sub { font-size: 11px; color: rgba(255,255,255,.7); margin-top: 2px; }
+  .recovery-body { padding: 14px 16px; }
+  .recovery-prop-row { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #f0f0f0; }
+  .recovery-prop-row:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+  .recovery-prop-name { font-size: 12px; font-weight: 700; color: #2c5f8a; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+  .recovery-pct { font-size: 20px; font-weight: 900; color: #1a1a2e; }
+  .recovery-bar-wrap { background: #f0f2f5; border-radius: 6px; height: 10px; margin-bottom: 10px; overflow: hidden; }
+  .recovery-bar-fill { height: 10px; border-radius: 6px; background: linear-gradient(90deg, #ef5350, #ffa726, #66bb6a); background-size: 300% 100%; transition: width .5s; }
+  .recovery-stats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .recovery-stat { background: #f8fafc; border-radius: 8px; padding: 7px 8px; text-align: center; }
+  .recovery-stat-label { font-size: 9px; font-weight: 700; color: #aaa; letter-spacing: .04em; margin-bottom: 2px; }
+  .recovery-stat-value { font-size: 12px; font-weight: 800; color: #1a1a2e; line-height: 1.2; }
+  .recovery-stat-value.profit { color: #2e7d32; }
+  .recovery-stat-value.loss { color: #c62828; }
+  .recovery-stat-value.warn { color: #e65100; }
+  .recovery-total { background: linear-gradient(135deg, #f3f4f6, #e8ecf1); border-radius: 12px; padding: 12px 14px; margin-top: 4px; }
+  .recovery-total-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; margin-bottom: 4px; }
+  .recovery-total-row:last-child { margin-bottom: 0; font-weight: 800; font-size: 14px; padding-top: 8px; border-top: 1.5px solid #dde0e6; margin-top: 4px; }
+
+  @media (max-width: 380px) {
+    .input-grid { grid-template-columns: 1fr 1fr; }
+    .input-grid .input-group:last-child { grid-column: 1 / -1; }
+    .input-group input { font-size: 18px; }
+  }
+
+  /* カレンダー詳細モーダル */
+  .day-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1000; display: flex; align-items: flex-end; justify-content: center; animation: fadeIn .15s; }
+  .day-modal { background: white; border-radius: 20px 20px 0 0; padding: 20px 18px calc(20px + env(safe-area-inset-bottom)); width: 100%; max-width: 640px; max-height: 70vh; overflow-y: auto; animation: slideUp .2s; }
+  .day-modal-title { font-size: 14px; font-weight: 800; color: #1a1a2e; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
+  .day-modal-booking { background: #f8f9fb; border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; }
+  .day-modal-booking:last-child { margin-bottom: 0; }
+  .day-modal-prop { font-size: 11px; font-weight: 700; color: #2c5f8a; margin-bottom: 4px; }
+  .day-modal-guest { font-size: 14px; font-weight: 700; color: #1a1a2e; margin-bottom: 6px; }
+  .day-modal-row { display: flex; justify-content: space-between; font-size: 12px; color: #666; margin-bottom: 2px; }
+  .day-modal-row span:last-child { font-weight: 700; color: #1a1a2e; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+  /* シナリオ比較 */
+  .scenario-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .scenario-card { border-radius: 12px; padding: 10px 10px; text-align: center; }
+  .scenario-label { font-size: 10px; font-weight: 700; margin-bottom: 4px; }
+  .scenario-occ { font-size: 11px; color: #888; margin-bottom: 6px; }
+  .scenario-profit { font-size: 16px; font-weight: 900; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
+  <h1>民泊利益シミュレーター</h1>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showTab('sim')">試算</button>
+  <button class="tab" onclick="showTab('monthly')">月別</button>
+  <button class="tab" onclick="showTab('annual')">実績</button>
+  <button class="tab" style="flex:0.5" onclick="showTab('settings')">⚙️</button>
+</div>
+
+<!-- シミュレーション -->
+<div class="page active" id="page-sim">
+  <div class="card">
+    <div class="card-title">物件</div>
+    <select class="prop-select" id="sim-property" onchange="onSimPropertyChange()">
+      <option value="">-- 物件を選んでください --</option>
+    </select>
+  </div>
+
+  <div class="card">
+    <div class="card-title">予約情報</div>
+    <div class="input-grid">
+      <div class="input-group">
+        <label>宿泊数</label>
+        <input type="number" id="nights" min="1" max="366" inputmode="numeric" oninput="onNightsInput();calcProfit()">
+        <div class="input-unit">泊</div>
+      </div>
+      <div class="input-group">
+        <label>組数</label>
+        <input type="number" id="groups" min="1" max="99" inputmode="numeric" oninput="calcProfit()">
+        <div class="input-unit">組</div>
+      </div>
+      <div class="input-group">
+        <label>受取金額</label>
+        <input type="number" id="revenue" min="0" inputmode="numeric" oninput="calcProfit()">
+        <div class="input-unit">円</div>
+      </div>
+    </div>
+    <div class="sub-inputs">
+      <div class="sub-input-group">
+        <label>月額固定費</label>
+        <input type="number" id="months" min="1" max="24" inputmode="numeric" value="1" onchange="calcProfit()">
+        <div class="sub-unit">ヶ月分</div>
+      </div>
+      <div class="sub-input-group">
+        <label>稼働基準日数 <span onclick="alert('この月の想定稼働日数。月額固定費をこの日数で按分して1予約分の固定費を計算します。')" style="cursor:pointer;color:#bbb;font-size:10px;border:1px solid #ddd;border-radius:50%;padding:0 4px;font-weight:400">?</span></label>
+        <input type="number" id="base-days" min="1" max="366" inputmode="numeric" oninput="this.dataset.manuallyEdited='1';calcProfit()" onchange="calcProfit()">
+        <div class="sub-unit">日</div>
+      </div>
+    </div>
+    <button class="btn-reset" onclick="resetInputs()">↺ クリア</button>
+  </div>
+
+  <div id="result-area"></div>
+  <div id="history-area"></div>
+</div>
+
+<!-- 月次サマリー -->
+<div class="page" id="page-monthly">
+  <div class="card">
+    <div class="card-title">対象月</div>
+    <div class="month-selector">
+      <input type="month" id="month-input" onchange="renderMonthly()">
+    </div>
+  </div>
+  <div id="monthly-calendar"></div>
+  <div id="monthly-bookings"></div>
+  <button class="btn-add-booking" onclick="addMonthlyBooking()">＋ 予約を追加</button>
+  <div id="monthly-summary"></div>
+</div>
+
+
+<!-- 年間管理 -->
+<div class="page" id="page-annual">
+  <div id="annual-content"></div>
+</div>
+
+<!-- 物件設定 -->
+<div class="page" id="page-settings">
+  <div class="property-list" id="property-list"></div>
+  <button class="btn-add-property" onclick="addProperty()">＋ 物件を追加</button>
+  <div class="save-bar">
+    <button class="btn-save" id="save-btn" onclick="saveSettings()">設定を保存</button>
+  </div>
+</div>
+
+<script>
+// ==================== データ ====================
+const DEFAULT_PROPERTIES = [
+  {
+    id: 1, name: "ATTビル",
+    operationStart: "2026-02",
+    licenseType: "minpaku",
+    maxAnnualNights: 180,
+    monthlyFixedCosts: [
+      { name: "家賃+共益費", amount: 39240 }, { name: "水道", amount: 5000 },
+      { name: "ガス", amount: 5000 }, { name: "電気", amount: 10000 },
+      { name: "通信費", amount: 3850 }, { name: "駆けつけ費用", amount: 5000 },
+      { name: "備品・消耗品", amount: 5000 }, { name: "旅館業保険", amount: 1820 },
+      { name: "その他", amount: 0 },
+    ],
+    perBookingCosts: [{ name: "清掃費", amount: 6000 }, { name: "リネン", amount: 1400 }],
+    initialCosts: [
+      { name: "インテリアコーディネーター", amount: 55000 },
+      { name: "敷金", amount: 35000 }, { name: "礼金", amount: 35000 },
+      { name: "仲介手数料", amount: 35000 }, { name: "管理費", amount: 3000 },
+      { name: "家賃保証", amount: 40000 }, { name: "オープンまでの家賃", amount: 40000 },
+      { name: "鍵交換", amount: 22000 }, { name: "冷蔵庫", amount: 12000 },
+      { name: "洗濯機", amount: 110000 }, { name: "ベッド周り", amount: 110000 },
+      { name: "タオル・マット類", amount: 13000 }, { name: "電子レンジ", amount: 11000 },
+      { name: "食器・調理器具", amount: 30000 }, { name: "机・椅子・インテリア", amount: 55295 },
+      { name: "掃除機", amount: 20000 }, { name: "清掃用具・シャンプーリンス", amount: 10000 },
+      { name: "カーテン", amount: 29000 }, { name: "ドライヤー", amount: 4000 },
+      { name: "ポット", amount: 4000 }, { name: "ルーター", amount: 5000 },
+      { name: "防犯カメラ・キーボックス・SDカード", amount: 15000 },
+      { name: "ランドリーバッグ", amount: 5000 },
+    ]
+  },
+  {
+    id: 2, name: "フィオーレ新子安",
+    operationStart: "2026-04",
+    licenseType: "minpaku",
+    maxAnnualNights: 180,
+    monthlyFixedCosts: [
+      { name: "家賃+共益費", amount: 61240 }, { name: "水道", amount: 5000 },
+      { name: "ガス", amount: 5000 }, { name: "電気", amount: 10000 },
+      { name: "通信費", amount: 3850 }, { name: "駆けつけ費用", amount: 5000 },
+      { name: "備品・消耗品", amount: 5000 }, { name: "旅館業保険", amount: 1820 },
+      { name: "その他", amount: 0 },
+    ],
+    perBookingCosts: [{ name: "清掃費", amount: 6000 }, { name: "リネン", amount: 1400 }],
+    initialCosts: [
+      { name: "自動火災報知設備", amount: 50000 }, { name: "避難誘導灯", amount: 111000 },
+      { name: "インテリアコーディネーター", amount: 55000 },
+      { name: "敷金", amount: 50000 }, { name: "礼金", amount: 57000 },
+      { name: "仲介手数料", amount: 57000 }, { name: "管理費", amount: 3000 },
+      { name: "家賃保証", amount: 60000 }, { name: "オープンまでの家賃", amount: 180000 },
+      { name: "鍵交換", amount: 33000 }, { name: "洗濯機", amount: 110000 },
+      { name: "ベッド周り", amount: 160000 }, { name: "タオル・マット類", amount: 13000 },
+      { name: "電子レンジ", amount: 11000 }, { name: "食器・調理器具", amount: 20000 },
+      { name: "机・椅子・インテリア", amount: 100000 }, { name: "掃除機", amount: 11000 },
+      { name: "清掃用具・シャンプーリンス", amount: 10000 }, { name: "カーテン", amount: 47000 },
+      { name: "ドライヤー", amount: 4000 }, { name: "ポット", amount: 4000 },
+      { name: "ルーター", amount: 5000 },
+      { name: "防犯カメラ・キーボックス・SDカード", amount: 15000 },
+      { name: "ランドリーバッグ", amount: 5000 },
+    ]
+  }
+];
+
+let properties = loadData();
+let history = loadHistory();
+let monthlyData = loadMonthly();
+let airbnbBookings = loadAirbnbData();
+let listingMap = loadListingMap();
+let pricelabsForecast = loadForecastData();
+let currentAnnualYear = new Date().getFullYear();
+let pendingListings = [];
+let annualPropFilter = 'all';
+let monthlyPropFilter = 'all';
+
+// ==================== Firebase ====================
+const firebaseConfig = {
+  apiKey: "AIzaSyAL6Cfw12e2tW0WBsjR874xJ9YeKHBNNFY",
+  authDomain: "minpaku-ae5ce.firebaseapp.com",
+  databaseURL: "https://minpaku-ae5ce-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "minpaku-ae5ce",
+  storageBucket: "minpaku-ae5ce.firebasestorage.app",
+  messagingSenderId: "61078480917",
+  appId: "1:61078480917:web:991533f1ae5dd1ab7bc61c"
+};
+firebase.initializeApp(firebaseConfig);
+const fbdb = firebase.database();
+
+// Firebase + localStorage 二重書き込み
+const KEYS = {
+  properties: 'minpaku_properties_v3',
+  history: 'minpaku_history_v1',
+  monthly: 'minpaku_monthly_v1',
+  airbnb: 'minpaku_airbnb_v1',
+  forecast: 'minpaku_forecast_v1',
+  listingMap: 'minpaku_listing_map_v1',
+};
+
+function fbSave(key, data) {
+  try { localStorage.setItem(key, JSON.stringify(data)); } catch(e) {}
+  fbdb.ref(key).set(data).catch(e => console.warn('Firebase save error:', e));
+}
+
+function loadData() {
+  try {
+    const s = localStorage.getItem(KEYS.properties);
+    if (s) {
+      const loaded = JSON.parse(s);
+      loaded.forEach(p => {
+        const def = DEFAULT_PROPERTIES.find(d => d.id === p.id);
+        if (!p.initialCosts) p.initialCosts = def ? JSON.parse(JSON.stringify(def.initialCosts)) : [];
+        if (!p.operationStart && def) p.operationStart = def.operationStart || '';
+        if (!p.licenseType) p.licenseType = def ? (def.licenseType || 'minpaku') : 'minpaku';
+        if (p.maxAnnualNights === undefined) p.maxAnnualNights = def ? (def.maxAnnualNights !== undefined ? def.maxAnnualNights : 180) : 180;
+      });
+      return loaded;
+    }
+  } catch(e) {}
+  return JSON.parse(JSON.stringify(DEFAULT_PROPERTIES));
+}
+function saveData() { fbSave(KEYS.properties, properties); }
+
+// 営業形態変更（上限日数を自動セット、手動上書き可）
+function setLicenseType(pi, type) {
+  properties[pi].licenseType = type;
+  if (type === 'minpaku') properties[pi].maxAnnualNights = 180;
+  else if (type === 'tokku') properties[pi].maxAnnualNights = 365;
+  else properties[pi].maxAnnualNights = null;
+  saveData();
+  renderSettings();
+}
+function setMaxAnnualNights(pi, val) {
+  const n = parseInt(val);
+  properties[pi].maxAnnualNights = isNaN(n) || n <= 0 ? null : n;
+  saveData();
+}
+
+function loadHistory() {
+  try { const s = localStorage.getItem(KEYS.history); if (s) return JSON.parse(s); } catch(e) {}
+  return [];
+}
+function saveHistory() { fbSave(KEYS.history, history); }
+
+function loadMonthly() {
+  try { const s = localStorage.getItem(KEYS.monthly); if (s) return JSON.parse(s); } catch(e) {}
+  return {};
+}
+function saveMonthly() { fbSave(KEYS.monthly, monthlyData); }
+
+function loadAirbnbData() {
+  try { const s = localStorage.getItem(KEYS.airbnb); if (s) return JSON.parse(s); } catch(e) {}
+  return [];
+}
+function saveAirbnbData() { fbSave(KEYS.airbnb, airbnbBookings); }
+
+function loadForecastData() {
+  try { const s = localStorage.getItem(KEYS.forecast); if (s) return JSON.parse(s); } catch(e) {}
+  return {};
+}
+function saveForecastData() { fbSave(KEYS.forecast, pricelabsForecast); }
+
+function loadListingMap() {
+  try { const s = localStorage.getItem(KEYS.listingMap); if (s) return JSON.parse(s); } catch(e) {}
+  return {};
+}
+function saveListingMap() { fbSave(KEYS.listingMap, listingMap); }
+
+// ==================== Firebase リアルタイム同期 ====================
+let _fbSyncInit = false;
+function initFirebaseSync() {
+  if (_fbSyncInit) return;
+  _fbSyncInit = true;
+
+  fbdb.ref(KEYS.properties).on('value', snap => {
+    const val = snap.val();
+    if (!val || !Array.isArray(val)) return;
+    if (JSON.stringify(val) === JSON.stringify(properties)) return;
+    val.forEach(p => {
+      const def = DEFAULT_PROPERTIES.find(d => d.id === p.id);
+      if (!p.initialCosts) p.initialCosts = def ? JSON.parse(JSON.stringify(def.initialCosts)) : [];
+      if (!p.operationStart && def) p.operationStart = def.operationStart || '';
+      if (!p.licenseType) p.licenseType = def ? (def.licenseType || 'minpaku') : 'minpaku';
+      if (p.maxAnnualNights === undefined) p.maxAnnualNights = def ? (def.maxAnnualNights !== undefined ? def.maxAnnualNights : 180) : 180;
+    });
+    try { localStorage.setItem(KEYS.properties, JSON.stringify(val)); } catch(e) {}
+    properties = val;
+    renderSimPropertySelect && renderSimPropertySelect();
+    renderSettings && renderSettings();
+  });
+
+  fbdb.ref(KEYS.airbnb).on('value', snap => {
+    const val = snap.val();
+    if (!Array.isArray(val)) return;
+    if (JSON.stringify(val) === JSON.stringify(airbnbBookings)) return;
+    try { localStorage.setItem(KEYS.airbnb, JSON.stringify(val)); } catch(e) {}
+    airbnbBookings = val;
+  });
+
+  fbdb.ref(KEYS.forecast).on('value', snap => {
+    const val = snap.val();
+    if (!val || typeof val !== 'object') return;
+    if (JSON.stringify(val) === JSON.stringify(pricelabsForecast)) return;
+    try { localStorage.setItem(KEYS.forecast, JSON.stringify(val)); } catch(e) {}
+    pricelabsForecast = val;
+  });
+
+  fbdb.ref(KEYS.listingMap).on('value', snap => {
+    const val = snap.val();
+    if (!val || typeof val !== 'object') return;
+    if (JSON.stringify(val) === JSON.stringify(listingMap)) return;
+    try { localStorage.setItem(KEYS.listingMap, JSON.stringify(val)); } catch(e) {}
+    listingMap = val;
+  });
+
+  fbdb.ref(KEYS.history).on('value', snap => {
+    const val = snap.val();
+    if (!Array.isArray(val)) return;
+    if (JSON.stringify(val) === JSON.stringify(history)) return;
+    try { localStorage.setItem(KEYS.history, JSON.stringify(val)); } catch(e) {}
+    history = val;
+    renderHistory && renderHistory();
+  });
+
+  fbdb.ref(KEYS.monthly).on('value', snap => {
+    const val = snap.val();
+    if (!val || typeof val !== 'object') return;
+    if (JSON.stringify(val) === JSON.stringify(monthlyData)) return;
+    try { localStorage.setItem(KEYS.monthly, JSON.stringify(val)); } catch(e) {}
+    monthlyData = val;
+  });
+
+  // 既存 localStorage データを Firebase に移行（初回のみ）
+  fbdb.ref(KEYS.properties).once('value', snap => {
+    if (!snap.val()) {
+      fbdb.ref(KEYS.properties).set(properties);
+      fbdb.ref(KEYS.airbnb).set(airbnbBookings);
+      fbdb.ref(KEYS.forecast).set(pricelabsForecast);
+      fbdb.ref(KEYS.listingMap).set(listingMap);
+      fbdb.ref(KEYS.history).set(history);
+      fbdb.ref(KEYS.monthly).set(monthlyData);
+    }
+  });
+}
+
+// ==================== タブ ====================
+function showTab(tab) {
+  const tabs = ['sim','monthly','annual','settings'];
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', tabs[i] === tab);
+  });
+  tabs.forEach(id => {
+    document.getElementById('page-' + id).classList.toggle('active', id === tab);
+  });
+  if (tab === 'sim') { renderSimPropertySelect(); renderHistory(); }
+  if (tab === 'monthly') { initMonthlyTab(); }
+  if (tab === 'annual') { initAnnualTab(); }
+  if (tab === 'settings') renderSettings();
+}
+
+// ==================== シミュレーション ====================
+function renderSimPropertySelect() {
+  const sel = document.getElementById('sim-property');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">-- 物件を選んでください --</option>';
+  properties.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = p.name;
+    if (String(p.id) === current) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  calcProfit();
+}
+
+function onSimPropertyChange() {
+  document.getElementById('months').value = '1';
+  const baseDaysEl = document.getElementById('base-days');
+  baseDaysEl.value = '';
+  delete baseDaysEl.dataset.manuallyEdited;
+  calcProfit();
+}
+
+function resetInputs() {
+  ['nights','groups','revenue','months','base-days'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('months').value = '1';
+  delete document.getElementById('base-days').dataset.manuallyEdited;
+  document.getElementById('result-area').innerHTML = '';
+}
+
+function onNightsInput() {
+  const nightsEl = document.getElementById('nights');
+  const baseDaysEl = document.getElementById('base-days');
+  const nightsVal = parseInt(nightsEl.value) || 0;
+  if (nightsVal <= 0) {
+    delete baseDaysEl.dataset.manuallyEdited;
+  }
+  if (nightsVal > 0 && !baseDaysEl.dataset.manuallyEdited) {
+    baseDaysEl.value = nightsVal;
+  }
+}
+
+function calcProfit() {
+  const propId = parseInt(document.getElementById('sim-property').value);
+  const nights = parseInt(document.getElementById('nights').value) || 0;
+  const revenue = parseInt(document.getElementById('revenue').value) || 0;
+  const area = document.getElementById('result-area');
+  if (!propId || nights === 0) { area.innerHTML = ''; return; }
+
+  const prop = properties.find(p => p.id === propId);
+  if (!prop) return;
+
+  const monthlyTotal = prop.monthlyFixedCosts.reduce((s, c) => s + c.amount, 0);
+  const baseDays = parseInt(document.getElementById('base-days').value) || 18;
+  const months = parseInt(document.getElementById('months').value) || 1;
+  const groups = parseInt(document.getElementById('groups').value) || 1;
+  const fixedPerStay = Math.round(monthlyTotal * months / baseDays * nights);
+  const perBookingTotal = prop.perBookingCosts.reduce((s, c) => s + c.amount, 0) * groups;
+  const totalCost = fixedPerStay + perBookingTotal;
+  const profit = revenue - totalCost;
+  const isProfit = profit >= 0;
+  const margin = revenue > 0 ? Math.round(profit / revenue * 100) : null;
+
+  // 損益分岐点
+  const breakEvenRevenue = totalCost;
+  const breakEvenPerNight = Math.ceil(totalCost / nights);
+  const currentPerNight = nights > 0 ? Math.round((revenue - perBookingTotal) / nights) : 0;
+  const shortfall = totalCost - revenue;
+
+  const fmt = n => n.toLocaleString('ja-JP');
+  const color = isProfit ? '#1b5e20' : '#b71c1c';
+  const borderColor = isProfit ? '#a5d6a7' : '#ef9a9a';
+
+  const fixedRows = prop.monthlyFixedCosts.map(c => {
+    const perStay = Math.round(c.amount * months / baseDays * nights);
+    return `<div class="bd-row">
+      <div><div class="bd-name">${c.name}</div><div class="bd-sub">月${fmt(c.amount)}円×${months}ヶ月 × ${nights}泊/${baseDays}日</div></div>
+      <div class="bd-amount red">−${fmt(perStay)}円</div></div>`;
+  }).join('');
+
+  const varRows = prop.perBookingCosts.map(c => `
+    <div class="bd-row">
+      <div><div class="bd-name">${c.name}</div><div class="bd-sub">${fmt(c.amount)}円 × ${groups}組</div></div>
+      <div class="bd-amount red">−${fmt(c.amount * groups)}円</div></div>`).join('');
+
+  area.innerHTML = `
+    <div class="result-card ${isProfit ? 'profit' : 'loss'}">
+      <div class="result-main">
+        <div>
+          <div class="result-label">利益</div>
+          <div class="result-amount ${isProfit ? 'profit' : 'loss'}">
+            ${isProfit ? '' : '▲'}${fmt(Math.abs(profit))}<span class="en">円</span>
+          </div>
+        </div>
+        ${margin !== null ? `<div class="result-margin">
+          <div class="result-margin-label">利益率</div>
+          <div class="result-margin-value ${isProfit ? 'profit' : 'loss'}">${isProfit ? '' : '-'}${Math.abs(margin)}%</div>
+        </div>` : ''}
+      </div>
+      <div class="breakeven-box">
+        <div class="be-item">
+          <div class="be-label">今の単価（1泊あたり）</div>
+          <div class="be-value">${fmt(currentPerNight)}円</div>
+        </div>
+        <div class="be-item">
+          <div class="be-label">損益分岐（1泊あたり）</div>
+          <div class="be-value">${fmt(breakEvenPerNight)}円</div>
+        </div>
+        <div class="be-item be-full">
+          <div class="be-label">${isProfit ? '黒字額' : 'あと'}</div>
+          <div class="be-value ${isProfit ? 'ok' : 'ng'}">${isProfit ? fmt(profit) + '円' : '▲' + fmt(shortfall) + '円 不足'}</div>
+        </div>
+        <div class="be-item be-full" style="background:${isProfit ? 'rgba(46,125,50,.1)' : 'rgba(198,40,40,.08)'};border-radius:10px;padding:10px 12px;text-align:center">
+          ${isProfit
+            ? `<div style="font-size:11px;color:#2e7d32;font-weight:700;margin-bottom:2px">黒字 ✓</div><div style="font-size:22px;font-weight:900;color:#1b5e20;line-height:1">1泊あたり ${fmt(currentPerNight - breakEvenPerNight)}円 の余裕</div>`
+            : `<div style="font-size:11px;color:#c62828;font-weight:700;margin-bottom:2px">黒字にするには</div><div style="font-size:22px;font-weight:900;color:#b71c1c;line-height:1">あと ${fmt(breakEvenPerNight - currentPerNight)}円/泊 上げれば黒字</div>`
+          }
+        </div>
+        ${!isProfit ? `
+        <div class="be-item be-full" style="background:rgba(255,152,0,.1);border-radius:10px;padding:10px 12px;text-align:center;margin-top:8px">
+          <div style="font-size:11px;color:#e65100;font-weight:700;margin-bottom:4px">🎯 黒字化まで</div>
+          <div style="font-size:22px;font-weight:900;color:#e65100;line-height:1">あと ${fmt(breakEvenPerNight - currentPerNight)}円/泊</div>
+          <div style="font-size:12px;color:#888;margin-top:4px">受取を ${fmt(breakEvenRevenue)}円以上にすると黒字</div>
+        </div>` : ''}
+      </div>
+    </div>
+
+    <div class="breakdown-card">
+      <button class="breakdown-toggle" onclick="toggleEl(this)">
+        <span>内訳を見る</span><span class="chevron">▼</span>
+      </button>
+      <div class="breakdown-body">
+        <div class="bd-row"><div class="bd-name">受取金額</div><div class="bd-amount blue">＋${fmt(revenue)}円</div></div>
+        <div class="bd-section-label">月額固定費（按分）</div>${fixedRows}
+        <div class="bd-section-label">1予約あたりのコスト</div>${varRows}
+        <div class="bd-total-row"><span>コスト合計</span><span style="color:#c62828">−${fmt(totalCost)}円</span></div>
+        <div class="bd-total-row" style="font-size:16px;margin-top:6px;padding-top:10px;border-top:2px solid ${borderColor}">
+          <span>利益</span><span style="color:${color}">${isProfit ? '' : '▲'}${fmt(Math.abs(profit))}円</span>
+        </div>
+      </div>
+    </div>`;
+
+  // 3シナリオ比較（稼働率±20%で想定）
+  const scenarioMultipliers = [
+    { label: '悲観', occ: -20, bg: '#fff3e0', labelColor: '#e65100', borderColor: '#ffcc80' },
+    { label: '標準', occ: 0,   bg: '#f8f9fb', labelColor: '#2c5f8a', borderColor: '#cfd8dc' },
+    { label: '楽観', occ: +20, bg: '#e8f5e9', labelColor: '#2e7d32', borderColor: '#a5d6a7' },
+  ];
+  const scenarioHtml = scenarioMultipliers.map(s => {
+    const sRev = Math.round(revenue * (1 + s.occ / 100));
+    const sProfit = sRev - totalCost;
+    const sIsP = sProfit >= 0;
+    return `<div class="scenario-card" style="background:${s.bg};border:1.5px solid ${s.borderColor}">
+      <div class="scenario-label" style="color:${s.labelColor}">${s.label}</div>
+      <div class="scenario-occ">${s.occ >= 0 ? '+' : ''}${s.occ}%</div>
+      <div class="scenario-profit" style="color:${sIsP?'#1b5e20':'#b71c1c'}">${sIsP?'':'▲'}${fmt(Math.abs(sProfit))}<span style="font-size:10px;font-weight:400">円</span></div>
+    </div>`;
+  }).join('');
+  area.innerHTML += `<div class="card" style="margin-top:8px">
+    <div class="card-title">シナリオ比較（受取金額±20%）</div>
+    <div class="scenario-grid">${scenarioHtml}</div>
+  </div>`;
+
+  // 履歴に保存
+  saveToHistory({ propId, propName: prop.name, nights, groups, revenue, profit, margin, baseDays, months });
+  renderHistory();
+}
+
+function toggleEl(btn) {
+  btn.classList.toggle('open');
+  btn.nextElementSibling.classList.toggle('open');
+  const span = btn.querySelector('span:first-child');
+  span.textContent = btn.classList.contains('open') ? '内訳を閉じる' : '内訳を見る';
+}
+
+// ==================== 履歴 ====================
+function saveToHistory(entry) {
+  entry.date = new Date().toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  history.unshift(entry);
+  if (history.length > 20) history = history.slice(0, 20);
+  saveHistory();
+}
+
+function renderHistory() {
+  const area = document.getElementById('history-area');
+  if (history.length === 0) { area.innerHTML = ''; return; }
+
+  const fmt = n => n.toLocaleString('ja-JP');
+  const items = history.map((h, i) => `
+    <div class="history-item" onclick="loadHistory_item(${i})">
+      <div>
+        <div class="history-name">${h.propName} · ${h.nights}泊${h.groups > 1 ? ' · ' + h.groups + '組' : ''}</div>
+        <div class="history-meta">${h.date} · ${fmt(h.revenue)}円</div>
+      </div>
+      <div class="history-profit ${h.profit >= 0 ? 'profit' : 'loss'}">
+        ${h.profit >= 0 ? '' : '▲'}${fmt(Math.abs(h.profit))}円
+        ${h.margin !== null ? `<span style="font-size:11px;margin-left:4px">${h.profit >= 0 ? '' : '-'}${Math.abs(h.margin)}%</span>` : ''}
+      </div>
+    </div>`).join('');
+
+  area.innerHTML = `
+    <div class="history-card">
+      <button class="history-toggle" onclick="toggleEl(this)">
+        <span>履歴 (${history.length}件)</span><span class="chevron">▼</span>
+      </button>
+      <div class="history-body">
+        ${items}
+        <button class="history-clear" onclick="clearHistory()">履歴をクリア</button>
+      </div>
+    </div>`;
+}
+
+function loadHistory_item(i) {
+  const h = history[i];
+  document.getElementById('sim-property').value = h.propId;
+  document.getElementById('nights').value = h.nights;
+  document.getElementById('groups').value = h.groups;
+  document.getElementById('revenue').value = h.revenue;
+  document.getElementById('months').value = h.months;
+  document.getElementById('base-days').value = h.baseDays;
+  calcProfit();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function clearHistory() {
+  if (!confirm('履歴を全て削除しますか？')) return;
+  history = [];
+  saveHistory();
+  renderHistory();
+}
+
+// ==================== 月次サマリー ====================
+function initMonthlyTab() {
+  const input = document.getElementById('month-input');
+  if (!input.value) {
+    const now = new Date();
+    input.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }
+  renderMonthly();
+}
+
+function currentMonthKey() {
+  return document.getElementById('month-input').value;
+}
+
+function getMonthBookings() {
+  const key = currentMonthKey();
+  if (!monthlyData[key]) monthlyData[key] = [];
+  return monthlyData[key];
+}
+
+function addMonthlyBooking() {
+  const bookings = getMonthBookings();
+  bookings.push({ propId: properties[0]?.id || 1, nights: '', groups: 1, revenue: '', baseDays: 18, months: 1 });
+  saveMonthly();
+  renderMonthly();
+}
+
+function updateMonthlyBooking(idx, field, val) {
+  const bookings = getMonthBookings();
+  bookings[idx][field] = ['nights','groups','revenue','baseDays','months'].includes(field) ? (parseInt(val) || 0) : val;
+  saveMonthly();
+  renderMonthly();
+}
+
+function removeMonthlyBooking(idx) {
+  const bookings = getMonthBookings();
+  bookings.splice(idx, 1);
+  saveMonthly();
+  renderMonthly();
+}
+
+function calcBookingProfit(b) {
+  const prop = properties.find(p => p.id === parseInt(b.propId));
+  if (!prop || !b.nights || !b.revenue) return null;
+  const monthlyTotal = prop.monthlyFixedCosts.reduce((s, c) => s + c.amount, 0);
+  const baseDays = b.baseDays || 18;
+  const months = b.months || 1;
+  const groups = b.groups || 1;
+  const fixedPerStay = Math.round(monthlyTotal * months / baseDays * b.nights);
+  const perBookingTotal = prop.perBookingCosts.reduce((s, c) => s + c.amount, 0) * groups;
+  return b.revenue - fixedPerStay - perBookingTotal;
+}
+
+function renderMonthly() {
+  const key = currentMonthKey();
+  const [year, month] = key.split('-').map(Number);
+  const daysInMonth = getDaysInMonth(year, month);
+  const fmt = n => n.toLocaleString('ja-JP');
+
+  const filterHtml = `<div class="prop-filter">
+    <button class="prop-filter-btn${monthlyPropFilter==='all'?' active':''}" onclick="monthlyPropFilter='all';renderMonthly()">全物件</button>
+    ${properties.map(p => `<button class="prop-filter-btn${monthlyPropFilter===String(p.id)?' active':''}" onclick="monthlyPropFilter='${p.id}';renderMonthly()">${p.name}</button>`).join('')}
+  </div>`;
+
+  // この月のCSVデータを先に抽出してモードを決定
+  const csvBooks = airbnbBookings.filter(b => {
+    const parts = b.checkin.split('/');
+    if (parseInt(parts[0]) !== year || parseInt(parts[1]) !== month) return false;
+    if (monthlyPropFilter !== 'all') return getBookingPropId(b) === parseInt(monthlyPropFilter);
+    return true;
+  });
+  const hasCsvThisMonth = csvBooks.length > 0;
+
+  if (hasCsvThisMonth) {
+    // CSVデータモード（この月のデータあり）
+    const addBtn = document.querySelector('.btn-add-booking');
+    if (addBtn) addBtn.style.display = 'none';
+
+    let totalRevenue = 0, totalVarCosts = 0, totalNights = 0;
+    csvBooks.forEach(b => {
+      totalRevenue += b.revenue;
+      const prop = properties.find(p => p.id === getBookingPropId(b));
+      if (prop) totalVarCosts += prop.perBookingCosts.reduce((s, c) => s + c.amount, 0);
+      totalNights += b.nights;
+    });
+    // 固定費：この月に営業中の物件全体
+    const monthFixed = getMonthFixedCosts(year, month, monthlyPropFilter);
+    const totalProfit = totalRevenue - monthFixed - totalVarCosts;
+
+    const operatingPropsM = monthlyPropFilter === 'all'
+      ? properties.filter(p => isPropertyOperating(p, year, month))
+      : properties.filter(p => String(p.id) === String(monthlyPropFilter) && isPropertyOperating(p, year, month));
+    const activePropCount = Math.max(operatingPropsM.length, 1);
+    const maxNights = daysInMonth * activePropCount;
+    const occRate = Math.min(Math.round(totalNights / maxNights * 100), 100);
+    const isP = totalProfit >= 0;
+
+    const bookingRows = csvBooks.length === 0
+      ? `<div style="text-align:center;color:#ccc;padding:24px;font-size:13px">この月の予約はありません</div>`
+      : csvBooks.map(b => {
+          const pid = getBookingPropId(b);
+          const prop = properties.find(p => p.id === pid);
+          const pf = calcAirbnbProfit(b);
+          const bIsP = pf !== null && pf >= 0;
+          return `<div class="booking-row">
+            <div class="booking-info">
+              <div class="booking-prop">${prop ? prop.name : '⚠️ 物件未設定'}</div>
+              <div class="booking-guest">${b.guestName} · ${b.nights}泊 · ${b.checkin}</div>
+            </div>
+            <div class="booking-amounts">
+              <div class="booking-rev">${fmt(b.revenue)}円</div>
+              ${pf !== null ? `<div class="booking-profit" style="color:${bIsP?'#2e7d32':'#c62828'}">${bIsP?'':'▲'}${fmt(Math.abs(pf))}円</div>` : '<div style="font-size:11px;color:#ccc">-</div>'}
+            </div>
+          </div>`;
+        }).join('');
+
+    document.getElementById('monthly-bookings').innerHTML = `
+      ${filterHtml}
+      <div class="month-stats">
+        <div class="month-stat">
+          <div class="month-stat-label">予約数</div>
+          <div class="month-stat-value">${csvBooks.length}件</div>
+        </div>
+        <div class="month-stat">
+          <div class="month-stat-label">稼働率</div>
+          <div class="month-stat-value">${occRate}%</div>
+          <div class="occ-bar-wrap"><div class="occ-bar-fill" style="width:${occRate}%"></div></div>
+        </div>
+        <div class="month-stat">
+          <div class="month-stat-label">稼働日数</div>
+          <div class="month-stat-value">${totalNights}/${maxNights}日</div>
+        </div>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">${bookingRows}</div>`;
+
+    const fmtSM = n => { const a = Math.abs(n); return (a >= 10000 ? (n/10000).toFixed(1)+'万' : n.toLocaleString('ja-JP')) + '円'; };
+    document.getElementById('monthly-summary').innerHTML = `
+      <div class="monthly-summary">
+        <div class="ms-row"><span class="ms-label">売上</span><span class="ms-value">${fmtSM(totalRevenue)}</span></div>
+        <div class="ms-row"><span class="ms-label">月額固定費</span><span class="ms-value" style="color:rgba(255,150,150,1)">▲${fmtSM(monthFixed)}</span></div>
+        ${totalVarCosts > 0 ? `<div class="ms-row"><span class="ms-label">変動費（清掃等）</span><span class="ms-value" style="color:rgba(255,150,150,1)">▲${fmtSM(totalVarCosts)}</span></div>` : ''}
+        <div class="ms-total">
+          <span class="ms-total-label">月間利益</span>
+          <span class="ms-total-value ${isP?'profit':'loss'}">${isP?'':'▲'}${fmtSM(Math.abs(totalProfit))}</span>
+        </div>
+      </div>`;
+
+  } else {
+    // 手動入力モード（この月のCSVデータなし）
+    const addBtn = document.querySelector('.btn-add-booking');
+    if (addBtn) addBtn.style.display = '';
+    const bookings = getMonthBookings();
+    const hasGlobalCsv = airbnbBookings.length > 0;
+
+    const bookingHTML = bookings.map((b, i) => {
+      const profit = calcBookingProfit(b);
+      return `<div class="monthly-booking">
+        <div class="monthly-booking-header">
+          <select class="mb-field" style="border:none;background:none;font-size:13px;font-weight:700;color:#2c5f8a;padding:0" onchange="updateMonthlyBooking(${i},'propId',this.value)">${properties.map(p => `<option value="${p.id}" ${parseInt(b.propId) === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}</select>
+          <button class="btn-remove-booking" onclick="removeMonthlyBooking(${i})">×</button>
+        </div>
+        <div class="monthly-booking-grid">
+          <div class="mb-field"><label>宿泊数</label><input type="number" value="${b.nights||''}" inputmode="numeric" placeholder="0" onchange="updateMonthlyBooking(${i},'nights',this.value)"><div style="font-size:10px;color:#ccc;text-align:right">泊</div></div>
+          <div class="mb-field"><label>組数</label><input type="number" value="${b.groups||1}" inputmode="numeric" onchange="updateMonthlyBooking(${i},'groups',this.value)"><div style="font-size:10px;color:#ccc;text-align:right">組</div></div>
+          <div class="mb-field"><label>受取金額</label><input type="number" value="${b.revenue||''}" inputmode="numeric" placeholder="0" onchange="updateMonthlyBooking(${i},'revenue',this.value)"><div style="font-size:10px;color:#ccc;text-align:right">円</div></div>
+        </div>
+        ${profit !== null ? `<div class="mb-profit" style="color:${profit>=0?'#2e7d32':'#c62828'}">利益: ${profit>=0?'':'▲'}${fmt(Math.abs(profit))}円</div>` : ''}
+      </div>`;
+    }).join('');
+
+    const modeBadge = hasGlobalCsv ? '<div style="display:flex;align-items:center;gap:6px;padding:7px 12px;background:#fff8e1;border-radius:10px;margin-bottom:8px;font-size:11px;color:#e65100"><span>✏️</span><span>この月のCSVデータなし — 手動入力モード</span></div>' : '';
+    document.getElementById('monthly-bookings').innerHTML = filterHtml + modeBadge + (bookingHTML || '<div class="empty-state" style="padding:20px">予約を追加してください</div>');
+
+    if (bookings.length > 0) {
+      let totalRevenue = 0, totalCostAll = 0, validCount = 0;
+      bookings.forEach(b => {
+        const p = calcBookingProfit(b);
+        if (p !== null) {
+          totalRevenue += parseInt(b.revenue) || 0;
+          const prop = properties.find(pr => pr.id === parseInt(b.propId));
+          if (prop) {
+            const monthlyTotal = prop.monthlyFixedCosts.reduce((s, c) => s + c.amount, 0);
+            const fix = Math.round(monthlyTotal * (b.months||1) / (b.baseDays||18) * b.nights);
+            const per = prop.perBookingCosts.reduce((s, c) => s + c.amount, 0) * (b.groups||1);
+            totalCostAll += fix + per;
+          }
+          validCount++;
+        }
+      });
+      const totalProfit = totalRevenue - totalCostAll;
+      const isP = totalProfit >= 0;
+      const fmtSM2 = n => { const a = Math.abs(n); return (a >= 10000 ? (n/10000).toFixed(1)+'万' : n.toLocaleString('ja-JP')) + '円'; };
+      document.getElementById('monthly-summary').innerHTML = `
+        <div class="monthly-summary">
+          <div class="ms-row"><span class="ms-label">予約数</span><span class="ms-value">${validCount}件</span></div>
+          <div class="ms-row"><span class="ms-label">総売上</span><span class="ms-value">${fmtSM2(totalRevenue)}</span></div>
+          <div class="ms-row"><span class="ms-label">総コスト</span><span class="ms-value">${fmtSM2(totalCostAll)}</span></div>
+          <div class="ms-total">
+            <span class="ms-total-label">月間利益</span>
+            <span class="ms-total-value ${isP?'profit':'loss'}">${isP?'':'▲'}${fmtSM2(Math.abs(totalProfit))}</span>
+          </div>
+        </div>`;
+    } else {
+      document.getElementById('monthly-summary').innerHTML = '';
+    }
+  }
+
+  // カレンダービューを描画
+  const calEl = document.getElementById('monthly-calendar');
+  if (calEl) calEl.innerHTML = renderCalendar(year, month);
+}
+
+// ==================== カレンダービュー (Airbnb風バー表示) ====================
+function renderCalendar(year, month) {
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const firstDay = new Date(year, month - 1, 1).getDay(); // 0=Sun
+  const today = new Date();
+  const todayY = today.getFullYear(), todayM = today.getMonth() + 1, todayD = today.getDate();
+  const numWeeks = Math.ceil((firstDay + daysInMonth) / 7);
+
+  // この月に重なる予約を収集（月をまたぐものも含む）
+  const monthBookings = airbnbBookings.filter(b => {
+    if (!b.checkin) return false;
+    // 物件フィルター連動
+    if (monthlyPropFilter !== 'all' && getBookingPropId(b) !== parseInt(monthlyPropFilter)) return false;
+    const coStr = getCheckout(b);
+    const cinParts = b.checkin.split('/').map(Number);
+    const coutParts = coStr.split('/').map(Number);
+    const cin = new Date(cinParts[0], cinParts[1] - 1, cinParts[2]);
+    const cout = new Date(coutParts[0], coutParts[1] - 1, coutParts[2]);
+    return cin < new Date(year, month, 1) && cout > new Date(year, month - 1, 1);
+  }).map(b => {
+    const coStr = getCheckout(b);
+    const cinParts = b.checkin.split('/').map(Number);
+    const coutParts = coStr.split('/').map(Number);
+    const cin = new Date(cinParts[0], cinParts[1] - 1, cinParts[2]);
+    const cout = new Date(coutParts[0], coutParts[1] - 1, coutParts[2]);
+    // 月内でのチェックイン日（前月からの場合は1）
+    const startDay = (cin.getFullYear() === year && cin.getMonth() + 1 === month) ? cin.getDate() : 0;
+    // 月内でのチェックアウト日（翌月へ続く場合はdaysInMonth+1）
+    const endDay = (cout.getFullYear() === year && cout.getMonth() + 1 === month) ? cout.getDate() : daysInMonth + 1;
+    return { b, startDay, endDay };
+  });
+
+  // 物件カラー（複数物件を色で区別）
+  const propColors = ['#1a1a2e', '#1565c0', '#2e7d32', '#6a1b9a', '#c62828'];
+  const propColorMap = {};
+  properties.forEach((p, i) => { propColorMap[p.id] = propColors[i % propColors.length]; });
+
+  const dayNames = ['日','月','火','水','木','金','土'];
+
+  let html = '<div class="card" style="margin-bottom:12px">'
+    + '<div class="card-title" style="margin-bottom:6px">稼働カレンダー <span style="font-size:10px;font-weight:400;color:#bbb">（バーをタップで詳細）</span></div>'
+    + '<div style="display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:2px">'
+    + dayNames.map((d, i) => '<div style="text-align:center;font-size:9px;font-weight:700;color:'+(i===0?'#ef9a9a':i===6?'#90caf9':'#bbb')+';padding:3px 0">'+d+'</div>').join('')
+    + '</div>';
+
+  for (let w = 0; w < numWeeks; w++) {
+    // この週の7日分（0=空白セル、1〜daysInMonth=実際の日）
+    const weekDays = Array.from({length: 7}, (_, c) => {
+      const d = w * 7 + c - firstDay + 1;
+      return (d >= 1 && d <= daysInMonth) ? d : 0;
+    });
+    const weekMin = weekDays.find(d => d > 0) || 1;
+    const weekMax = [...weekDays].reverse().find(d => d > 0) || 7;
+
+    // 日付番号行
+    html += '<div style="display:grid;grid-template-columns:repeat(7,1fr)">';
+    weekDays.forEach((day, col) => {
+      if (!day) { html += '<div style="min-height:28px"></div>'; return; }
+      const isToday = year === todayY && month === todayM && day === todayD;
+      const isSun = col === 0, isSat = col === 6;
+      const color = isToday ? '#e65100' : isSun ? '#ef5350' : isSat ? '#1565c0' : '#444';
+      html += '<div style="text-align:center;font-size:11px;font-weight:'+(isToday?'800':'500')+';color:'+color+';padding:4px 2px;min-height:28px;'+(isToday?'background:#fff3e0;border-radius:50%;':'')+'">'+day+'</div>';
+    });
+    html += '</div>';
+
+    // この週に重なる予約を抽出
+    const weekBooks = monthBookings.filter(({ startDay, endDay }) => {
+      const s = startDay === 0 ? 1 : startDay;
+      const e = endDay === daysInMonth + 1 ? daysInMonth : endDay - 1;
+      return s <= weekMax && e >= weekMin;
+    });
+
+    if (weekBooks.length > 0) {
+      html += '<div style="display:flex;flex-direction:column;gap:3px;margin:2px 0 6px;position:relative">';
+      weekBooks.forEach(({ b, startDay, endDay }) => {
+        const effectiveStart = startDay === 0 ? 1 : startDay;
+        const effectiveEnd = endDay === daysInMonth + 1 ? daysInMonth : endDay - 1;
+        // この週内にクリップ
+        const clipStart = Math.max(effectiveStart, weekMin);
+        const clipEnd = Math.min(effectiveEnd, weekMax);
+        if (clipStart > clipEnd) return;
+
+        // グリッド列位置
+        const colStart = weekDays.indexOf(clipStart);
+        const colEnd = weekDays.indexOf(clipEnd);
+        if (colStart < 0 || colEnd < 0) return;
+
+        const leftPct = (colStart / 7 * 100).toFixed(2);
+        const widthPct = ((colEnd - colStart + 1) / 7 * 100).toFixed(2);
+
+        // バーが始まる/終わる（週をまたぐか）
+        const isStart = clipStart === effectiveStart;
+        const isEnd = clipEnd === effectiveEnd;
+        const br = (isStart ? '11px' : '0') + ' ' + (isEnd ? '11px' : '0') + ' ' + (isEnd ? '11px' : '0') + ' ' + (isStart ? '11px' : '0');
+
+        const prop = properties.find(p => p.id === getBookingPropId(b));
+        const bgColor = propColorMap[getBookingPropId(b)] || '#1a1a2e';
+        const initial = b.guestName ? b.guestName.charAt(0).toUpperCase() : '?';
+        const perNight = b.nights > 0 ? Math.round(b.revenue / b.nights) : 0;
+        const fmtY = n => n >= 10000 ? '¥'+(n/10000).toFixed(1)+'万' : '¥'+n.toLocaleString('ja-JP');
+
+        html += '<div style="margin-left:'+leftPct+'%;width:'+widthPct+'%;box-sizing:border-box;background:'+bgColor+';border-radius:'+br+';height:24px;display:flex;align-items:center;gap:5px;padding:0 '+(isStart?'8px':'4px')+' 0 '+(isStart?'6px':'4px')+';cursor:pointer;overflow:hidden;white-space:nowrap" onclick="showDayDetail('+year+','+month+','+clipStart+')">'
+          + (isStart ? '<div style="width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,.25);color:white;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+initial+'</div>'
+            + '<span style="font-size:10px;font-weight:600;color:white;overflow:hidden;text-overflow:ellipsis;flex:1">'+escHtml(b.guestName||'ゲスト')+(prop?' · '+prop.name:'')+'</span>'
+            : '')
+          + '</div>';
+      });
+      html += '</div>';
+    } else {
+      html += '<div style="min-height:4px;margin-bottom:6px"></div>';
+    }
+  }
+
+  html += '</div>';
+  return html;
+}
+
+// ==================== 物件設定 ====================
+function renderSettings() {
+  const list = document.getElementById('property-list');
+  if (properties.length === 0) { list.innerHTML = '<div class="empty-state">物件が登録されていません</div>'; return; }
+  let settingsHTML = properties.map((p, pi) => `
+    <div class="property-item" id="prop-item-${p.id}">
+      <div class="property-header" style="cursor:pointer" onclick="togglePropertyAccordion(${p.id})">
+        <input class="property-name-input" type="text" value="${escHtml(p.name)}" placeholder="物件名" oninput="updateName(${pi},this.value)" onclick="event.stopPropagation()">
+        <button class="btn-delete" onclick="event.stopPropagation();deleteProperty(${pi})">削除</button>
+        <span id="prop-chevron-${p.id}" style="color:rgba(255,255,255,.6);margin-left:8px;transition:transform .2s;flex-shrink:0">▼</span>
+      </div>
+      <div class="cost-section" id="prop-body-${p.id}" style="display:none">
+        <div class="cost-section-title">営業開始月</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <input type="month" value="${p.operationStart||''}" style="border:1.5px solid #eee;border-radius:8px;padding:8px 10px;font-size:14px;font-weight:600;color:#333;flex:1" oninput="properties[${pi}].operationStart=this.value">
+          <span style="font-size:11px;color:#bbb">この月から月額固定費が発生</span>
+        </div>
+        <div class="cost-section-title">営業形態・稼働日数上限</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+          ${[
+            {type:'minpaku', label:'民泊新法', days:'180日'},
+            {type:'tokku',   label:'特区民泊', days:'365日'},
+            {type:'ryokan',  label:'旅館業',   days:null}
+          ].map(opt => `<button onclick="setLicenseType(${pi},'${opt.type}')" style="padding:6px 14px;border-radius:20px;border:1.5px solid ${p.licenseType===opt.type?'#1976d2':'#eee'};background:${p.licenseType===opt.type?'#e3f2fd':'white'};color:${p.licenseType===opt.type?'#1976d2':'#888'};font-size:12px;font-weight:${p.licenseType===opt.type?'700':'400'};cursor:pointer">${opt.label}${opt.days?' ('+opt.days+')':''}</button>`).join('')}
+        </div>
+        ${p.licenseType !== 'ryokan' ? `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <span style="font-size:12px;color:#555;white-space:nowrap">年間上限日数</span>
+          <input type="number" value="${p.maxAnnualNights||''}" min="1" max="365" style="border:1.5px solid #eee;border-radius:8px;padding:6px 10px;font-size:14px;font-weight:700;width:72px;text-align:center;color:#1976d2" oninput="setMaxAnnualNights(${pi},this.value)">
+          <span style="font-size:11px;color:#bbb">日/年（手動変更可）</span>
+        </div>` : `
+        <div style="font-size:11px;color:#aaa;margin-bottom:12px;padding:6px 0">旅館業は年間稼働日数の法的上限なし（無制限）</div>`}
+        <div class="cost-section-title">月額固定費（宿泊数で按分）</div>
+        ${p.monthlyFixedCosts.map((c,ci) => `
+          <div class="cost-row">
+            <input class="cost-name" type="text" value="${escHtml(c.name)}" placeholder="項目名" oninput="updateCost(${pi},'monthly',${ci},'name',this.value)">
+            <input class="cost-amount" type="number" value="${c.amount}" placeholder="0" inputmode="numeric" oninput="updateCost(${pi},'monthly',${ci},'amount',this.value)">
+            <span class="cost-unit">円/月</span>
+            <button class="btn-remove-row" onclick="removeCostRow(${pi},'monthly',${ci})">×</button>
+          </div>`).join('')}
+        <button class="btn-add-row" onclick="addCostRow(${pi},'monthly')">＋ 項目を追加</button>
+        <div class="divider"></div>
+        <div class="cost-section-title">1予約あたりのコスト</div>
+        ${p.perBookingCosts.map((c,ci) => `
+          <div class="cost-row">
+            <input class="cost-name" type="text" value="${escHtml(c.name)}" placeholder="項目名" oninput="updateCost(${pi},'booking',${ci},'name',this.value)">
+            <input class="cost-amount" type="number" value="${c.amount}" placeholder="0" inputmode="numeric" oninput="updateCost(${pi},'booking',${ci},'amount',this.value)">
+            <span class="cost-unit">円</span>
+            <button class="btn-remove-row" onclick="removeCostRow(${pi},'booking',${ci})">×</button>
+          </div>`).join('')}
+        <button class="btn-add-row" onclick="addCostRow(${pi},'booking')">＋ 項目を追加</button>
+        <div class="divider"></div>
+        <div class="cost-section-title" style="color:#e65100">初期費用（開業時の一時費用）</div>
+        <div style="font-size:11px;color:#bbb;margin-bottom:8px">合計: ${(p.initialCosts||[]).reduce((s,c)=>s+c.amount,0).toLocaleString('ja-JP')}円</div>
+        ${(p.initialCosts||[]).map((c,ci) => `
+          <div class="cost-row">
+            <input class="cost-name" type="text" value="${escHtml(c.name)}" placeholder="項目名" oninput="updateCost(${pi},'initial',${ci},'name',this.value)">
+            <input class="cost-amount" type="number" value="${c.amount}" placeholder="0" inputmode="numeric" oninput="updateCost(${pi},'initial',${ci},'amount',this.value)">
+            <span class="cost-unit">円</span>
+            <button class="btn-remove-row" onclick="removeCostRow(${pi},'initial',${ci})">×</button>
+          </div>`).join('')}
+        <button class="btn-add-row" onclick="addCostRow(${pi},'initial')">＋ 項目を追加</button>
+      </div>
+    </div>`).join('');
+
+  // Airbnb物件紐付け（データある場合のみ表示）
+  if (airbnbBookings.length > 0) {
+    const allListings = [...new Set(airbnbBookings.map(b => b.listing))];
+    settingsHTML += `<div class="property-item" style="background:#f8fafc">
+      <div class="property-header" style="background:linear-gradient(135deg,#37474f,#546e7a)">
+        <span style="color:white;font-size:14px;font-weight:700;flex:1">Airbnbリスティング → 物件の紐付け</span>
+      </div>
+      <div class="cost-section">
+        <div style="font-size:11px;color:#aaa;margin-bottom:12px">Airbnbのリスティング名と物件を対応付けてください</div>
+        ${allListings.map((l, i) => {
+          const currentVal = listingMap[l] || '';
+          return `<div class="map-row">
+            <div class="map-listing">${l}</div>
+            <select class="map-select" onchange="setListingMapByIndex(${i},this.value)">
+              <option value="">-- 選択 --</option>
+              ${properties.map(p => `<option value="${p.id}"${currentVal==p.id?' selected':''}>${p.name}</option>`).join('')}
+            </select>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+
+  list.innerHTML = settingsHTML;
+}
+
+function updateName(pi, val) { properties[pi].name = val; }
+function getCostList(pi, type) {
+  if (type === 'monthly') return properties[pi].monthlyFixedCosts;
+  if (type === 'booking') return properties[pi].perBookingCosts;
+  if (type === 'initial') { if (!properties[pi].initialCosts) properties[pi].initialCosts = []; return properties[pi].initialCosts; }
+  return [];
+}
+function updateCost(pi, type, ci, field, val) {
+  const list = getCostList(pi, type);
+  list[ci][field] = field === 'amount' ? (parseInt(val) || 0) : val;
+}
+function addCostRow(pi, type) {
+  getCostList(pi, type).push({ name: '', amount: 0 });
+  renderSettings();
+}
+function removeCostRow(pi, type, ci) {
+  getCostList(pi, type).splice(ci, 1);
+  renderSettings();
+}
+function addProperty() {
+  const template = properties[0] || { monthlyFixedCosts: [], perBookingCosts: [] };
+  properties.push({ id: Date.now(), name: '新しい物件', monthlyFixedCosts: JSON.parse(JSON.stringify(template.monthlyFixedCosts)), perBookingCosts: JSON.parse(JSON.stringify(template.perBookingCosts)) });
+  renderSettings();
+}
+function deleteProperty(pi) {
+  if (!confirm(`「${properties[pi].name}」を削除しますか？`)) return;
+  properties.splice(pi, 1);
+  renderSettings();
+}
+function saveSettings() {
+  saveData();
+  const btn = document.getElementById('save-btn');
+  btn.textContent = '✓ 保存しました';
+  btn.classList.add('saved');
+  setTimeout(() => { btn.textContent = '設定を保存'; btn.classList.remove('saved'); }, 2000);
+  renderSimPropertySelect();
+}
+function escHtml(str) {
+  return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function togglePropertyAccordion(propId) {
+  const body = document.getElementById('prop-body-' + propId);
+  const chevron = document.getElementById('prop-chevron-' + propId);
+  if (!body || !chevron) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  chevron.style.transform = isOpen ? '' : 'rotate(180deg)';
+}
+
+// ==================== ヘルパー ====================
+function getDaysInMonth(year, month) { return new Date(year, month, 0).getDate(); }
+
+// 物件がその月に営業しているか
+function isPropertyOperating(prop, year, month) {
+  if (!prop.operationStart) return true;
+  const [sy, sm] = prop.operationStart.split('-').map(Number);
+  return year > sy || (year === sy && month >= sm);
+}
+
+// 営業開始から現在までの月数
+function totalMonthsOperating(prop) {
+  if (!prop.operationStart) return 0;
+  const [sy, sm] = prop.operationStart.split('-').map(Number);
+  const now = new Date();
+  const ny = now.getFullYear();
+  const nm = now.getMonth() + 1;
+  return Math.max((ny - sy) * 12 + (nm - sm) + 1, 0);
+}
+
+// ある月の固定費合計（フィルター考慮）
+function getMonthFixedCosts(year, month, propFilter) {
+  const targetProps = propFilter === 'all'
+    ? properties.filter(p => isPropertyOperating(p, year, month))
+    : properties.filter(p => String(p.id) === String(propFilter) && isPropertyOperating(p, year, month));
+  return targetProps.reduce((s, p) => s + p.monthlyFixedCosts.reduce((ss, c) => ss + c.amount, 0), 0);
+}
+function fmtShort(n) {
+  const abs = Math.abs(n);
+  if (abs >= 10000) return (n / 10000).toFixed(1) + '万';
+  return n.toLocaleString('ja-JP');
+}
+
+function renderDonut(pct, forecastPct, size=88) {
+  const r = 32;
+  const circ = 2 * Math.PI * r;
+  const sw = 14;
+  const actualPct = Math.min(pct, 100);
+  const forecastPctCapped = Math.min(forecastPct, 100 - actualPct);
+  const actualDash = circ * actualPct / 100;
+  const forecastDash = circ * forecastPctCapped / 100;
+  const totalPct = Math.round(actualPct + forecastPctCapped);
+  return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 88 88">'
+    + '<circle cx="44" cy="44" r="'+r+'" fill="none" stroke="#eee" stroke-width="'+sw+'"/>'
+    + '<circle cx="44" cy="44" r="'+r+'" fill="none" stroke="#66bb6a" stroke-width="'+sw+'"'
+    + ' stroke-dasharray="'+actualDash.toFixed(2)+' '+circ.toFixed(2)+'" stroke-linecap="round"'
+    + ' transform="rotate(-90 44 44)"/>'
+    + (forecastPctCapped > 0 ? '<circle cx="44" cy="44" r="'+r+'" fill="none" stroke="#42a5f5" stroke-width="'+sw+'"'
+    + ' stroke-dasharray="'+forecastDash.toFixed(2)+' '+circ.toFixed(2)+'" stroke-linecap="round"'
+    + ' transform="rotate('+(-90 + 360 * actualPct / 100).toFixed(2)+' 44 44)"/>' : '')
+    + '<text x="44" y="41" text-anchor="middle" dominant-baseline="middle"'
+    + ' font-size="14" font-weight="800" fill="#1a1a2e">'+actualPct+'%</text>'
+    + '<text x="44" y="55" text-anchor="middle" font-size="7" fill="#66bb6a">実績</text>'
+    + '</svg>';
+}
+
+function toggleRecDetail(id) {
+  const el = document.getElementById(id);
+  const chev = document.getElementById(id + '-chev');
+  if (!el || !chev) return;
+  const isOpen = el.style.display !== 'none';
+  el.style.display = isOpen ? 'none' : 'block';
+  chev.style.transform = isOpen ? '' : 'rotate(180deg)';
+}
+
+function toggleRecPL(id) {
+  const el = document.getElementById(id);
+  const chev = document.getElementById(id + '-chev');
+  if (!el || !chev) return;
+  const isOpen = el.style.display !== 'none';
+  el.style.display = isOpen ? 'none' : 'block';
+  chev.style.transform = isOpen ? '' : 'rotate(180deg)';
+}
+
+function renderProfitChart(monthlyStats, avgMonthlyTarget) {
+  const profits = monthlyStats.map(m => m ? m.profit : null);
+  const validP = profits.filter(p => p !== null);
+  if (validP.length === 0) return '<div style="text-align:center;color:#ccc;padding:20px;font-size:13px">データなし</div>';
+  const targetLine = (typeof avgMonthlyTarget === 'number' && avgMonthlyTarget > 0) ? avgMonthlyTarget : null;
+  const maxAbs = Math.max(...validP.map(Math.abs), targetLine || 0, 1);
+  const W = 300, H = 100;
+  const barW = (W / 12) * 0.62;
+  const baseline = H * 0.58;
+  let svgBars = '';
+  profits.forEach((p, i) => {
+    if (p === null) return;
+    const cx = (W / 12) * (i + 0.5);
+    const bh = Math.max(Math.abs(p) / maxAbs * (baseline - 8), 2);
+    const y = p >= 0 ? baseline - bh : baseline;
+    svgBars += '<rect x="'+(cx - barW/2).toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+bh.toFixed(1)+'" fill="'+(p >= 0 ? '#4caf50' : '#ef5350')+'" rx="2"/>';
+  });
+  const labels = monthlyStats.map((m, i) => {
+    const cx = ((W/12) * (i + 0.5)).toFixed(1);
+    const label = m ? m.month : (i + 1);
+    return '<text x="'+cx+'" y="'+(H - 2)+'" text-anchor="middle" font-size="8" fill="#bbb">'+label+'</text>';
+  }).join('');
+  let targetLineHtml = '';
+  if (targetLine !== null) {
+    const ty = (baseline - targetLine / maxAbs * (baseline - 8)).toFixed(1);
+    targetLineHtml = '<line x1="0" y1="'+ty+'" x2="'+W+'" y2="'+ty+'" stroke="#ff9800" stroke-width="1.5" stroke-dasharray="4 3"/>'
+      + '<text x="'+(W-2)+'" y="'+(parseFloat(ty)-2)+'" text-anchor="end" font-size="7" fill="#ff9800">目標</text>';
+  }
+  return '<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="display:block">'
+    + '<line x1="0" y1="'+baseline+'" x2="'+W+'" y2="'+baseline+'" stroke="#eee" stroke-width="1.5"/>'
+    + targetLineHtml + svgBars + labels
+    + '</svg>';
+}
+
+// チェックアウト日を取得（旧データ対応：なければcheckin+nightsで計算）
+function getCheckout(b) {
+  if (b.checkout) return b.checkout;
+  const [y, m, d] = b.checkin.split('/').map(Number);
+  const dt = new Date(y, m - 1, d + b.nights);
+  return `${dt.getFullYear()}/${dt.getMonth()+1}/${dt.getDate()}`;
+}
+function parseDateStr(s) {
+  if (!s) return null;
+  const p = s.split('/').map(Number);
+  return new Date(p[0], p[1]-1, p[2]);
+}
+
+// ==================== 予約重複チェック ====================
+function getOverlapInnerHTML() {
+  if (airbnbBookings.length === 0) return '';
+  const fmtD = s => { if (!s) return '?'; const p = s.split('/'); return `${p[1]}/${p[2]}`; };
+
+  let html = `<div style="font-size:11px;color:#aaa;margin-bottom:12px">集計基準：<strong style="color:#555">チェックイン日</strong>で月を判定・表示しています</div>`;
+
+  let hasAnyOverlap = false;
+
+  properties.forEach(prop => {
+    const books = airbnbBookings
+      .filter(b => getBookingPropId(b) === prop.id)
+      .sort((a, b) => (parseDateStr(a.checkin) || 0) - (parseDateStr(b.checkin) || 0));
+
+    html += `<div style="margin-bottom:16px">
+      <div style="font-size:12px;font-weight:700;color:#2c5f8a;margin-bottom:6px;padding:6px 8px;background:#eef4fb;border-radius:8px">${prop.name}（${books.length}件）</div>`;
+
+    if (books.length === 0) {
+      html += `<div style="font-size:12px;color:#ccc;padding:4px 8px">予約なし</div>`;
+    }
+
+    books.forEach((b, i) => {
+      const coStr = getCheckout(b);
+      const coD = parseDateStr(coStr);
+      const nextB = books[i + 1];
+      const nextCiD = nextB ? parseDateStr(nextB.checkin) : null;
+
+      let rowBg = '#f8fafc', borderLeft = '', warningHtml = '';
+      if (nextCiD && coD && coD > nextCiD) {
+        rowBg = '#ffebee'; borderLeft = 'border-left:3px solid #e53935;';
+        warningHtml = `<div style="font-size:10px;color:#c62828;font-weight:700;margin-top:2px;padding-left:4px">⚠️ 重複！次の予約(${nextB.guestName})とチェックアウト前にチェックインが重なっています</div>`;
+        hasAnyOverlap = true;
+      } else if (nextCiD && coD && coD.getTime() === nextCiD.getTime()) {
+        rowBg = '#fffde7'; borderLeft = 'border-left:3px solid #f9a825;';
+        warningHtml = `<div style="font-size:10px;color:#e65100;margin-top:2px;padding-left:4px">⚡ 当日ターンオーバー（チェックアウトとチェックインが同日）</div>`;
+      }
+
+      html += `<div style="margin-bottom:4px">
+        <div style="display:flex;align-items:center;gap:6px;padding:7px 8px;background:${rowBg};border-radius:8px;${borderLeft}">
+          <div style="font-size:11px;white-space:nowrap;color:#777">
+            <span style="background:#e3f2fd;color:#1565c0;font-weight:700;font-size:9px;padding:1px 4px;border-radius:4px;margin-right:2px">IN</span>${fmtD(b.checkin)}
+            <span style="color:#ccc;margin:0 3px">→</span>
+            <span style="background:#fce4ec;color:#c62828;font-weight:700;font-size:9px;padding:1px 4px;border-radius:4px;margin-right:2px">OUT</span>${fmtD(coStr)}
+            <span style="color:#bbb;margin-left:4px">${b.nights}泊</span>
+          </div>
+          <div style="flex:1;min-width:0;font-size:11px;color:#555;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.guestName}</div>
+        </div>
+        ${warningHtml}
+      </div>`;
+    });
+
+    html += `</div>`;
+  });
+
+  if (!hasAnyOverlap) {
+    html += `<div style="text-align:center;font-size:12px;color:#2e7d32;font-weight:700;padding:8px;background:#e8f5e9;border-radius:8px;margin-top:4px">✅ 重複なし・すべての予約は正常です</div>`;
+  }
+
+  return html;
+}
+
+function renderOverlapCheck() {
+  return `<div class="card"><div class="card-title" style="margin-bottom:4px">📅 予約カレンダー・重複チェック</div>${getOverlapInnerHTML()}</div>`;
+}
+
+// ==================== 投資回収計算 ====================
+function renderInvestmentRecovery() {
+  const fmt = n => n.toLocaleString('ja-JP');
+  const fmtS = n => { const a = Math.abs(n); return (a >= 10000 ? (n/10000).toFixed(1)+'万' : n.toLocaleString('ja-JP')) + '円'; };
+
+  // 全期間の累積利益を物件別に計算（現在月までの実績のみ・売上と固定費の期間を統一）
+  const nowY = new Date().getFullYear();
+  const nowM = new Date().getMonth() + 1;
+  // 実績期間ラベル（最も早い営業開始月〜現在月）
+  const earliestOpStart = properties.reduce((min, p) => {
+    if (!p.operationStart) return min;
+    return !min || p.operationStart < min ? p.operationStart : min;
+  }, null);
+  const recStartM = earliestOpStart ? parseInt(earliestOpStart.split('-')[1]) : nowM;
+  const recPeriodLabel = `実績ベース（${recStartM}月〜${nowM}月）`;
+
+  const propStats = properties.map(p => {
+    const initialTotal = (p.initialCosts || []).reduce((s, c) => s + c.amount, 0);
+    const monthlyFixedTotal = p.monthlyFixedCosts.reduce((s, c) => s + c.amount, 0);
+
+    // 現在月までの予約のみ（未来の予約は固定費も未発生なので除外）
+    const books = airbnbBookings.filter(b => {
+      if (getBookingPropId(b) !== p.id) return false;
+      const [by, bm] = b.checkin.split('/').map(Number);
+      return by < nowY || (by === nowY && bm <= nowM);
+    });
+
+    // 営業開始から現在月までの全固定費（予約がない月も含む）
+    const months = totalMonthsOperating(p);
+    const totalFixedCosts = monthlyFixedTotal * months;
+
+    // 現在月までの売上と変動費
+    let totalRevenue = 0, totalVarCosts = 0;
+    books.forEach(b => {
+      totalRevenue += b.revenue;
+      totalVarCosts += p.perBookingCosts.reduce((s, c) => s + c.amount, 0);
+    });
+
+    const cumulativeProfit = totalRevenue - totalFixedCosts - totalVarCosts;
+
+    // 月別の純利益（直近3ヶ月平均 → 回収予想）
+    // 各月の純利益 = 売上 - 固定費 - 変動費
+    const monthRevMap = {}, monthVarMap = {};
+    books.forEach(b => {
+      const [y, mo] = b.checkin.split('/').map(Number);
+      const key = `${y}-${String(mo).padStart(2,'0')}`;
+      monthRevMap[key] = (monthRevMap[key] || 0) + b.revenue;
+      monthVarMap[key] = (monthVarMap[key] || 0) + p.perBookingCosts.reduce((s, c) => s + c.amount, 0);
+    });
+    // 営業開始〜現在の全月を列挙
+    const allMonthProfits = [];
+    if (p.operationStart) {
+      const [sy, sm] = p.operationStart.split('-').map(Number);
+      const now = new Date();
+      let cy = sy, cm = sm;
+      while (cy < now.getFullYear() || (cy === now.getFullYear() && cm <= now.getMonth() + 1)) {
+        const key = `${cy}-${String(cm).padStart(2,'0')}`;
+        const mp = (monthRevMap[key] || 0) - monthlyFixedTotal - (monthVarMap[key] || 0);
+        allMonthProfits.push(mp);
+        cm++; if (cm > 12) { cm = 1; cy++; }
+      }
+    }
+    const recent3 = allMonthProfits.slice(-3);
+    const avgMonthlyProfit = recent3.length > 0 ? recent3.reduce((a, b) => a + b, 0) / recent3.length : 0;
+
+    const remaining = Math.max(initialTotal - cumulativeProfit, 0);
+    const pct = initialTotal > 0 ? Math.min(Math.round(cumulativeProfit / initialTotal * 100), 100) : 0;
+    const monthsNeeded = avgMonthlyProfit > 0 && remaining > 0 ? Math.ceil(remaining / avgMonthlyProfit) : null;
+
+    return { prop: p, initialTotal, cumulativeProfit, totalFixedCosts, totalRevenue, months, remaining, pct, avgMonthlyProfit, monthsNeeded };
+  });
+
+  const totalInitial = propStats.reduce((s, x) => s + x.initialTotal, 0);
+  const totalProfit = propStats.reduce((s, x) => s + x.cumulativeProfit, 0);
+  const totalRemaining = Math.max(totalInitial - totalProfit, 0);
+  const totalPct = totalInitial > 0 ? Math.min(Math.round(totalProfit / totalInitial * 100), 100) : 0;
+  const netPos = totalProfit - totalInitial;
+
+  let html = `<div class="recovery-card">
+    <div class="recovery-header">
+      <div>
+        <div class="recovery-header-title">💰 初期投資の回収状況</div>
+        <div class="recovery-header-sub">${recPeriodLabel}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:10px;color:rgba(255,255,255,.6)">回収率</div>
+        <div style="font-size:22px;font-weight:900">${totalPct}%</div>
+      </div>
+    </div>
+    <div class="recovery-body">`;
+
+  // 物件別
+  propStats.forEach((x, xi) => {
+    const barColor = x.pct >= 100 ? '#4caf50' : x.pct >= 50 ? '#ff9800' : '#ef5350';
+
+    // PriceLabs予測の事前計算（ドーナツ用）
+    let forecastPctForDonut = 0;
+    let forecastProfitForSummary = 0;
+    let hasForecastForSummary = false;
+    let remainingMonthsForSummary = 0;
+    let totalProfitWithForecast = x.cumulativeProfit;
+    let totalRemainingWithForecast = x.remaining;
+    const fyKeyPre = String(nowY);
+    const pfPre = pricelabsForecast[fyKeyPre] && pricelabsForecast[fyKeyPre][x.prop.id];
+    if (pfPre) {
+      hasForecastForSummary = true;
+      const annualFixedPre = x.prop.monthlyFixedCosts.reduce((s,c)=>s+c.amount,0) * 12;
+      const perBookingCostPre = x.prop.perBookingCosts.reduce((s,c)=>s+c.amount,0);
+      const propBooksPre = airbnbBookings.filter(b => getBookingPropId(b) === x.prop.id && b.nights > 0);
+      const avgNightsPre = propBooksPre.length > 0 ? propBooksPre.reduce((s,b)=>s+b.nights,0)/propBooksPre.length : 3;
+      const shortRevPre = pfPre.shortTermRevenue || pfPre.revenue || 0;
+      const estDaysPre = Math.round(pfPre.occupancy / 100 * 365);
+      const maxDaysPre = x.prop.maxAnnualNights;
+      const cappedDaysPre = maxDaysPre && estDaysPre > maxDaysPre ? maxDaysPre : estDaysPre;
+      const cappedRevPre = maxDaysPre && estDaysPre > maxDaysPre ? Math.round(shortRevPre * maxDaysPre / estDaysPre) : shortRevPre;
+      remainingMonthsForSummary = nowM >= 4 ? (15 - nowM) : (3 - nowM + 1);
+      const monthFractionPre = Math.min(remainingMonthsForSummary, 12) / 12;
+      const cappedRevAdjPre = Math.round(cappedRevPre * monthFractionPre);
+      const annualFixedAdjPre = Math.round(annualFixedPre * monthFractionPre);
+      const estBookingsPre = Math.round(cappedDaysPre * monthFractionPre / avgNightsPre);
+      forecastProfitForSummary = cappedRevAdjPre - annualFixedAdjPre - perBookingCostPre * estBookingsPre;
+      totalProfitWithForecast = x.cumulativeProfit + forecastProfitForSummary;
+      totalRemainingWithForecast = Math.max(x.initialTotal - totalProfitWithForecast, 0);
+      forecastPctForDonut = x.initialTotal > 0 ? Math.max(Math.min(Math.round(forecastProfitForSummary / x.initialTotal * 100), 100 - x.pct), 0) : 0;
+    }
+
+    const donutSvg = renderDonut(x.pct, forecastPctForDonut);
+
+    const accordionId = 'rec-detail-' + x.prop.id;
+    const plAccordionId = 'rec-pl-' + x.prop.id;
+
+    // 常時表示のサマリー行
+    const summaryRow = hasForecastForSummary ? `
+      <div style="margin-top:6px;padding:6px 10px;background:#e8f5e9;border-radius:8px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px">
+        <div style="font-size:9px;color:#666">実績利益</div>
+        <div style="font-size:9px;color:#666">＋ 予測利益（残${remainingMonthsForSummary}ヶ月）</div>
+        <div style="font-size:9px;color:#666">= トータル残り回収額</div>
+        <div style="font-size:12px;font-weight:700;color:#2e7d32">${fmtS(x.cumulativeProfit)}</div>
+        <div style="font-size:12px;font-weight:700;color:#1565c0">${fmtS(forecastProfitForSummary)}</div>
+        <div style="font-size:12px;font-weight:700;color:${totalRemainingWithForecast===0?'#2e7d32':'#e65100'}">${totalRemainingWithForecast===0?'回収完了見込み':fmtS(totalRemainingWithForecast)}</div>
+      </div>` : '';
+
+    // PriceLabs詳細ブロック（アコーディオン）
+    const plDetailHtml = (() => {
+      const fyKey = String(nowY);
+      const pf = pricelabsForecast[fyKey] && pricelabsForecast[fyKey][x.prop.id];
+      if (!pf) return '';
+      const annualFixed = x.prop.monthlyFixedCosts.reduce((s,c)=>s+c.amount,0) * 12;
+      const perBookingCost = x.prop.perBookingCosts.reduce((s,c)=>s+c.amount,0);
+      const propBooks = airbnbBookings.filter(b => getBookingPropId(b) === x.prop.id && b.nights > 0);
+      const avgNights = propBooks.length > 0 ? propBooks.reduce((s,b)=>s+b.nights,0)/propBooks.length : 3;
+      const shortRev = pf.shortTermRevenue || pf.revenue || 0;
+      const estimatedDays = Math.round(pf.occupancy / 100 * 365);
+      const maxDays = x.prop.maxAnnualNights;
+      const overLimit = maxDays && estimatedDays > maxDays;
+      const cappedDays = overLimit ? maxDays : estimatedDays;
+      const cappedRev = overLimit ? Math.round(shortRev * maxDays / estimatedDays) : shortRev;
+      const remainingMonths = nowM >= 4 ? (15 - nowM) : (3 - nowM + 1);
+      const monthFraction = Math.min(remainingMonths, 12) / 12;
+      const cappedRevAdj = Math.round(cappedRev * monthFraction);
+      const annualFixedAdj = Math.round(annualFixed * monthFraction);
+      const estBookings = Math.round(cappedDays * monthFraction / avgNights);
+      const estVarCost = perBookingCost * estBookings;
+      const forecastProfit = cappedRevAdj - annualFixedAdj - estVarCost;
+      const projRemaining = Math.max(x.initialTotal - x.cumulativeProfit - forecastProfit, 0);
+      const hasLong = pf.longTermOcc != null && (pf.longTermRevenue || 0) > 0;
+      const longDaysRaw = hasLong ? Math.round(pf.longTermOcc / 100 * 365) : 0;
+      const monthlyMaxDays = 365 - cappedDays;
+      const monthlyRealisticDays = Math.round(monthlyMaxDays * 0.5);
+      const longDays = Math.min(longDaysRaw, monthlyRealisticDays);
+      const longRevRaw = pf.longTermRevenue || 0;
+      const cappedLongRev = (hasLong && longDaysRaw > 0) ? Math.round(longRevRaw * longDays / longDaysRaw) : longRevRaw;
+      const estLongBookings = longDays > 0 ? Math.round(longDays / 28) : 0;
+      const estLongVarCost = perBookingCost * estLongBookings;
+      const longProfit = cappedLongRev - estLongVarCost;
+      return `<div style="margin-top:8px">
+        <div onclick="toggleRecPL('${plAccordionId}')" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:#f3e5f5;border-radius:8px">
+          <div style="font-size:10px;font-weight:700;color:#7b1fa2">📈 PriceLabs年間予測（${fyKey}年）</div>
+          <span id="${plAccordionId}-chev" style="color:#ab47bc;font-size:10px;transition:transform .2s">▼</span>
+        </div>
+        <div id="${plAccordionId}" style="display:none;padding:8px 10px;background:#f3e5f5;border-radius:0 0 8px 8px;margin-top:1px">
+          <div style="margin-bottom:6px">
+            <div style="font-size:9px;color:#ab47bc;font-weight:700;margin-bottom:3px">📅 通常リスティング</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px">
+              <div style="font-size:9px;color:#999">予測売上${overLimit?'（上限適用後）':''}</div>
+              <div style="font-size:9px;color:#999">予測利益（固定費・変動費控除）</div>
+              <div style="font-size:9px;color:#999">予測後残り回収額</div>
+              <div style="font-size:12px;font-weight:700;color:#7b1fa2">
+                ${fmtS(cappedRev)}
+                <div style="font-size:9px;font-weight:400;color:#aaa">${overLimit ? '元予測 '+fmtS(shortRev)+' / '+estimatedDays+'日→'+cappedDays+'日' : '稼働 '+cappedDays+'日'}</div>
+              </div>
+              <div style="font-size:12px;font-weight:700;color:${forecastProfit>=0?'#2e7d32':'#c62828'}">${fmtS(forecastProfit)}</div>
+              <div style="font-size:12px;font-weight:700;color:${projRemaining===0?'#2e7d32':'#e65100'}">${projRemaining===0?'回収完了見込み':fmtS(projRemaining)}</div>
+            </div>
+          </div>
+          ${hasLong ? '<div style="border-top:1px solid #e1bee7;padding-top:5px"><div style="font-size:9px;color:#ab47bc;font-weight:700;margin-bottom:3px">🎁 マンスリー（28+nights）ボーナス</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px"><div style="font-size:9px;color:#999">予測売上（残'+monthlyMaxDays+'日×50%）</div><div style="font-size:9px;color:#999">予測利益（変動費控除）</div><div style="font-size:9px;color:#999">想定稼働日数</div><div style="font-size:12px;font-weight:700;color:#6a1b9a">'+fmtS(cappedLongRev)+'</div><div style="font-size:12px;font-weight:700;color:'+(longProfit>=0?'#2e7d32':'#c62828')+'">'+fmtS(longProfit)+'</div><div style="font-size:12px;font-weight:700;color:#6a1b9a">'+longDays+'日</div></div></div>' : ''}
+          <div style="font-size:9px;color:#bbb;margin-top:4px">※残り${remainingMonths}ヶ月分で按分 / 変動費 ${fmtS(perBookingCost)}/件（通常 約${estBookings}件・マンスリー 約${estLongBookings}件）</div>
+        </div>
+      </div>`;
+    })();
+
+    const displayRemaining = hasForecastForSummary ? totalRemainingWithForecast : x.remaining;
+    const displayRemainingLabel = displayRemaining === 0
+      ? (hasForecastForSummary ? '回収完了見込み' : '回収完了')
+      : fmtS(displayRemaining);
+    const displayRemainingColor = displayRemaining === 0 ? '#2e7d32' : '#e65100';
+
+    html += `<div class="recovery-prop-row">
+      <!-- ヘッダー: ドーナツ + 物件名 -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        ${donutSvg}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;color:#2c5f8a">${x.prop.name}</div>
+          <div style="font-size:11px;color:#888;margin-top:2px">実績 <strong style="color:#66bb6a">${x.pct}%</strong>${hasForecastForSummary ? ' + 予測 <strong style="color:#42a5f5">'+forecastPctForDonut+'%</strong>' : ''}</div>
+          ${x.monthsNeeded !== null ? '<div style="font-size:10px;color:#888;margin-top:2px">実績ベース: あと約<strong style="color:#e65100">'+x.monthsNeeded+'ヶ月</strong>で回収見込み</div>' : ''}
+        </div>
+      </div>
+
+      <!-- 3ステップ表示: 実績利益 → 予測利益 → 残り回収額 -->
+      <div style="display:grid;grid-template-columns:1fr 18px 1fr 18px 1fr;align-items:center;gap:2px;padding:10px;background:#f8f9fb;border-radius:12px;margin-bottom:8px">
+        <div style="text-align:center">
+          <div style="font-size:9px;color:#888;margin-bottom:4px">実績利益</div>
+          <div style="font-size:13px;font-weight:800;color:${x.cumulativeProfit>=0?'#2e7d32':'#c62828'}">${x.cumulativeProfit<0?'▲':''}${fmtS(Math.abs(x.cumulativeProfit))}</div>
+        </div>
+        <div style="text-align:center;font-size:14px;color:#bbb;font-weight:300">＋</div>
+        <div style="text-align:center">
+          <div style="font-size:9px;color:#888;margin-bottom:4px">${hasForecastForSummary ? '予測利益（残'+remainingMonthsForSummary+'ヶ月）' : '予測利益'}</div>
+          <div style="font-size:13px;font-weight:800;color:${hasForecastForSummary?'#1565c0':'#ddd'}">${hasForecastForSummary ? (forecastProfitForSummary<0?'▲':'')+fmtS(Math.abs(forecastProfitForSummary)) : '−'}</div>
+        </div>
+        <div style="text-align:center;font-size:14px;color:#bbb;font-weight:300">＝</div>
+        <div style="text-align:center">
+          <div style="font-size:9px;color:#888;margin-bottom:4px">残り回収額</div>
+          <div style="font-size:13px;font-weight:800;color:${displayRemainingColor}">${displayRemainingLabel}</div>
+        </div>
+      </div>
+
+      <!-- 詳細トグル -->
+      <div onclick="toggleRecDetail('${accordionId}')" style="cursor:pointer;display:flex;justify-content:center;align-items:center;gap:4px;padding:6px 0 2px;color:#1976d2;font-size:11px;font-weight:600">
+        <span>詳細を見る</span>
+        <span id="${accordionId}-chev" style="font-size:10px;transition:transform .2s">▼</span>
+      </div>
+
+      <!-- 詳細アコーディオン -->
+      <div id="${accordionId}" style="display:none;margin-top:8px">
+        <div class="recovery-stats-grid">
+          <div class="recovery-stat">
+            <div class="recovery-stat-label">初期投資</div>
+            <div class="recovery-stat-value">${fmtS(x.initialTotal)}</div>
+          </div>
+          <div class="recovery-stat">
+            <div class="recovery-stat-label">累積実績利益</div>
+            <div class="recovery-stat-value ${x.cumulativeProfit >= 0 ? 'profit' : 'loss'}">${x.cumulativeProfit < 0 ? '▲' : ''}${fmtS(Math.abs(x.cumulativeProfit))}</div>
+          </div>
+          <div class="recovery-stat">
+            <div class="recovery-stat-label">${x.remaining > 0 ? '実績のみ残額' : '回収完了！'}</div>
+            <div class="recovery-stat-value ${x.remaining > 0 ? 'warn' : 'profit'}">${x.remaining > 0 ? fmtS(x.remaining) : '✓'}</div>
+          </div>
+        </div>
+        ${x.monthsNeeded !== null ? '<div style="margin-top:8px;font-size:11px;color:#888;text-align:right">月平均利益 '+fmtS(Math.round(x.avgMonthlyProfit))+' → あと約<strong style="color:#e65100">'+x.monthsNeeded+'ヶ月</strong>で回収見込み</div>' : x.remaining === 0 ? '' : '<div style="margin-top:8px;font-size:11px;color:#bbb;text-align:right">収益データが少ないため予測不可</div>'}
+        ${plDetailHtml}
+      </div>
+    </div>`;
+  });
+
+  // 合計（予測利益 = 売上 - 固定費按分 - 変動費）
+  const fyForecastTotal = (() => {
+    const fyKey = String(nowY);
+    const fd = pricelabsForecast[fyKey];
+    if (!fd) return null;
+    let total = 0, hasAny = false;
+    propStats.forEach(x => {
+      const pf = fd[x.prop.id];
+      if (!pf) return;
+      hasAny = true;
+      const annualFixed = x.prop.monthlyFixedCosts.reduce((s,c)=>s+c.amount,0) * 12;
+      const perBookingCost = x.prop.perBookingCosts.reduce((s,c)=>s+c.amount,0);
+      const propBooks = airbnbBookings.filter(b => getBookingPropId(b) === x.prop.id && b.nights > 0);
+      const avgNights = propBooks.length > 0 ? propBooks.reduce((s,b)=>s+b.nights,0)/propBooks.length : 3;
+      const shortRev = pf.shortTermRevenue || pf.revenue || 0;
+      const estDays = Math.round(pf.occupancy / 100 * 365);
+      const maxDays = x.prop.maxAnnualNights;
+      const cappedDays = maxDays && estDays > maxDays ? maxDays : estDays;
+      const cappedRev = maxDays && estDays > maxDays ? Math.round(shortRev * maxDays / estDays) : shortRev;
+      const remainingMonths2 = nowM >= 4 ? (15 - nowM) : (3 - nowM + 1);
+      const monthFraction2 = Math.min(remainingMonths2, 12) / 12;
+      const cappedRevAdj = Math.round(cappedRev * monthFraction2);
+      const annualFixedAdj = Math.round(annualFixed * monthFraction2);
+      const estBookings2 = Math.round(cappedDays * monthFraction2 / avgNights);
+      total += cappedRevAdj - annualFixedAdj - perBookingCost * estBookings2;
+    });
+    return hasAny ? total : null;
+  })();
+
+  html += `<div class="recovery-total">
+    <div class="recovery-total-row"><span style="color:#666">総初期投資</span><span style="font-weight:700">${fmtS(totalInitial)}</span></div>
+    <div class="recovery-total-row"><span style="color:#666">累積実績利益合計</span><span style="font-weight:700;color:${totalProfit>=0?'#2e7d32':'#c62828'}">${totalProfit<0?'▲':''}${fmtS(Math.abs(totalProfit))}</span></div>
+    ${fyForecastTotal !== null ? `<div class="recovery-total-row"><span style="color:#7b1fa2">PL年間予測利益合計（残月按分）</span><span style="font-weight:700;color:${fyForecastTotal>=0?'#7b1fa2':'#c62828'}">${fyForecastTotal<0?'▲':''}${fmtS(Math.abs(fyForecastTotal))}</span></div>` : ''}
+    <div class="recovery-total-row">
+      <span style="color:#444">純損益（実績ベース）</span>
+      <span style="color:${netPos>=0?'#1b5e20':'#b71c1c'}">${netPos>=0?'':'▲'}${fmtS(Math.abs(netPos))}</span>
+    </div>
+    ${fyForecastTotal !== null ? (() => { const netWithForecast = totalProfit + fyForecastTotal - totalInitial; return `<div class="recovery-total-row" style="border-top:1px dashed #e0e0e0;padding-top:6px;margin-top:2px"><span style="color:#7b1fa2;font-weight:700">純損益（予測込み）</span><span style="font-weight:700;color:${netWithForecast>=0?'#1b5e20':'#b71c1c'}">${netWithForecast>=0?'':'▲'}${fmtS(Math.abs(netWithForecast))}</span></div>`; })() : ''}
+  </div>
+  </div></div>`;
+
+  return html;
+}
+
+// ==================== 年間管理 ====================
+function initAnnualTab() { renderAnnual(); }
+
+function parseCSVLine(line) {
+  const vals = []; let inQ = false; let cur = '';
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { inQ = !inQ; }
+    else if (c === ',' && !inQ) { vals.push(cur); cur = ''; }
+    else { cur += c; }
+  }
+  vals.push(cur);
+  return vals;
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+  const header = parseCSVLine(lines[0]);
+  const bookings = [];
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const vals = parseCSVLine(lines[i]);
+    const row = {};
+    header.forEach((h, idx) => { row[h] = (vals[idx] || '').trim(); });
+    const status = row['ステータス'] || '';
+    if (status.includes('キャンセル')) continue;
+    const revenueRaw = row['収入'] || '';
+    const revenue = parseInt(revenueRaw.replace(/[¥￥\s,円]/g, '')) || 0;
+    if (revenue === 0) continue;
+    const nights = parseInt(row['宿泊日数']) || 0;
+    if (nights === 0) continue;
+    bookings.push({
+      code: row['確認コード'] || '',
+      status,
+      guestName: row['ゲスト名'] || '',
+      nights,
+      checkin: row['開始日'] || '',
+      checkout: row['終了日'] || '',
+      listing: row['リスティング'] || '',
+      revenue
+    });
+  }
+  return bookings;
+}
+
+function handleCSVFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const parsed = parseCSV(e.target.result);
+    if (parsed.length === 0) { alert('有効な予約データが見つかりませんでした。'); return; }
+    // Airbnb CSV読み込み時はAirbnb分のみ置き換え（PriceLabs追加分は保持）
+    const plBooks = airbnbBookings.filter(b => b.source === 'pricelabs');
+    const plCodes = new Set(plBooks.map(b => b.code).filter(Boolean));
+    const filteredPL = plBooks.filter(b => !parsed.some(a => a.code && a.code === b.code));
+    airbnbBookings = [...parsed, ...filteredPL];
+    saveAirbnbData();
+    renderAnnual();
+  };
+  reader.readAsText(file, 'UTF-8');
+  input.value = '';
+}
+
+function parsePriceLabsXLSX(arrayBuffer) {
+  const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellDates: true });
+  const ws = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { raw: true });
+  const fmtDate = v => {
+    if (!v) return '';
+    const d = v instanceof Date ? v : new Date(v);
+    if (isNaN(d)) return '';
+    return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}`;
+  };
+  const bookings = [];
+  rows.forEach(row => {
+    if ((row['Booking Status'] || '').toLowerCase().includes('cancel')) return;
+    const revenue = typeof row['Total Revenue'] === 'number' ? row['Total Revenue']
+      : parseFloat(String(row['Total Revenue'] || '').replace(/[¥,\s]/g, '')) || 0;
+    if (revenue === 0) return;
+    const nights = parseInt(row['Length of Stay (Days)']) || 0;
+    if (nights === 0) return;
+    bookings.push({
+      code: String(row['Reservation ID'] || ''),
+      status: row['Booking Status'] || '',
+      guestName: '',
+      nights,
+      checkin: fmtDate(row['Check-in Date']),
+      checkout: fmtDate(row['Check-out Date']),
+      listing: row['Listing Name'] || '',
+      revenue,
+      source: 'pricelabs'
+    });
+  });
+  return bookings;
+}
+
+function handlePriceLabsFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    let parsed;
+    try { parsed = parsePriceLabsXLSX(e.target.result); }
+    catch(err) { alert('ファイルの読み込みに失敗しました。PriceLabsのBookings Reportのxlsxファイルを選択してください。'); return; }
+    if (parsed.length === 0) { alert('有効な予約データが見つかりませんでした。'); return; }
+    // 既存のAirbnb予約と重複しないものだけ追加（確認コードで照合）
+    const existingCodes = new Set(airbnbBookings.filter(b => b.source !== 'pricelabs').map(b => b.code).filter(Boolean));
+    const newBooks = parsed.filter(b => !existingCodes.has(b.code));
+    // 既存のPriceLabs分を今回のデータで置き換え
+    const airbnbOnly = airbnbBookings.filter(b => b.source !== 'pricelabs');
+    airbnbBookings = [...airbnbOnly, ...newBooks];
+    saveAirbnbData();
+    renderAnnual();
+    const added = newBooks.length;
+    const dupes = parsed.length - added;
+    alert(`PriceLabs: ${added}件追加${dupes > 0 ? `（${dupes}件はAirbnbデータと重複のためスキップ）` : ''}`);
+  };
+  reader.readAsArrayBuffer(file);
+  input.value = '';
+}
+
+function parseForecastXLSX(arrayBuffer) {
+  const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellDates: true });
+  const ws = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { raw: true });
+  return rows.map(row => ({
+    listing: (row['Listing Name'] || '').trim(),
+    forecastRevenue: typeof row['Rental Revenue Forecast'] === 'number' ? row['Rental Revenue Forecast'] : 0,
+    forecastOccupancy: typeof row['Forecasted Occupancy %'] === 'number' ? row['Forecasted Occupancy %'] : 0,
+  })).filter(r => r.listing);
+}
+
+function showForecastYearPicker(callback) {
+  const defaultYear = new Date().getFullYear();
+  const overlay = document.createElement('div');
+  overlay.setAttribute('data-forecast-modal', '1');
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:white;border-radius:16px;padding:24px;width:90%;max-width:320px;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+      <div style="font-size:15px;font-weight:700;color:#333;margin-bottom:6px">📈 PriceLabs年間予測データ</div>
+      <div style="font-size:12px;color:#aaa;margin-bottom:16px">「Stay Date Range: This year」でダウンロードしたデータです。何年度のファイルですか？</div>
+      <input type="number" id="forecast-year-input" value="${defaultYear}" min="2020" max="2030" style="width:100%;padding:10px;border:1.5px solid #eee;border-radius:8px;font-size:22px;font-weight:700;margin-bottom:16px;box-sizing:border-box;text-align:center;color:#333">
+      <div style="display:flex;gap:8px">
+        <button onclick="document.body.removeChild(document.querySelector('[data-forecast-modal]'))" style="flex:1;padding:10px;border:1.5px solid #eee;border-radius:8px;font-weight:700;background:white;cursor:pointer;color:#888">キャンセル</button>
+        <button id="forecast-confirm-btn" style="flex:2;padding:10px;border:none;border-radius:8px;font-weight:700;background:#7b1fa2;color:white;cursor:pointer">この年度で確定</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#forecast-confirm-btn').onclick = () => {
+    const year = parseInt(overlay.querySelector('#forecast-year-input').value);
+    document.body.removeChild(overlay);
+    callback(year);
+  };
+}
+
+function applyForecastData(year, parsed) {
+  const propForecast = {};
+  parsed.forEach(r => {
+    const propId = listingMap[r.listing];
+    if (!propId) return;
+    if (!propForecast[propId]) propForecast[propId] = {
+      revenue: 0, shortTermRevenue: 0, longTermRevenue: 0,
+      shortTermOcc: null, longTermOcc: null
+    };
+    propForecast[propId].revenue += r.forecastRevenue;
+    const is28plus = /28\+|28 ?nights?/i.test(r.listing);
+    if (is28plus) {
+      propForecast[propId].longTermOcc = r.forecastOccupancy;
+      propForecast[propId].longTermRevenue += r.forecastRevenue;
+    } else {
+      propForecast[propId].shortTermOcc = propForecast[propId].shortTermOcc === null
+        ? r.forecastOccupancy
+        : Math.max(propForecast[propId].shortTermOcc, r.forecastOccupancy);
+      propForecast[propId].shortTermRevenue += r.forecastRevenue;
+    }
+  });
+  Object.keys(propForecast).forEach(pid => {
+    const pf = propForecast[pid];
+    pf.occupancy = pf.shortTermOcc !== null ? pf.shortTermOcc
+      : (pf.longTermOcc !== null ? pf.longTermOcc : 0);
+    delete pf.shortTermOcc;
+  });
+  pricelabsForecast[String(year)] = propForecast;
+  saveForecastData();
+  renderAnnual();
+  alert(`${year}年度の予測を保存しました（${Object.keys(propForecast).length}物件）`);
+}
+
+function showForecastMappingDialog(unmappedListings, year, allParsed) {
+  const overlay = document.createElement('div');
+  overlay.setAttribute('data-fmap-modal', '1');
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  const rows = unmappedListings.map((r, i) => `
+    <div style="margin-bottom:10px">
+      <div style="font-size:11px;color:#555;margin-bottom:4px;word-break:break-all">${r.listing}</div>
+      <select id="fmap-sel-${i}" style="width:100%;padding:8px;border:1.5px solid #eee;border-radius:8px;font-size:14px;font-weight:600">
+        <option value="">-- スキップ --</option>
+        ${properties.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+      </select>
+    </div>`).join('');
+  overlay.innerHTML = `
+    <div style="background:white;border-radius:16px;padding:24px;width:100%;max-width:400px;max-height:80vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+      <div style="font-size:15px;font-weight:700;color:#333;margin-bottom:4px">📈 リスティングの物件割り当て</div>
+      <div style="font-size:11px;color:#aaa;margin-bottom:16px">以下のリスティングが未設定です。物件を選択してください（設定はAirbnbデータにも反映されます）</div>
+      ${rows}
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button onclick="document.body.removeChild(document.querySelector('[data-fmap-modal]'))" style="flex:1;padding:10px;border:1.5px solid #eee;border-radius:8px;font-weight:700;background:white;cursor:pointer;color:#888">キャンセル</button>
+        <button id="fmap-confirm" style="flex:2;padding:10px;border:none;border-radius:8px;font-weight:700;background:#7b1fa2;color:white;cursor:pointer">保存して取り込む</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#fmap-confirm').onclick = () => {
+    unmappedListings.forEach((r, i) => {
+      const sel = overlay.querySelector(`#fmap-sel-${i}`);
+      const pid = parseInt(sel.value);
+      if (pid) { listingMap[r.listing] = pid; }
+    });
+    saveListingMap();
+    document.body.removeChild(overlay);
+    applyForecastData(year, allParsed);
+  };
+}
+
+function handleForecastFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    let parsed;
+    try { parsed = parseForecastXLSX(e.target.result); }
+    catch(err) { alert('ファイルの読み込みに失敗しました。'); return; }
+    if (parsed.length === 0) { alert('有効なデータが見つかりませんでした。'); return; }
+    showForecastYearPicker(year => {
+      if (!year) return;
+      const unmappedListings = parsed.filter(r => !listingMap[r.listing]);
+      if (unmappedListings.length > 0) {
+        showForecastMappingDialog(unmappedListings, year, parsed);
+      } else {
+        applyForecastData(year, parsed);
+      }
+    });
+  };
+  reader.readAsArrayBuffer(file);
+  input.value = '';
+}
+
+function setListingMapByIndex(idx, propId) {
+  const allListings = [...new Set(airbnbBookings.map(b => b.listing))];
+  const listing = allListings[idx];
+  if (listing === undefined) return;
+  listingMap[listing] = parseInt(propId) || null;
+  saveListingMap();
+  renderAnnual();
+}
+
+function getBookingPropId(b) { return listingMap[b.listing] || null; }
+
+function calcAirbnbProfit(b) {
+  const propId = getBookingPropId(b);
+  const prop = properties.find(p => p.id === propId);
+  if (!prop) return null;
+  const monthlyTotal = prop.monthlyFixedCosts.reduce((s, c) => s + c.amount, 0);
+  const fixed = Math.round(monthlyTotal / 18 * b.nights);
+  const perBooking = prop.perBookingCosts.reduce((s, c) => s + c.amount, 0);
+  return b.revenue - fixed - perBooking;
+}
+
+function renderAnnual() {
+  const content = document.getElementById('annual-content');
+  const fmt = n => n.toLocaleString('ja-JP');
+
+  if (airbnbBookings.length === 0) {
+    content.innerHTML = `
+      <div class="card">
+        <div class="card-title" style="margin-bottom:12px">予約データを読み込む</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <div style="font-size:11px;font-weight:700;color:#666;margin-bottom:6px">Airbnb CSV</div>
+            <div class="csv-drop-area" onclick="document.getElementById('csv-input').click()"
+              ondragover="event.preventDefault();this.classList.add('dragover')"
+              ondragleave="this.classList.remove('dragover')"
+              ondrop="event.preventDefault();this.classList.remove('dragover');handleCSVFile({files:event.dataTransfer.files,value:''})">
+              <div class="csv-drop-icon">📂</div>
+              <div class="csv-drop-text" style="font-size:13px">Airbnb CSV</div>
+              <div class="csv-drop-sub">ホスト管理 → 予約管理</div>
+            </div>
+            <input type="file" id="csv-input" accept=".csv" style="display:none" onchange="handleCSVFile(this)">
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:700;color:#e05a2b;margin-bottom:6px">PriceLabs</div>
+            <div class="csv-drop-area" style="border-color:#e05a2b33" onclick="document.getElementById('pl-input').click()"
+              ondragover="event.preventDefault();this.classList.add('dragover')"
+              ondragleave="this.classList.remove('dragover')"
+              ondrop="event.preventDefault();this.classList.remove('dragover');handlePriceLabsFile({files:event.dataTransfer.files,value:''})">
+              <div class="csv-drop-icon">📊</div>
+              <div class="csv-drop-text" style="font-size:13px">PriceLabs xlsx</div>
+              <div class="csv-drop-sub">Portfolio Analytics → Bookings Report</div>
+            </div>
+            <input type="file" id="pl-input" accept=".xlsx" style="display:none" onchange="handlePriceLabsFile(this)">
+          </div>
+        </div>
+        <div style="border-top:1px solid #f0f0f0;margin-top:12px;padding-top:12px">
+          <div style="font-size:11px;font-weight:700;color:#7b1fa2;margin-bottom:6px">PriceLabs 年間予測</div>
+          <button onclick="document.getElementById('forecast-input-empty').click()" style="width:100%;padding:10px;border:1.5px dashed #ce93d8;border-radius:10px;background:#fdf4ff;cursor:pointer;color:#7b1fa2;font-size:13px;font-weight:700">📈 年間予測ファイルを読み込む<br><span style="font-size:10px;font-weight:400;color:#ab47bc">Portfolio Analytics → Forecast</span></button>
+          <input type="file" id="forecast-input-empty" accept=".xlsx" style="display:none" onchange="handleForecastFile(this)">
+        </div>
+      </div>`;
+    return;
+  }
+
+  const allListings = [...new Set(airbnbBookings.map(b => b.listing))];
+  const unmapped = allListings.filter(l => !listingMap[l]);
+  pendingListings = unmapped;
+
+  const fiscalYears = [...new Set(airbnbBookings.map(b => {
+    const [by, bm] = b.checkin.split('/').map(Number);
+    return bm >= 4 ? by : by - 1;
+  }))].filter(y => !isNaN(y)).sort();
+  if (!fiscalYears.includes(currentAnnualYear)) currentAnnualYear = fiscalYears[fiscalYears.length - 1] || new Date().getFullYear();
+
+  let html = '';
+
+  // ヘッダー
+  const plCount = airbnbBookings.filter(b => b.source === 'pricelabs').length;
+  const airbnbCount = airbnbBookings.length - plCount;
+  html += `<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:11px 14px;gap:8px">
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:700;color:#555">${airbnbBookings.length}件読み込み済み
+        <span style="font-size:10px;font-weight:400;color:#aaa;margin-left:4px">Airbnb ${airbnbCount}件${plCount>0?' / PriceLabs '+plCount+'件':''}</span>
+      </div>
+      <div style="font-size:10px;color:#aaa;margin-top:1px">チェックイン日基準　${currentAnnualYear}年度（${currentAnnualYear}/4〜${currentAnnualYear+1}/3）</div>
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0">
+      <button onclick="document.getElementById('csv-input').click()" style="font-size:11px;color:#2c5f8a;background:none;border:1.5px solid #2c5f8a;cursor:pointer;font-weight:700;padding:5px 10px;border-radius:8px">↺ Airbnb</button>
+      <button onclick="document.getElementById('pl-input').click()" style="font-size:11px;color:#e05a2b;background:none;border:1.5px solid #e05a2b;cursor:pointer;font-weight:700;padding:5px 10px;border-radius:8px">↺ PriceLabs</button>
+      <button onclick="document.getElementById('forecast-input').click()" style="font-size:11px;color:#7b1fa2;background:none;border:1.5px solid #7b1fa2;cursor:pointer;font-weight:700;padding:5px 10px;border-radius:8px">📈 予測</button>
+    </div>
+    <input type="file" id="csv-input" accept=".csv" style="display:none" onchange="handleCSVFile(this)">
+    <input type="file" id="pl-input" accept=".xlsx" style="display:none" onchange="handlePriceLabsFile(this)">
+    <input type="file" id="forecast-input" accept=".xlsx" style="display:none" onchange="handleForecastFile(this)">
+  </div>`;
+
+  // 年タブ
+  if (fiscalYears.length > 1) {
+    html += `<div class="year-tabs">${fiscalYears.map(y => `<button class="year-tab${y===currentAnnualYear?' active':''}" onclick="currentAnnualYear=${y};renderAnnual()">${y}年度</button>`).join('')}</div>`;
+  }
+
+  // 物件フィルター
+  html += `<div class="prop-filter">
+    <button class="prop-filter-btn${annualPropFilter==='all'?' active':''}" onclick="annualPropFilter='all';renderAnnual()">全物件</button>
+    ${properties.map(p => `<button class="prop-filter-btn${annualPropFilter===String(p.id)?' active':''}" onclick="annualPropFilter='${p.id}';renderAnnual()">${p.name}</button>`).join('')}
+  </div>`;
+
+  // フィルター適用（会計年度：currentAnnualYear/4〜currentAnnualYear+1/3）
+  const yearBooks = airbnbBookings.filter(b => {
+    const [by, bm] = b.checkin.split('/').map(Number);
+    const inFY = (by === currentAnnualYear && bm >= 4) || (by === currentAnnualYear + 1 && bm <= 3);
+    if (!inFY) return false;
+    if (annualPropFilter !== 'all') return getBookingPropId(b) === parseInt(annualPropFilter);
+    return true;
+  });
+
+  // 月別統計を計算（会計年度順：4,5,...,12,1,2,3）
+  const todayY = new Date().getFullYear();
+  const todayM = new Date().getMonth() + 1;
+  const fyMonthOrder = [4,5,6,7,8,9,10,11,12,1,2,3];
+  const monthlyStats = fyMonthOrder.map(m => {
+    const mYear = m >= 4 ? currentAnnualYear : currentAnnualYear + 1;
+    const mBooks = yearBooks.filter(b => {
+      const [by, bm] = b.checkin.split('/').map(Number);
+      return by === mYear && bm === m;
+    });
+    const isFuture = (mYear > todayY) || (mYear === todayY && m > todayM);
+    if (isFuture && mBooks.length === 0) return null;
+
+    const operatingProps = annualPropFilter === 'all'
+      ? properties.filter(p => isPropertyOperating(p, mYear, m))
+      : properties.filter(p => String(p.id) === String(annualPropFilter) && isPropertyOperating(p, mYear, m));
+
+    if (mBooks.length === 0 && operatingProps.length === 0) return null;
+
+    const monthFixedCosts = operatingProps.reduce((s, p) => s + p.monthlyFixedCosts.reduce((ss, c) => ss + c.amount, 0), 0);
+
+    let rev = 0, varCosts = 0, nights = 0;
+    mBooks.forEach(b => {
+      rev += b.revenue;
+      const prop = properties.find(p => p.id === getBookingPropId(b));
+      if (prop) varCosts += prop.perBookingCosts.reduce((s, c) => s + c.amount, 0);
+      nights += b.nights;
+    });
+
+    const profit = rev - monthFixedCosts - varCosts;
+    const dim = getDaysInMonth(mYear, m);
+    const activePropCount = Math.max(operatingProps.length, 1);
+    const maxNights = dim * activePropCount;
+    return { month: m, year: mYear, revenue: rev, profit, nights, bookings: mBooks.length, daysInMonth: dim, maxNights, occRate: Math.min(Math.round(nights / maxNights * 100), 100), monthFixedCosts, varCosts };
+  });
+
+  const validMonths = monthlyStats.filter(Boolean);
+  const totalRevenue = validMonths.reduce((s, m) => s + m.revenue, 0);
+  const totalProfit = validMonths.reduce((s, m) => s + m.profit, 0);
+  const totalNights = validMonths.reduce((s, m) => s + m.nights, 0);
+  const totalBookings = validMonths.reduce((s, m) => s + m.bookings, 0);
+  const avgPerNight = totalNights > 0 ? Math.round(totalRevenue / totalNights) : 0;
+  const bestMonth = validMonths.length > 0 ? validMonths.reduce((a, b) => b.profit > a.profit ? b : a) : null;
+  const isAP = totalProfit >= 0;
+
+  // 次の予約ウィジェット
+  {
+    const now = new Date(); now.setHours(0,0,0,0);
+    const upcoming = airbnbBookings.filter(b => {
+      if (!b.checkin) return false;
+      if (annualPropFilter !== 'all' && getBookingPropId(b) !== parseInt(annualPropFilter)) return false;
+      const p = b.checkin.split('/').map(Number);
+      return new Date(p[0], p[1]-1, p[2]) >= now;
+    }).sort((a, b) => {
+      const ap = a.checkin.split('/').map(Number), bp = b.checkin.split('/').map(Number);
+      return new Date(ap[0],ap[1]-1,ap[2]) - new Date(bp[0],bp[1]-1,bp[2]);
+    }).slice(0, 3);
+
+    if (upcoming.length > 0) {
+      const fmtSW = n => n >= 10000 ? '¥'+(n/10000).toFixed(1)+'万' : '¥'+n.toLocaleString('ja-JP');
+      html += `<div class="card" style="margin-bottom:12px">
+        <div class="card-title" style="margin-bottom:10px">🗓️ 次の予約</div>`;
+      upcoming.forEach((b, i) => {
+        const prop = properties.find(p => p.id === getBookingPropId(b));
+        const parts = b.checkin.split('/').map(Number);
+        const cinDate = new Date(parts[0], parts[1]-1, parts[2]);
+        const diff = Math.round((cinDate - now) / 86400000);
+        const diffLabel = diff === 0 ? '今日 🔑' : diff === 1 ? '明日' : `${diff}日後`;
+        const coStr = getCheckout(b);
+        html += `<div style="display:flex;align-items:center;gap:12px;${i>0?'margin-top:10px;padding-top:10px;border-top:1px solid #f0f0f0':''}">
+          <div style="min-width:48px;text-align:center;padding:8px 6px;background:${diff===0?'#fff3e0':diff<=2?'#e3f2fd':'#f5f5f5'};border-radius:10px">
+            <div style="font-size:16px;font-weight:900;color:${diff===0?'#e65100':diff<=2?'#1565c0':'#444'};line-height:1">${parts[2]}</div>
+            <div style="font-size:9px;color:#aaa;margin-top:1px">${parts[1]}月</div>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:700;color:#1a1a2e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(b.guestName||'ゲスト')}</div>
+            <div style="font-size:11px;color:#888;margin-top:2px">${prop?prop.name:'物件未設定'} · ${b.nights}泊 · ${b.checkin}〜${coStr}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-size:13px;font-weight:800;color:#2c5f8a">${fmtSW(b.revenue)}</div>
+            <div style="font-size:10px;color:${diff===0?'#e65100':diff<=2?'#1565c0':'#aaa'};font-weight:700;margin-top:2px">${diffLabel}</div>
+          </div>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+  }
+
+  // KPI期間ラベル（会計年度ベース）
+  const hasFutureBooks = yearBooks.some(b => {
+    const [by, bm] = b.checkin.split('/').map(Number);
+    return by > todayY || (by === todayY && bm > todayM);
+  });
+  const kpiPeriodLabel = hasFutureBooks ? `確定予約含む ${currentAnnualYear}/4〜${currentAnnualYear+1}/3` : `実績ベース ${currentAnnualYear}/4〜${todayY}/${todayM}`;
+
+  // KPIカード（最優先表示）
+  html += `<div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">売上（${currentAnnualYear}年度）</div>
+      <div class="kpi-value">${fmtShort(totalRevenue)}円</div>
+      <div class="kpi-sub">${totalBookings}件・${totalNights}泊</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">利益（${currentAnnualYear}年度）</div>
+      <div class="kpi-value ${isAP?'profit':'loss'}">${isAP?'':'▲'}${fmtShort(Math.abs(totalProfit))}円</div>
+      <div class="kpi-sub">${kpiPeriodLabel}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">平均単価/泊</div>
+      <div class="kpi-value">${fmt(avgPerNight)}円</div>
+      <div class="kpi-sub">総稼働 ${totalNights}泊</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">最高月</div>
+      <div class="kpi-value profit">${bestMonth ? bestMonth.month + '月' : '-'}</div>
+      <div class="kpi-sub">${bestMonth ? (bestMonth.profit>=0?'':'▲')+fmt(Math.abs(bestMonth.profit))+'円' : ''}</div>
+    </div>
+  </div>`;
+
+  // 年間稼働日数管理（会計年度ベース：4月〜翌年3月）
+  {
+    // yearBooks はすでに会計年度フィルター済み
+    const nightsByProp = {};
+    yearBooks.forEach(b => {
+      const pid = getBookingPropId(b);
+      nightsByProp[pid] = (nightsByProp[pid] || 0) + b.nights;
+    });
+    const targetProps = annualPropFilter === 'all' ? properties : properties.filter(p => String(p.id) === String(annualPropFilter));
+    const showSection = targetProps.some(p => p.maxAnnualNights != null || (nightsByProp[p.id] || 0) > 0);
+    if (showSection) {
+      html += `<div class="card" style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
+          <div class="card-title" style="margin-bottom:0">📅 年間稼働宿泊数</div>
+          <div style="font-size:10px;color:#bbb">${currentAnnualYear}年度（${currentAnnualYear}/4〜${currentAnnualYear+1}/3）</div>
+        </div>`;
+      targetProps.forEach(p => {
+        const used = nightsByProp[p.id] || 0;
+        const max = p.maxAnnualNights;
+        const pct = max ? Math.min(Math.round(used / max * 100), 100) : null;
+        const remaining = max ? max - used : null;
+        const remainingDays = remaining !== null ? Math.max(remaining, 0) : null;
+        const isAlert = remainingDays !== null && remainingDays <= 30;
+        const isWarn = remainingDays !== null && remainingDays <= 60 && remainingDays > 30;
+        const barColor = pct === null ? '#42a5f5' : isAlert ? '#ef5350' : isWarn ? '#ff9800' : pct >= 70 ? '#ff9800' : '#42a5f5';
+        const licenseLabel = {minpaku:'民泊新法',tokku:'特区民泊',ryokan:'旅館業'}[p.licenseType] || p.licenseType;
+        html += `<div style="margin-bottom:14px${isAlert?';background:#fff5f5;border-radius:12px;padding:10px;border:1.5px solid #ffcdd2':''}">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+            <div style="font-size:13px;font-weight:700;color:#333">${escHtml(p.name)}<span style="font-size:10px;font-weight:400;color:#aaa;margin-left:6px">${licenseLabel}</span></div>
+            <div style="font-size:14px;font-weight:800;color:${barColor}">${used}日${max ? ' / ' + max + '日' : ''}${remainingDays !== null ? '<span style="font-size:10px;font-weight:'+(isAlert?'700':'400')+';color:'+(isAlert?'#c62828':isWarn?'#e65100':'#aaa')+';margin-left:4px">残り'+remainingDays+'日</span>' : ''}</div>
+          </div>
+          ${max ? `
+          <div style="background:#f0f0f0;border-radius:6px;height:10px;overflow:hidden">
+            <div style="width:${pct}%;height:100%;background:${barColor};border-radius:6px;transition:width .3s"></div>
+          </div>
+          ${isAlert ? `<div style="font-size:11px;color:#c62828;font-weight:700;margin-top:5px;display:flex;align-items:center;gap:4px">⚠️ 残り${remainingDays}日！新規受付は慎重に</div>` : isWarn ? `<div style="font-size:11px;color:#e65100;margin-top:3px">⚡ 残り${remainingDays}日 — 上限に近づいています</div>` : ''}
+          ` : `<div style="font-size:11px;color:#bbb;margin-top:2px">旅館業 — 法的上限なし</div>`}
+        </div>`;
+      });
+      html += `</div>`;
+    }
+  }
+
+  // 投資回収状況
+  html += renderInvestmentRecovery();
+
+
+  // グラフ＋月別テーブルを1枚のカードに統合
+  html += `<div class="card">
+    <div class="card-title" style="margin-bottom:10px">月別利益（緑＝黒字 / 赤＝赤字）</div>
+    ${renderProfitChart(monthlyStats, (() => {
+      const targetProps = annualPropFilter === 'all' ? properties : properties.filter(p => String(p.id) === String(annualPropFilter));
+      const totalInitialForChart = targetProps.reduce((s, p) => s + (p.initialCosts || []).reduce((ss, c) => ss + c.amount, 0), 0);
+      const opMonths = targetProps.reduce((s, p) => s + totalMonthsOperating(p), 0);
+      return opMonths > 0 ? Math.round(totalInitialForChart / opMonths) : 0;
+    })())}
+    <div style="height:1px;background:#f0f0f0;margin:14px 0 12px"></div>
+    <table class="month-table">
+      <thead><tr><th>月</th><th>件数</th><th>売上</th><th>利益</th><th>稼働</th></tr></thead>
+      <tbody>
+        ${monthlyStats.map((ms, i) => {
+          const mo = fyMonthOrder[i];
+          if (!ms) return `<tr><td style="color:#ddd">${mo}月</td><td colspan="4" style="color:#eee;text-align:center">−</td></tr>`;
+          const isMP = ms.profit >= 0;
+          return `<tr style="cursor:pointer" onclick="document.getElementById('mcard-${ms.month}').querySelector('.month-detail-body').classList.toggle('open');var ch=document.getElementById('mcard-${ms.month}').querySelector('.mchev');ch.style.transform=document.getElementById('mcard-${ms.month}').querySelector('.month-detail-body').classList.contains('open')?'rotate(180deg)':''">
+            <td>${ms.month}月</td>
+            <td>${ms.bookings}件</td>
+            <td>${fmtShort(ms.revenue)}</td>
+            <td class="td-profit ${isMP?'profit':'loss'}">${isMP?'':'▲'}${fmtShort(Math.abs(ms.profit))}</td>
+            <td>${ms.occRate}%</td>
+          </tr>`;
+        }).join('')}
+        <tr class="total-row">
+          <td>合計</td><td>${totalBookings}件</td><td>${fmtShort(totalRevenue)}</td>
+          <td class="td-profit ${isAP?'profit':'loss'}">${isAP?'':'▲'}${fmtShort(Math.abs(totalProfit))}</td><td>−</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>`;
+
+  // 月別詳細カード（タップで開閉・新しい月から表示：会計年度逆順）
+  html += `<div class="section-label"><span>月別詳細（タップで予約一覧を表示）</span></div>`;
+  for (let idx = 11; idx >= 0; idx--) {
+    const ms = monthlyStats[idx];
+    if (!ms) continue;
+    const mBooks = yearBooks.filter(b => {
+      const [by, bm] = b.checkin.split('/').map(Number);
+      return by === ms.year && bm === ms.month;
+    });
+    const m = ms.month; // used throughout the card HTML below
+    const isMP = ms.profit >= 0;
+    html += `<div class="month-card" id="mcard-${m}">
+      <div class="month-card-header" onclick="this.nextElementSibling.classList.toggle('open');var ch=this.querySelector('.mchev');ch.style.transform=this.nextElementSibling.classList.contains('open')?'rotate(180deg)':''">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:6px">
+            <div class="month-label">${m}月</div>
+            <div style="font-size:11px;color:#aaa">${ms.bookings}件・${ms.nights}泊</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:3px">
+            <div style="flex:1;max-width:80px;height:4px;background:#e8e8e8;border-radius:2px"><div style="width:${ms.occRate}%;height:100%;background:#2c5f8a;border-radius:2px"></div></div>
+            <div style="font-size:10px;color:#aaa">${ms.occRate}% (${ms.nights}/${ms.maxNights}日)</div>
+          </div>
+        </div>
+        <div style="text-align:right;margin-left:8px">
+          <div style="font-size:10px;color:#aaa">${fmtShort(ms.revenue)}円</div>
+          <div style="font-size:15px;font-weight:800;color:${isMP?'#2e7d32':'#c62828'}">${isMP?'':'▲'}${fmtShort(Math.abs(ms.profit))}円</div>
+        </div>
+        <span class="mchev" style="margin-left:6px">▼</span>
+      </div>
+      <div class="month-detail-body">
+        <div style="padding:0 14px 4px;font-size:10px;color:#bbb">固定費 ${fmt(ms.monthFixedCosts)}円 / 変動費 ${fmt(ms.varCosts)}円</div>
+        ${mBooks.length === 0
+          ? `<div style="padding:12px 14px;font-size:12px;color:#ccc;text-align:center">この月の予約なし（固定費のみ発生）</div>`
+          : mBooks.map(b => {
+              const pid = getBookingPropId(b);
+              const prop = properties.find(p => p.id === pid);
+              const coStr = getCheckout(b);
+              const fmtD = s => { if (!s) return '?'; const p = s.split('/'); return `${parseInt(p[1])}/${parseInt(p[2])}`; };
+              return `<div class="booking-row">
+                <div class="booking-info">
+                  <div class="booking-prop">${prop ? prop.name : '⚠️ 未設定'}${b.source==='pricelabs'?'<span style="font-size:8px;font-weight:700;background:#fff0eb;color:#e05a2b;padding:1px 4px;border-radius:3px;margin-left:5px">PL</span>':''}</div>
+                  <div class="booking-guest">${b.guestName || (b.source==='pricelabs' ? 'PriceLabs予約' : '')}</div>
+                  <div style="font-size:10px;color:#bbb;margin-top:1px">
+                    <span style="background:#e3f2fd;color:#1565c0;font-size:8px;font-weight:700;padding:1px 3px;border-radius:3px;margin-right:2px">IN</span>${fmtD(b.checkin)}
+                    <span style="color:#ddd;margin:0 2px">→</span>
+                    <span style="background:#fce4ec;color:#c62828;font-size:8px;font-weight:700;padding:1px 3px;border-radius:3px;margin-right:2px">OUT</span>${fmtD(coStr)}
+                    （${b.nights}泊）
+                  </div>
+                </div>
+                <div class="booking-amounts">
+                  <div class="booking-rev">${fmt(b.revenue)}円</div>
+                </div>
+              </div>`;
+            }).join('')}
+      </div>
+    </div>`;
+  }
+
+  // 予約カレンダー・重複チェック（アコーディオン・デフォルト閉じ）
+  html += `<div class="breakdown-card" style="margin-bottom:12px">
+    <button class="breakdown-toggle" onclick="toggleEl(this)">
+      <span>📅 予約カレンダー・重複チェック</span><span class="chevron">▼</span>
+    </button>
+    <div class="breakdown-body" style="padding:0 16px 14px">
+      ${getOverlapInnerHTML()}
+    </div>
+  </div>`;
+
+  // 複数月の利益推移グラフ（全期間ローリング）
+  {
+    // 全データの月リストを生成（最大24ヶ月）
+    const allMonths = [];
+    if (airbnbBookings.length > 0) {
+      let earliest = null;
+      airbnbBookings.forEach(b => {
+        if (!b.checkin) return;
+        const p = b.checkin.split('/').map(Number);
+        const d = new Date(p[0], p[1]-1, 1);
+        if (!earliest || d < earliest) earliest = d;
+      });
+      if (earliest) {
+        const now2 = new Date(); now2.setDate(1);
+        let cy = earliest.getFullYear(), cm = earliest.getMonth() + 1;
+        while (new Date(cy, cm-1, 1) <= now2) {
+          allMonths.push({ y: cy, m: cm });
+          cm++; if (cm > 12) { cm = 1; cy++; }
+        }
+      }
+    }
+
+    if (allMonths.length >= 2) {
+      const trendData = allMonths.map(({ y, m }) => {
+        const mBooks = airbnbBookings.filter(b => {
+          if (!b.checkin) return false;
+          if (annualPropFilter !== 'all' && getBookingPropId(b) !== parseInt(annualPropFilter)) return false;
+          const p = b.checkin.split('/').map(Number);
+          return p[0] === y && p[1] === m;
+        });
+        const operatingProps = annualPropFilter === 'all'
+          ? properties.filter(p => isPropertyOperating(p, y, m))
+          : properties.filter(p => String(p.id) === String(annualPropFilter) && isPropertyOperating(p, y, m));
+        if (mBooks.length === 0 && operatingProps.length === 0) return { y, m, profit: null };
+        const fixedCosts = operatingProps.reduce((s, p) => s + p.monthlyFixedCosts.reduce((ss, c) => ss + c.amount, 0), 0);
+        let rev = 0, varC = 0;
+        mBooks.forEach(b => {
+          rev += b.revenue;
+          const prop = properties.find(p => p.id === getBookingPropId(b));
+          if (prop) varC += prop.perBookingCosts.reduce((s, c) => s + c.amount, 0);
+        });
+        return { y, m, profit: rev - fixedCosts - varC };
+      });
+
+      const validT = trendData.filter(d => d.profit !== null);
+      if (validT.length >= 2) {
+        const maxAbs = Math.max(...validT.map(d => Math.abs(d.profit)), 1);
+        const W = 320, H = 80, barW = Math.max(Math.floor(W / trendData.length) - 2, 4);
+        const baseline = H * 0.55;
+        let bars = '', labels = '';
+        trendData.forEach((d, i) => {
+          if (d.profit === null) return;
+          const cx = (W / trendData.length) * (i + 0.5);
+          const bh = Math.max(Math.abs(d.profit) / maxAbs * (baseline - 6), 2);
+          const y2 = d.profit >= 0 ? baseline - bh : baseline;
+          const color = d.profit >= 0 ? '#4caf50' : '#ef5350';
+          bars += `<rect x="${(cx - barW/2).toFixed(1)}" y="${y2.toFixed(1)}" width="${barW}" height="${bh.toFixed(1)}" fill="${color}" rx="2"/>`;
+          if (trendData.length <= 18 || i % 2 === 0) {
+            labels += `<text x="${cx.toFixed(1)}" y="${H - 2}" text-anchor="middle" font-size="7" fill="#bbb">${d.m}月</text>`;
+          }
+        });
+        const cumLine = (() => {
+          let cum = 0;
+          let pts = '';
+          trendData.forEach((d, i) => {
+            if (d.profit === null) return;
+            cum += d.profit;
+          });
+          return '';
+        })();
+        const baseline2Y = baseline.toFixed(1);
+        html += `<div class="card" style="margin-bottom:12px">
+          <div class="card-title" style="margin-bottom:6px">📈 月別利益推移（全期間）</div>
+          <div style="overflow-x:auto">
+            <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block;margin:0 auto">
+              <line x1="0" y1="${baseline2Y}" x2="${W}" y2="${baseline2Y}" stroke="#eee" stroke-width="1"/>
+              ${bars}${labels}
+            </svg>
+          </div>
+          <div style="display:flex;justify-content:center;gap:16px;margin-top:6px">
+            <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:#4caf50;border-radius:2px"></div><span style="font-size:10px;color:#888">黒字月</span></div>
+            <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:#ef5350;border-radius:2px"></div><span style="font-size:10px;color:#888">赤字月</span></div>
+          </div>
+        </div>`;
+      }
+    }
+  }
+
+  content.innerHTML = html;
+}
+
+renderSimPropertySelect();
+renderHistory();
+initFirebaseSync();
+
+// ==================== カレンダー日付詳細モーダル ====================
+function showDayDetail(year, month, day) {
+  const fmt = n => n.toLocaleString('ja-JP');
+  const fmtS = n => { const a = Math.abs(n); return (a >= 10000 ? (n/10000).toFixed(1)+'万' : n.toLocaleString('ja-JP')) + '円'; };
+
+  // この日に宿泊中の予約を収集
+  const targetDate = new Date(year, month - 1, day);
+  const dayBooks = airbnbBookings.filter(b => {
+    if (!b.checkin) return false;
+    const coStr = getCheckout(b);
+    const cinParts = b.checkin.split('/').map(Number);
+    const coutParts = coStr.split('/').map(Number);
+    const cin = new Date(cinParts[0], cinParts[1] - 1, cinParts[2]);
+    const cout = new Date(coutParts[0], coutParts[1] - 1, coutParts[2]);
+    return targetDate >= cin && targetDate < cout;
+  });
+
+  if (dayBooks.length === 0) return;
+
+  const dateLabel = `${month}月${day}日`;
+  const rows = dayBooks.map(b => {
+    const prop = properties.find(p => p.id === getBookingPropId(b));
+    const profit = calcAirbnbProfit(b);
+    const coStr = getCheckout(b);
+    return `<div class="day-modal-booking">
+      <div class="day-modal-prop">${prop ? prop.name : '物件未設定'}</div>
+      <div class="day-modal-guest">${b.guestName || 'ゲスト名なし'}</div>
+      <div class="day-modal-row"><span>チェックイン</span><span>${b.checkin}</span></div>
+      <div class="day-modal-row"><span>チェックアウト</span><span>${coStr}</span></div>
+      <div class="day-modal-row"><span>宿泊数</span><span>${b.nights}泊</span></div>
+      <div class="day-modal-row"><span>売上</span><span>${fmtS(b.revenue)}</span></div>
+      ${profit !== null ? `<div class="day-modal-row"><span>利益</span><span style="color:${profit>=0?'#2e7d32':'#c62828'}">${profit<0?'▲':''}${fmtS(Math.abs(profit))}</span></div>` : ''}
+      ${b.listing ? `<div class="day-modal-row"><span>リスティング</span><span style="font-size:11px">${b.listing}</span></div>` : ''}
+    </div>`;
+  }).join('');
+
+  const overlay = document.createElement('div');
+  overlay.className = 'day-modal-overlay';
+  overlay.innerHTML = `<div class="day-modal">
+    <div class="day-modal-title">
+      <span>📅 ${dateLabel}の宿泊情報</span>
+      <button onclick="this.closest('.day-modal-overlay').remove()" style="background:none;border:none;font-size:20px;color:#bbb;cursor:pointer;line-height:1">×</button>
+    </div>
+    ${rows}
+  </div>`;
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+</script>
+</body>
+</html>
