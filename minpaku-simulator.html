@@ -494,6 +494,13 @@ let pricelabsForecast = loadForecastData();
 let currentAnnualYear = new Date().getFullYear();
 let pendingListings = [];
 let annualPropFilter = 'all';
+let dataUpdatedAt = JSON.parse(localStorage.getItem('dataUpdatedAt') || '{}');
+function saveDataUpdatedAt() { localStorage.setItem('dataUpdatedAt', JSON.stringify(dataUpdatedAt)); }
+function fmtUpdatedAt(key) {
+  if (!dataUpdatedAt[key]) return '未更新';
+  const d = new Date(dataUpdatedAt[key]);
+  return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
 let monthlyPropFilter = 'all';
 let calendarPropFilter = 'all';
 let calendarYear = new Date().getFullYear();
@@ -1644,9 +1651,10 @@ function renderProfitChart(monthlyStats, avgMonthlyTarget) {
     const y = p >= 0 ? baseline - bh : baseline;
     svgBars += '<rect x="'+(cx - barW/2).toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+bh.toFixed(1)+'" fill="'+(p >= 0 ? '#4caf50' : '#ef5350')+'" rx="2"/>';
   });
+  const fyOrder = [4,5,6,7,8,9,10,11,12,1,2,3];
   const labels = monthlyStats.map((m, i) => {
     const cx = ((W/12) * (i + 0.5)).toFixed(1);
-    const label = m ? m.month : (i + 1);
+    const label = m ? m.month : fyOrder[i];
     return '<text x="'+cx+'" y="'+(H - 2)+'" text-anchor="middle" font-size="8" fill="#bbb">'+label+'</text>';
   }).join('');
   let targetLineHtml = '';
@@ -2106,6 +2114,8 @@ function handleCSVFile(input) {
     const filteredPL = plBooks.filter(b => !parsed.some(a => a.code && a.code === b.code));
     airbnbBookings = [...parsed, ...filteredPL];
     saveAirbnbData();
+    dataUpdatedAt['airbnb'] = new Date().toISOString();
+    saveDataUpdatedAt();
     renderAnnual();
   };
   reader.readAsText(file, 'UTF-8');
@@ -2161,6 +2171,8 @@ function handlePriceLabsFile(input) {
     const airbnbOnly = airbnbBookings.filter(b => b.source !== 'pricelabs');
     airbnbBookings = [...airbnbOnly, ...newBooks];
     saveAirbnbData();
+    dataUpdatedAt['pricelabs'] = new Date().toISOString();
+    saveDataUpdatedAt();
     renderAnnual();
     const added = newBooks.length;
     const dupes = parsed.length - added;
@@ -2233,6 +2245,8 @@ function applyForecastData(year, parsed) {
   });
   pricelabsForecast[String(year)] = propForecast;
   saveForecastData();
+  dataUpdatedAt['forecast'] = new Date().toISOString();
+  saveDataUpdatedAt();
   renderAnnual();
   alert(`${year}年度の予測を保存しました（${Object.keys(propForecast).length}物件）`);
 }
@@ -2381,10 +2395,19 @@ function renderAnnual() {
       </div>
       <div style="font-size:10px;color:#aaa;margin-top:1px">チェックイン日基準　${currentAnnualYear}年度（${currentAnnualYear}/4〜${currentAnnualYear+1}/3）</div>
     </div>
-    <div style="display:flex;gap:6px;flex-shrink:0">
-      <button onclick="document.getElementById('csv-input').click()" style="font-size:11px;color:#1A56DB;background:none;border:1.5px solid #1A56DB;cursor:pointer;font-weight:700;padding:5px 10px;border-radius:8px">↺ Airbnb</button>
-      <button onclick="document.getElementById('pl-input').click()" style="font-size:11px;color:#e05a2b;background:none;border:1.5px solid #e05a2b;cursor:pointer;font-weight:700;padding:5px 10px;border-radius:8px">↺ PriceLabs</button>
-      <button onclick="document.getElementById('forecast-input').click()" style="font-size:11px;color:#7b1fa2;background:none;border:1.5px solid #7b1fa2;cursor:pointer;font-weight:700;padding:5px 10px;border-radius:8px">📈 予測</button>
+    <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:1px">
+        <button onclick="document.getElementById('csv-input').click()" style="font-size:11px;color:#1A56DB;background:none;border:1.5px solid #1A56DB;cursor:pointer;font-weight:700;padding:5px 10px;border-radius:8px">↺ Airbnb</button>
+        <span style="font-size:9px;color:#bbb">${fmtUpdatedAt('airbnb')}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:1px">
+        <button onclick="document.getElementById('pl-input').click()" style="font-size:11px;color:#e05a2b;background:none;border:1.5px solid #e05a2b;cursor:pointer;font-weight:700;padding:5px 10px;border-radius:8px">↺ PriceLabs</button>
+        <span style="font-size:9px;color:#bbb">${fmtUpdatedAt('pricelabs')}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:1px">
+        <button onclick="document.getElementById('forecast-input').click()" style="font-size:11px;color:#7b1fa2;background:none;border:1.5px solid #7b1fa2;cursor:pointer;font-weight:700;padding:5px 10px;border-radius:8px">📈 予測</button>
+        <span style="font-size:9px;color:#bbb">${fmtUpdatedAt('forecast')}</span>
+      </div>
     </div>
     <input type="file" id="csv-input" accept=".csv" style="display:none" onchange="handleCSVFile(this)">
     <input type="file" id="pl-input" accept=".xlsx" style="display:none" onchange="handlePriceLabsFile(this)">
