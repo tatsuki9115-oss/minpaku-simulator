@@ -27,24 +27,26 @@
   .tabs {
     background: white;
     border-bottom: 1px solid #E8E6E1;
-    padding: 0 6px;
+    padding: 0 4px;
     display: flex; gap: 0;
     position: sticky; top: 56px; z-index: 99;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
   }
+  .tabs::-webkit-scrollbar { display: none; }
   .tab {
-    flex: 1; padding: 11px 4px 9px; text-align: center; font-size: 12px; font-weight: 600;
-    cursor: pointer; color: #B0ADA8;
+    flex: 1; min-width: 52px; padding: 12px 4px 10px; text-align: center; font-size: 12px; font-weight: 600;
+    cursor: pointer; color: #B0ADA8; white-space: nowrap;
     border: none; border-bottom: 2.5px solid transparent; background: none;
     transition: color .15s, border-color .15s;
   }
   .tab.active { color: #F07C3F; border-bottom-color: #F07C3F; font-weight: 700; }
 
-  .page { display: none; padding: 14px; max-width: 640px; margin: 0 auto; padding-bottom: 20px; }
+  .page { display: none; padding: 16px; max-width: 640px; margin: 0 auto; padding-bottom: 24px; }
   .page.active { display: block; }
   .page#page-settings { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 
-  .card { background: white; border-radius: 12px; padding: 14px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
-  .card-title { font-size: 11px; font-weight: 700; color: #B0ADA8; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 10px; }
+  .card { background: white; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .card-title { font-size: 12px; font-weight: 700; color: #B0ADA8; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 12px; }
 
   /* 物件選択 */
   .prop-select { width: 100%; border: 1.5px solid #E8E6E1; border-radius: 10px; padding: 11px 14px; font-size: 15px; font-weight: 600; background: #FAFAF9; color: #1C1C1E; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23B0ADA8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; }
@@ -142,7 +144,7 @@
   .btn-add-booking { width: 100%; padding: 14px; border: 1.5px dashed #E8E6E1; border-radius: 10px; background: white; color: #B0ADA8; font-size: 13px; font-weight: 700; cursor: pointer; margin-bottom: 10px; }
   .btn-add-booking:active { border-color: #F07C3F; color: #F07C3F; }
   .monthly-summary { background: white; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.06); border-top: 3px solid #F07C3F; }
-  .ms-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid #F2F1EE; font-size: 14px; }
+  .ms-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid #F2F1EE; font-size: 14px; }
   .ms-row:last-child { border-bottom: none; }
   .ms-label { color: #888; }
   .ms-value { font-family: 'Inter', sans-serif; font-weight: 700; color: #1C1C1E; }
@@ -161,11 +163,11 @@
   /* KPIカード */
   .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
   .kpi-card { background: white; border-radius: 12px; padding: 12px 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
-  .kpi-label { font-size: 10px; font-weight: 700; color: #B0ADA8; letter-spacing: .06em; margin-bottom: 4px; }
-  .kpi-value { font-family: 'Inter', sans-serif; font-size: 18px; font-weight: 900; color: #1C1C1E; line-height: 1.2; }
+  .kpi-label { font-size: 11px; font-weight: 700; color: #B0ADA8; letter-spacing: .06em; margin-bottom: 6px; }
+  .kpi-value { font-family: 'Inter', sans-serif; font-size: 22px; font-weight: 900; color: #1C1C1E; line-height: 1.2; }
   .kpi-value.profit { color: #1C9A52; }
   .kpi-value.loss { color: #E53935; }
-  .kpi-sub { font-size: 11px; color: #B0ADA8; margin-top: 3px; }
+  .kpi-sub { font-size: 12px; color: #B0ADA8; margin-top: 4px; }
 
   /* 棒グラフ */
   .chart-wrap { background: white; border-radius: 12px; padding: 14px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
@@ -187,8 +189,8 @@
   .month-stat:nth-child(1) { border-left: 3px solid #F07C3F; }
   .month-stat:nth-child(2) { border-left: 3px solid #F59E0B; }
   .month-stat:nth-child(3) { border-left: 3px solid #1C9A52; }
-  .month-stat-label { font-size: 10px; color: #B0ADA8; font-weight: 700; margin-bottom: 4px; }
-  .month-stat-value { font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 900; }
+  .month-stat-label { font-size: 11px; color: #B0ADA8; font-weight: 700; margin-bottom: 4px; }
+  .month-stat-value { font-family: 'Inter', sans-serif; font-size: 17px; font-weight: 900; }
   .month-stat:nth-child(1) .month-stat-value { color: #F07C3F; }
   .month-stat:nth-child(2) .month-stat-value { color: #D97706; }
   .month-stat:nth-child(3) .month-stat-value { color: #1C9A52; }
@@ -247,14 +249,14 @@
   .month-profit { text-align: right; }
   .month-profit-rev { font-size: 11px; color: #B0ADA8; }
   .month-profit-val { font-family: 'Inter', sans-serif; font-size: 16px; font-weight: 800; }
-  .booking-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 14px; border-bottom: 1px solid #F9F8F7; gap: 8px; }
+  .booking-row { display: flex; justify-content: space-between; align-items: center; padding: 11px 14px 11px 16px; border-bottom: 1px solid #F9F8F7; gap: 8px; border-left: 4px solid var(--prop-color, #E8E6E1); }
   .booking-row:last-child { border-bottom: none; }
   .booking-info { min-width: 0; }
-  .booking-prop { font-size: 12px; font-weight: 700; color: #F07C3F; }
-  .booking-guest { font-size: 11px; color: #B0ADA8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .booking-prop { font-size: 13px; font-weight: 700; color: var(--prop-color, #F07C3F); }
+  .booking-guest { font-size: 12px; color: #B0ADA8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .booking-amounts { text-align: right; flex-shrink: 0; }
-  .booking-rev { font-size: 11px; color: #B0ADA8; }
-  .booking-profit { font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 700; }
+  .booking-rev { font-size: 12px; color: #B0ADA8; }
+  .booking-profit { font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 700; }
   .map-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; background: #FAFAF9; border-radius: 10px; padding: 10px; border: 1px solid #F2F1EE; }
   .map-listing { font-size: 11px; color: #666; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .map-select { border: 1.5px solid #E8E6E1; border-radius: 8px; padding: 7px 8px; font-size: 13px; font-weight: 600; background: white; flex-shrink: 0; width: 140px; }
@@ -343,9 +345,10 @@
 <div class="tabs">
   <button class="tab active" onclick="showTab('sim')">試算</button>
   <button class="tab" onclick="showTab('monthly')">月別</button>
-  <button class="tab" style="flex:0.7" onclick="showTab('calendar')">📅</button>
+  <button class="tab" onclick="showTab('calendar')">カレンダー</button>
+  <button class="tab" onclick="showTab('bookings')">予約</button>
   <button class="tab" onclick="showTab('annual')">実績</button>
-  <button class="tab" style="flex:0.5" onclick="showTab('settings')">⚙️</button>
+  <button class="tab" onclick="showTab('settings')">設定</button>
 </div>
 
 <!-- シミュレーション -->
@@ -411,6 +414,11 @@
 <!-- カレンダー -->
 <div class="page" id="page-calendar">
   <div id="calendar-content"></div>
+</div>
+
+<!-- 予約一覧 -->
+<div class="page" id="page-bookings">
+  <div id="bookings-content"></div>
 </div>
 
 <!-- 年間管理 -->
@@ -716,9 +724,16 @@ function initFirebaseSync() {
   });
 }
 
+// ==================== 物件カラー ====================
+const PROP_COLORS = ['#F07C3F','#3B82F6','#8B5CF6','#10B981','#F59E0B','#EF4444'];
+function getPropColor(propId) {
+  const idx = properties.findIndex(p => p.id === parseInt(propId));
+  return PROP_COLORS[idx >= 0 ? idx % PROP_COLORS.length : 0];
+}
+
 // ==================== タブ ====================
 function showTab(tab) {
-  const tabs = ['sim','monthly','calendar','annual','settings'];
+  const tabs = ['sim','monthly','calendar','bookings','annual','settings'];
   document.querySelectorAll('.tab').forEach((t, i) => {
     t.classList.toggle('active', tabs[i] === tab);
   });
@@ -728,6 +743,7 @@ function showTab(tab) {
   if (tab === 'sim') { renderSimPropertySelect(); renderHistory(); }
   if (tab === 'monthly') { initMonthlyTab(); }
   if (tab === 'calendar') { initCalendarTab(); }
+  if (tab === 'bookings') { renderBookings(); }
   if (tab === 'annual') { initAnnualTab(); }
   if (tab === 'settings') renderSettings();
 }
@@ -1067,7 +1083,8 @@ function renderMonthly() {
           const prop = properties.find(p => p.id === pid);
           const pf = calcAirbnbProfit(b);
           const bIsP = pf !== null && pf >= 0;
-          return `<div class="booking-row">
+          const bColor = getPropColor(pid);
+          return `<div class="booking-row" style="--prop-color:${bColor}">
             <div class="booking-info">
               <div class="booking-prop">${prop ? prop.name : '⚠️ 物件未設定'}</div>
               <div class="booking-guest">${b.guestName} · ${b.nights}泊 · ${b.checkin}</div>
@@ -2425,6 +2442,83 @@ function calcAirbnbProfit(b) {
   return b.revenue - fixed - perBooking;
 }
 
+// ==================== 予約一覧 ====================
+let bookingsPropFilter = 'all';
+function renderBookings() {
+  const content = document.getElementById('bookings-content');
+  const fmt = n => n.toLocaleString('ja-JP');
+  const fmtD = s => { if (!s) return '?'; const p = s.split('/'); return `${parseInt(p[1])}/${parseInt(p[2])}`; };
+
+  if (airbnbBookings.length === 0) {
+    content.innerHTML = `<div class="empty-state">予約データがありません<br><span style="font-size:12px">「実績」タブからCSVを読み込んでください</span></div>`;
+    return;
+  }
+
+  const now = new Date(); now.setHours(0,0,0,0);
+  const sorted = [...airbnbBookings].sort((a, b) => {
+    const ap = a.checkin.split('/').map(Number), bp = b.checkin.split('/').map(Number);
+    return new Date(bp[0],bp[1]-1,bp[2]) - new Date(ap[0],ap[1]-1,ap[2]);
+  });
+
+  const filterHtml = `<div class="prop-filter" style="margin-bottom:12px">
+    <button class="prop-filter-btn${bookingsPropFilter==='all'?' active':''}" onclick="bookingsPropFilter='all';renderBookings()">全物件</button>
+    ${properties.map(p => `<button class="prop-filter-btn${bookingsPropFilter===String(p.id)?' active':''}" style="${bookingsPropFilter===String(p.id)?'background:'+getPropColor(p.id)+';border-color:'+getPropColor(p.id)+'':''}" onclick="bookingsPropFilter='${p.id}';renderBookings()">
+      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${getPropColor(p.id)};margin-right:5px;vertical-align:middle"></span>${p.name}
+    </button>`).join('')}
+  </div>`;
+
+  const filtered = bookingsPropFilter === 'all' ? sorted : sorted.filter(b => getBookingPropId(b) === parseInt(bookingsPropFilter));
+
+  // 今後 / 過去に分ける
+  const upcoming = filtered.filter(b => { const p = b.checkin.split('/').map(Number); return new Date(p[0],p[1]-1,p[2]) >= now; });
+  const past = filtered.filter(b => { const p = b.checkin.split('/').map(Number); return new Date(p[0],p[1]-1,p[2]) < now; });
+
+  const bookingRow = (b) => {
+    const pid = getBookingPropId(b);
+    const prop = properties.find(p => p.id === pid);
+    const color = getPropColor(pid);
+    const coStr = getCheckout(b);
+    const parts = b.checkin.split('/').map(Number);
+    const cinDate = new Date(parts[0], parts[1]-1, parts[2]);
+    const diff = Math.round((cinDate - now) / 86400000);
+    const isFuture = diff >= 0;
+    const diffLabel = diff === 0 ? '今日' : diff === 1 ? '明日' : isFuture ? `${diff}日後` : `${-diff}日前`;
+    return `<div class="booking-row" style="--prop-color:${color}">
+      <div style="min-width:44px;text-align:center;padding:8px 4px;background:${isFuture?(diff===0?'#FFF3E0':'#F8F8F8'):'#F8F8F8'};border-radius:10px;flex-shrink:0">
+        <div style="font-family:'Inter',sans-serif;font-size:18px;font-weight:900;color:${diff===0?'#E65100':isFuture?'#1C1C1E':'#C8C5C0'};line-height:1">${parts[2]}</div>
+        <div style="font-size:10px;color:#B0ADA8;margin-top:1px">${parts[1]}月</div>
+      </div>
+      <div class="booking-info" style="flex:1">
+        <div class="booking-prop">${prop ? prop.name : '⚠️ 未設定'}${b.source==='pricelabs'?'<span style="font-size:9px;font-weight:700;background:#fff0eb;color:#e05a2b;padding:1px 5px;border-radius:3px;margin-left:5px">PL</span>':''}</div>
+        <div class="booking-guest">${b.guestName || (b.source==='pricelabs'?'PriceLabs予約':'')}</div>
+        <div style="font-size:11px;color:#C8C5C0;margin-top:2px">${fmtD(b.checkin)} → ${fmtD(coStr)} · ${b.nights}泊</div>
+      </div>
+      <div class="booking-amounts">
+        <div style="font-family:'Inter',sans-serif;font-size:14px;font-weight:800;color:#1C1C1E">¥${fmt(b.revenue)}</div>
+        <div style="font-size:11px;font-weight:700;color:${diff===0?'#E65100':isFuture?color:'#C8C5C0'};margin-top:2px">${diffLabel}</div>
+      </div>
+    </div>`;
+  };
+
+  let html = filterHtml;
+
+  if (upcoming.length > 0) {
+    html += `<div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
+      <div style="padding:12px 16px 8px;font-size:12px;font-weight:700;color:#B0ADA8;letter-spacing:.06em">今後の予約 (${upcoming.length}件)</div>
+      ${upcoming.map(bookingRow).join('')}
+    </div>`;
+  }
+
+  if (past.length > 0) {
+    html += `<div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:12px 16px 8px;font-size:12px;font-weight:700;color:#B0ADA8;letter-spacing:.06em">過去の予約 (${past.length}件)</div>
+      ${past.map(bookingRow).join('')}
+    </div>`;
+  }
+
+  content.innerHTML = html;
+}
+
 function renderAnnual() {
   const content = document.getElementById('annual-content');
   const fmt = n => n.toLocaleString('ja-JP');
@@ -2750,18 +2844,14 @@ function renderAnnual() {
           : mBooks.map(b => {
               const pid = getBookingPropId(b);
               const prop = properties.find(p => p.id === pid);
+              const bColor = getPropColor(pid);
               const coStr = getCheckout(b);
               const fmtD = s => { if (!s) return '?'; const p = s.split('/'); return `${parseInt(p[1])}/${parseInt(p[2])}`; };
-              return `<div class="booking-row">
+              return `<div class="booking-row" style="--prop-color:${bColor}">
                 <div class="booking-info">
-                  <div class="booking-prop">${prop ? prop.name : '⚠️ 未設定'}${b.source==='pricelabs'?'<span style="font-size:8px;font-weight:700;background:#fff0eb;color:#e05a2b;padding:1px 4px;border-radius:3px;margin-left:5px">PL</span>':''}</div>
+                  <div class="booking-prop">${prop ? prop.name : '⚠️ 未設定'}${b.source==='pricelabs'?'<span style="font-size:9px;font-weight:700;background:#fff0eb;color:#e05a2b;padding:1px 5px;border-radius:3px;margin-left:5px">PL</span>':''}</div>
                   <div class="booking-guest">${b.guestName || (b.source==='pricelabs' ? 'PriceLabs予約' : '')}</div>
-                  <div style="font-size:10px;color:#bbb;margin-top:1px">
-                    <span style="background:#e3f2fd;color:#F07C3F;font-size:8px;font-weight:700;padding:1px 3px;border-radius:3px;margin-right:2px">IN</span>${fmtD(b.checkin)}
-                    <span style="color:#ddd;margin:0 2px">→</span>
-                    <span style="background:#fce4ec;color:#E53935;font-size:8px;font-weight:700;padding:1px 3px;border-radius:3px;margin-right:2px">OUT</span>${fmtD(coStr)}
-                    （${b.nights}泊）
-                  </div>
+                  <div style="font-size:11px;color:#bbb;margin-top:2px">${fmtD(b.checkin)} → ${fmtD(coStr)} · ${b.nights}泊</div>
                 </div>
                 <div class="booking-amounts">
                   <div class="booking-rev">${fmt(b.revenue)}円</div>
