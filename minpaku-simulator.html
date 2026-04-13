@@ -1861,9 +1861,20 @@ function renderInvestmentRecovery() {
       return by < nowY || (by === nowY && bm <= nowM);
     });
 
-    // 営業開始から現在月までの全固定費（予約がない月も含む）
+    // 営業開始から現在月までの全固定費（予約がない月も含む、実費入力済み月は実費を使用）
     const months = totalMonthsOperating(p);
-    const totalFixedCosts = monthlyFixedTotal * months;
+    let totalFixedCosts = 0;
+    if (p.operationStart) {
+      const [_sy, _sm] = p.operationStart.split('-').map(Number);
+      const _now = new Date();
+      let _cy = _sy, _cm = _sm;
+      while (_cy < _now.getFullYear() || (_cy === _now.getFullYear() && _cm <= _now.getMonth() + 1)) {
+        totalFixedCosts += getPropMonthFixedCosts(p, _cy, _cm);
+        _cm++; if (_cm > 12) { _cm = 1; _cy++; }
+      }
+    } else {
+      totalFixedCosts = monthlyFixedTotal * months;
+    }
 
     // 現在月までの売上と変動費
     let totalRevenue = 0, totalVarCosts = 0;
@@ -1898,7 +1909,9 @@ function renderInvestmentRecovery() {
       let cy = sy, cm = sm;
       while (cy < now.getFullYear() || (cy === now.getFullYear() && cm <= now.getMonth() + 1)) {
         const key = `${cy}-${String(cm).padStart(2,'0')}`;
-        const mp = (monthRevMap[key] || 0) - monthlyFixedTotal - (monthVarMap[key] || 0);
+        // 実費入力済み月は実費固定費を、それ以外は概算を使用
+        const mFixedCost = getPropMonthFixedCosts(p, cy, cm);
+        const mp = (monthRevMap[key] || 0) - mFixedCost - (monthVarMap[key] || 0);
         allMonthProfits.push(mp);
         cm++; if (cm > 12) { cm = 1; cy++; }
       }
@@ -3196,12 +3209,17 @@ function renderAnnual() {
           ? properties.filter(p => isPropertyOperating(p, y, m))
           : properties.filter(p => String(p.id) === String(annualPropFilter) && isPropertyOperating(p, y, m));
         if (mBooks.length === 0 && operatingProps.length === 0) return { y, m, profit: null };
-        const fixedCosts = operatingProps.reduce((s, p) => s + p.monthlyFixedCosts.reduce((ss, c) => ss + c.amount, 0), 0);
+        // 実費入力済み月は実費固定費を、それ以外は概算を使用
+        const fixedCosts = operatingProps.reduce((s, p) => s + getPropMonthFixedCosts(p, y, m), 0);
         let rev = 0, varC = 0;
         mBooks.forEach(b => {
           rev += b.revenue;
-          const prop = properties.find(p => p.id === getBookingPropId(b));
-          if (prop) varC += prop.perBookingCosts.reduce((s, c) => s + c.amount, 0);
+          const pid = getBookingPropId(b);
+          const prop = properties.find(p => p.id === pid);
+          // 実費入力済みの物件は変動費を加算しない（実費に含まれているため）
+          if (prop && !hasActualCosts(pid, y, m)) {
+            varC += prop.perBookingCosts.reduce((s, c) => s + c.amount, 0);
+          }
         });
         return { y, m, profit: rev - fixedCosts - varC };
       });
