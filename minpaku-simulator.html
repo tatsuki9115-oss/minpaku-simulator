@@ -2149,15 +2149,25 @@ function showActualCostModal(year, month, propId) {
   const key = `${propId}_${year}_${month}`;
   const existing = actualCosts[key];
   // 初期値：実費データがあればそれを、なければ設定の概算値を使用
+  const baseFixed = prop.monthlyFixedCosts;
   const initCosts = existing
     ? JSON.parse(JSON.stringify(existing))
-    : JSON.parse(JSON.stringify(prop.monthlyFixedCosts));
+    : JSON.parse(JSON.stringify(baseFixed));
+
+  const fixedCount = baseFixed.length;
+
+  // 変動費（清掃費・コインランドリー）の実績値：initCostsにあれば使う
+  const EXTRA_ITEMS = ['清掃費', 'コインランドリー'];
+  const extraAmounts = EXTRA_ITEMS.map(name => {
+    const found = initCosts.find((c, i) => i >= fixedCount && c.name === name);
+    return found ? found.amount : 0;
+  });
 
   const overlay = document.createElement('div');
   overlay.setAttribute('data-actual-cost-modal', '1');
   overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
 
-  const rows = initCosts.map((c, i) => `
+  const fixedRows = initCosts.slice(0, fixedCount).map((c, i) => `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
       <div style="flex:1;font-size:13px;color:#555">${c.name}</div>
       <div style="display:flex;align-items:center;gap:4px">
@@ -2167,31 +2177,53 @@ function showActualCostModal(year, month, propId) {
       </div>
     </div>`).join('');
 
+  const extraRows = EXTRA_ITEMS.map((name, ei) => `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <div style="flex:1;font-size:13px;color:#555">${name}</div>
+      <div style="display:flex;align-items:center;gap:4px">
+        <span style="font-size:11px;color:#aaa">¥</span>
+        <input type="number" id="ac-extra-${ei}" value="${extraAmounts[ei]}" min="0" step="100"
+          style="width:90px;padding:6px 8px;border:1.5px solid #eee;border-radius:8px;font-size:13px;font-weight:600;text-align:right;color:#333">
+      </div>
+    </div>`).join('');
+
   overlay.innerHTML = `
     <div style="background:white;border-radius:16px;padding:20px;width:100%;max-width:360px;max-height:85vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.2)">
       <div style="font-size:15px;font-weight:700;color:#333;margin-bottom:2px">✏️ ${year}年${month}月の実費入力</div>
       <div style="font-size:11px;color:#aaa;margin-bottom:16px">${prop.name}｜初期値は設定の概算値</div>
-      ${rows}
-      <div style="border-top:1px solid #f0f0f0;margin-top:12px;padding-top:10px;display:flex;justify-content:space-between;align-items:center">
+      ${fixedRows}
+      <div style="border-top:1px solid #f0f0f0;margin:10px 0 10px;padding-top:10px">
+        <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:8px">変動費（月合計）</div>
+        ${extraRows}
+      </div>
+      <div style="border-top:1px solid #f0f0f0;margin-top:4px;padding-top:10px;display:flex;justify-content:space-between;align-items:center">
         <button onclick="deleteActualCost('${key}')" style="font-size:11px;color:#e53935;background:none;border:none;cursor:pointer;padding:4px 0">概算に戻す</button>
         <div style="display:flex;gap:8px">
           <button onclick="document.body.removeChild(document.querySelector('[data-actual-cost-modal]'))" style="padding:9px 16px;border:1.5px solid #eee;border-radius:8px;font-weight:700;background:white;cursor:pointer;color:#888;font-size:13px">キャンセル</button>
-          <button onclick="saveActualCostFromModal('${key}',${initCosts.length})" style="padding:9px 18px;border:none;border-radius:8px;font-weight:700;background:#F07C3F;color:white;cursor:pointer;font-size:13px">保存</button>
+          <button onclick="saveActualCostFromModal('${key}',${fixedCount})" style="padding:9px 18px;border:none;border-radius:8px;font-weight:700;background:#F07C3F;color:white;cursor:pointer;font-size:13px">保存</button>
         </div>
       </div>
     </div>`;
   document.body.appendChild(overlay);
 }
 
-function saveActualCostFromModal(key, count) {
+function saveActualCostFromModal(key, fixedCount) {
   const costs = [];
   const prop = properties.find(p => p.id === parseInt(key.split('_')[0]));
   if (!prop) return;
-  for (let i = 0; i < count; i++) {
+  // 固定費
+  for (let i = 0; i < fixedCount; i++) {
     const input = document.getElementById(`ac-input-${i}`);
     if (!input) continue;
     costs.push({ name: prop.monthlyFixedCosts[i]?.name || '', amount: parseInt(input.value) || 0 });
   }
+  // 変動費（清掃費・コインランドリー）
+  const EXTRA_ITEMS = ['清掃費', 'コインランドリー'];
+  EXTRA_ITEMS.forEach((name, ei) => {
+    const input = document.getElementById(`ac-extra-${ei}`);
+    const amount = input ? (parseInt(input.value) || 0) : 0;
+    if (amount > 0) costs.push({ name, amount });
+  });
   actualCosts[key] = costs;
   saveActualCosts();
   document.body.removeChild(document.querySelector('[data-actual-cost-modal]'));
