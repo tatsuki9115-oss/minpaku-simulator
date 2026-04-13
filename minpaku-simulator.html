@@ -2338,31 +2338,17 @@ function renderAnnual() {
     content.innerHTML = `
       <div class="card">
         <div class="card-title" style="margin-bottom:12px">予約データを読み込む</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div>
-            <div style="font-size:11px;font-weight:700;color:#666;margin-bottom:6px">Airbnb CSV</div>
-            <div class="csv-drop-area" onclick="document.getElementById('csv-input').click()"
-              ondragover="event.preventDefault();this.classList.add('dragover')"
-              ondragleave="this.classList.remove('dragover')"
-              ondrop="event.preventDefault();this.classList.remove('dragover');handleCSVFile({files:event.dataTransfer.files,value:''})">
-              <div class="csv-drop-icon">📂</div>
-              <div class="csv-drop-text" style="font-size:13px">Airbnb CSV</div>
-              <div class="csv-drop-sub">ホスト管理 → 予約管理</div>
-            </div>
-            <input type="file" id="csv-input" accept=".csv" style="display:none" onchange="handleCSVFile(this)">
+        <div>
+          <div style="font-size:11px;font-weight:700;color:#666;margin-bottom:6px">Airbnb CSV</div>
+          <div class="csv-drop-area" onclick="document.getElementById('csv-input').click()"
+            ondragover="event.preventDefault();this.classList.add('dragover')"
+            ondragleave="this.classList.remove('dragover')"
+            ondrop="event.preventDefault();this.classList.remove('dragover');handleCSVFile({files:event.dataTransfer.files,value:''})">
+            <div class="csv-drop-icon">📂</div>
+            <div class="csv-drop-text" style="font-size:13px">Airbnb CSV</div>
+            <div class="csv-drop-sub">ホスト管理 → 予約管理</div>
           </div>
-          <div>
-            <div style="font-size:11px;font-weight:700;color:#e05a2b;margin-bottom:6px">PriceLabs</div>
-            <div class="csv-drop-area" style="border-color:#e05a2b33" onclick="document.getElementById('pl-input').click()"
-              ondragover="event.preventDefault();this.classList.add('dragover')"
-              ondragleave="this.classList.remove('dragover')"
-              ondrop="event.preventDefault();this.classList.remove('dragover');handlePriceLabsFile({files:event.dataTransfer.files,value:''})">
-              <div class="csv-drop-icon">📊</div>
-              <div class="csv-drop-text" style="font-size:13px">PriceLabs xlsx</div>
-              <div class="csv-drop-sub">Portfolio Analytics → Bookings Report</div>
-            </div>
-            <input type="file" id="pl-input" accept=".xlsx" style="display:none" onchange="handlePriceLabsFile(this)">
-          </div>
+          <input type="file" id="csv-input" accept=".csv" style="display:none" onchange="handleCSVFile(this)">
         </div>
         <div style="border-top:1px solid #f0f0f0;margin-top:12px;padding-top:12px">
           <div style="font-size:11px;font-weight:700;color:#7b1fa2;margin-bottom:6px">PriceLabs 年間予測</div>
@@ -2386,13 +2372,9 @@ function renderAnnual() {
   let html = '';
 
   // ヘッダー
-  const plCount = airbnbBookings.filter(b => b.source === 'pricelabs').length;
-  const airbnbCount = airbnbBookings.length - plCount;
   html += `<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:11px 14px;gap:8px">
     <div style="flex:1;min-width:0">
-      <div style="font-size:13px;font-weight:700;color:#555">${airbnbBookings.length}件読み込み済み
-        <span style="font-size:10px;font-weight:400;color:#aaa;margin-left:4px">Airbnb ${airbnbCount}件${plCount>0?' / PriceLabs '+plCount+'件':''}</span>
-      </div>
+      <div style="font-size:13px;font-weight:700;color:#555">${airbnbBookings.length}件読み込み済み</div>
       <div style="font-size:10px;color:#aaa;margin-top:1px">チェックイン日基準　${currentAnnualYear}年度（${currentAnnualYear}/4〜${currentAnnualYear+1}/3）</div>
     </div>
     <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
@@ -2401,16 +2383,11 @@ function renderAnnual() {
         <span style="font-size:9px;color:#bbb">${fmtUpdatedAt('airbnb')}</span>
       </div>
       <div style="display:flex;flex-direction:column;align-items:center;gap:1px">
-        <button onclick="document.getElementById('pl-input').click()" style="font-size:11px;color:#e05a2b;background:none;border:1.5px solid #e05a2b;cursor:pointer;font-weight:700;padding:5px 10px;border-radius:8px">↺ PriceLabs</button>
-        <span style="font-size:9px;color:#bbb">${fmtUpdatedAt('pricelabs')}</span>
-      </div>
-      <div style="display:flex;flex-direction:column;align-items:center;gap:1px">
         <button onclick="document.getElementById('forecast-input').click()" style="font-size:11px;color:#7b1fa2;background:none;border:1.5px solid #7b1fa2;cursor:pointer;font-weight:700;padding:5px 10px;border-radius:8px">📈 予測</button>
         <span style="font-size:9px;color:#bbb">${fmtUpdatedAt('forecast')}</span>
       </div>
     </div>
     <input type="file" id="csv-input" accept=".csv" style="display:none" onchange="handleCSVFile(this)">
-    <input type="file" id="pl-input" accept=".xlsx" style="display:none" onchange="handlePriceLabsFile(this)">
     <input type="file" id="forecast-input" accept=".xlsx" style="display:none" onchange="handleForecastFile(this)">
   </div>`;
 
