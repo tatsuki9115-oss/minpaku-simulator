@@ -344,9 +344,8 @@
 
 <div class="tabs">
   <button class="tab active" onclick="showTab('sim')">試算</button>
-  <button class="tab" onclick="showTab('monthly')">月別</button>
-  <button class="tab" onclick="showTab('calendar')">カレンダー</button>
   <button class="tab" onclick="showTab('bookings')">予約</button>
+  <button class="tab" onclick="showTab('calendar')">カレンダー</button>
   <button class="tab" onclick="showTab('annual')">実績</button>
   <button class="tab" onclick="showTab('settings')">設定</button>
 </div>
@@ -509,6 +508,7 @@ let pricelabsForecast = loadForecastData();
 let currentAnnualYear = new Date().getFullYear();
 let pendingListings = [];
 let annualPropFilter = 'all';
+let annualSelectedMonth = null; // null=全期間, {year,month}=月別ビュー
 let dataUpdatedAt = JSON.parse(localStorage.getItem('dataUpdatedAt') || '{}');
 function saveDataUpdatedAt() { localStorage.setItem('dataUpdatedAt', JSON.stringify(dataUpdatedAt)); }
 function fmtUpdatedAt(key) {
@@ -733,7 +733,7 @@ function getPropColor(propId) {
 
 // ==================== タブ ====================
 function showTab(tab) {
-  const tabs = ['sim','monthly','calendar','bookings','annual','settings'];
+  const tabs = ['sim','bookings','calendar','annual','settings'];
   document.querySelectorAll('.tab').forEach((t, i) => {
     t.classList.toggle('active', tabs[i] === tab);
   });
@@ -741,9 +741,8 @@ function showTab(tab) {
     document.getElementById('page-' + id).classList.toggle('active', id === tab);
   });
   if (tab === 'sim') { renderSimPropertySelect(); renderHistory(); }
-  if (tab === 'monthly') { initMonthlyTab(); }
+  if (tab === 'bookings') { renderDashboard(); }
   if (tab === 'calendar') { initCalendarTab(); }
-  if (tab === 'bookings') { renderBookings(); }
   if (tab === 'annual') { initAnnualTab(); }
   if (tab === 'settings') renderSettings();
 }
@@ -2442,81 +2441,182 @@ function calcAirbnbProfit(b) {
   return b.revenue - fixed - perBooking;
 }
 
-// ==================== 予約一覧 ====================
-let bookingsPropFilter = 'all';
-function renderBookings() {
+// ==================== 運営ダッシュボード ====================
+let bookingsPropFilter = 'all'; // 既存変数を流用
+function renderDashboard() {
   const content = document.getElementById('bookings-content');
+  if (!content) return;
   const fmt = n => n.toLocaleString('ja-JP');
-  const fmtD = s => { if (!s) return '?'; const p = s.split('/'); return `${parseInt(p[1])}/${parseInt(p[2])}`; };
+  const dayNames = ['日','月','火','水','木','金','土'];
+
+  const now = new Date(); now.setHours(0,0,0,0);
+  const toStr = d => `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}`;
+
+  const getCI = b => { const p = b.checkin.split('/').map(Number); return new Date(p[0],p[1]-1,p[2]); };
+  const getCO = b => { const co = getCheckout(b); if (!co) return null; const p = co.split('/').map(Number); return new Date(p[0],p[1]-1,p[2]); };
 
   if (airbnbBookings.length === 0) {
     content.innerHTML = `<div class="empty-state">予約データがありません<br><span style="font-size:12px">「実績」タブからCSVを読み込んでください</span></div>`;
     return;
   }
 
-  const now = new Date(); now.setHours(0,0,0,0);
-  const sorted = [...airbnbBookings].sort((a, b) => {
-    const ap = a.checkin.split('/').map(Number), bp = b.checkin.split('/').map(Number);
-    return new Date(bp[0],bp[1]-1,bp[2]) - new Date(ap[0],ap[1]-1,ap[2]);
-  });
+  // 次の予約
+  const nextBook = [...airbnbBookings]
+    .filter(b => getCI(b) > now)
+    .sort((a,b2) => getCI(a) - getCI(b2))[0];
 
-  const filterHtml = `<div class="prop-filter" style="margin-bottom:12px">
-    <button class="prop-filter-btn${bookingsPropFilter==='all'?' active':''}" onclick="bookingsPropFilter='all';renderBookings()">全物件</button>
-    ${properties.map(p => `<button class="prop-filter-btn${bookingsPropFilter===String(p.id)?' active':''}" style="${bookingsPropFilter===String(p.id)?'background:'+getPropColor(p.id)+';border-color:'+getPropColor(p.id)+'':''}" onclick="bookingsPropFilter='${p.id}';renderBookings()">
-      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${getPropColor(p.id)};margin-right:5px;vertical-align:middle"></span>${p.name}
-    </button>`).join('')}
+  // 今日〜7日後のイベント
+  const events = []; // { date, type:'in'|'out', booking }
+  for (let i = 0; i <= 7; i++) {
+    const d = new Date(now); d.setDate(d.getDate() + i);
+    const ds = toStr(d);
+    airbnbBookings.forEach(b => {
+      if (b.checkin === ds) events.push({ date: d, diff: i, type: 'in', booking: b });
+      const co = getCheckout(b);
+      if (co === ds) events.push({ date: d, diff: i, type: 'out', booking: b });
+    });
+  }
+  events.sort((a, b2) => a.date - b2.date || (a.type === 'out' ? -1 : 1));
+
+  // 未完了タスク（チェックイン7日以内）
+  const upcoming30 = airbnbBookings.filter(b => {
+    const d = getCI(b); const diff = Math.round((d - now) / 86400000);
+    return diff >= -1 && diff <= 30;
+  });
+  const pendingForm = upcoming30.filter(b => b.code && !bookingChecks[b.code]?.formDone);
+  const pendingClean = upcoming30.filter(b => b.code && !bookingChecks[b.code]?.cleaningDone);
+
+  let html = '';
+
+  // ヘッダーカード
+  const nextDiff = nextBook ? Math.round((getCI(nextBook) - now) / 86400000) : null;
+  const nextProp = nextBook ? properties.find(p => p.id === getBookingPropId(nextBook)) : null;
+  const nextColor = nextBook ? getPropColor(getBookingPropId(nextBook)) : '#B0ADA8';
+  html += `<div class="card" style="margin-bottom:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:24px;font-weight:900;color:#1C1C1E;line-height:1">${now.getMonth()+1}月${now.getDate()}日</div>
+        <div style="font-size:13px;color:#B0ADA8;margin-top:3px">${now.getFullYear()}年（${dayNames[now.getDay()]}）</div>
+      </div>
+      ${nextBook ? `<div style="text-align:right;background:#F8F8F8;border-radius:12px;padding:10px 14px">
+        <div style="font-size:11px;color:#B0ADA8;font-weight:700;margin-bottom:2px">次の予約まで</div>
+        <div style="font-family:'Inter',sans-serif;font-size:22px;font-weight:900;color:${nextColor};line-height:1">${nextDiff === 0 ? '今日' : nextDiff+'日'}</div>
+        <div style="font-size:11px;color:#B0ADA8;margin-top:2px">${nextProp?.name||''}</div>
+      </div>` : ''}
+    </div>
   </div>`;
 
-  const filtered = bookingsPropFilter === 'all' ? sorted : sorted.filter(b => getBookingPropId(b) === parseInt(bookingsPropFilter));
-
-  // 今後 / 過去に分ける
-  const upcoming = filtered.filter(b => { const p = b.checkin.split('/').map(Number); return new Date(p[0],p[1]-1,p[2]) >= now; });
-  const past = filtered.filter(b => { const p = b.checkin.split('/').map(Number); return new Date(p[0],p[1]-1,p[2]) < now; });
-
-  const bookingRow = (b) => {
-    const pid = getBookingPropId(b);
-    const prop = properties.find(p => p.id === pid);
-    const color = getPropColor(pid);
-    const coStr = getCheckout(b);
-    const parts = b.checkin.split('/').map(Number);
-    const cinDate = new Date(parts[0], parts[1]-1, parts[2]);
-    const diff = Math.round((cinDate - now) / 86400000);
-    const isFuture = diff >= 0;
-    const diffLabel = diff === 0 ? '今日' : diff === 1 ? '明日' : isFuture ? `${diff}日後` : `${-diff}日前`;
-    return `<div class="booking-row" style="--prop-color:${color}">
-      <div style="min-width:44px;text-align:center;padding:8px 4px;background:${isFuture?(diff===0?'#FFF3E0':'#F8F8F8'):'#F8F8F8'};border-radius:10px;flex-shrink:0">
-        <div style="font-family:'Inter',sans-serif;font-size:18px;font-weight:900;color:${diff===0?'#E65100':isFuture?'#1C1C1E':'#C8C5C0'};line-height:1">${parts[2]}</div>
-        <div style="font-size:10px;color:#B0ADA8;margin-top:1px">${parts[1]}月</div>
+  // タスクサマリー（未完了あるときだけ）
+  const hasPending = pendingForm.length > 0 || pendingClean.length > 0;
+  if (hasPending) {
+    html += `<div class="card" style="margin-bottom:12px;border-top:3px solid #F59E0B">
+      <div style="font-size:12px;font-weight:700;color:#B0ADA8;margin-bottom:10px">未完了タスク</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:${pendingForm.length>0?'#FFF8EC':'#F8F8F8'};border-radius:10px;padding:12px;text-align:center" onclick="document.getElementById('dash-tasks').style.display=document.getElementById('dash-tasks').style.display==='none'?'':'none'">
+          <div style="font-size:11px;font-weight:700;color:#B0ADA8;margin-bottom:4px">📋 フォーム確認</div>
+          <div style="font-family:'Inter',sans-serif;font-size:22px;font-weight:900;color:${pendingForm.length>0?'#E65100':'#1C9A52'}">${pendingForm.length}件</div>
+          <div style="font-size:10px;color:#B0ADA8">未完了</div>
+        </div>
+        <div style="background:${pendingClean.length>0?'#F0FAFA':'#F8F8F8'};border-radius:10px;padding:12px;text-align:center">
+          <div style="font-size:11px;font-weight:700;color:#B0ADA8;margin-bottom:4px">🧹 清掃手配</div>
+          <div style="font-family:'Inter',sans-serif;font-size:22px;font-weight:900;color:${pendingClean.length>0?'#00796B':'#1C9A52'}">${pendingClean.length}件</div>
+          <div style="font-size:10px;color:#B0ADA8">未完了</div>
+        </div>
       </div>
-      <div class="booking-info" style="flex:1">
-        <div class="booking-prop">${prop ? prop.name : '⚠️ 未設定'}${b.source==='pricelabs'?'<span style="font-size:9px;font-weight:700;background:#fff0eb;color:#e05a2b;padding:1px 5px;border-radius:3px;margin-left:5px">PL</span>':''}</div>
-        <div class="booking-guest">${b.guestName || (b.source==='pricelabs'?'PriceLabs予約':'')}</div>
-        <div style="font-size:11px;color:#C8C5C0;margin-top:2px">${fmtD(b.checkin)} → ${fmtD(coStr)} · ${b.nights}泊</div>
-      </div>
-      <div class="booking-amounts">
-        <div style="font-family:'Inter',sans-serif;font-size:14px;font-weight:800;color:#1C1C1E">¥${fmt(b.revenue)}</div>
-        <div style="font-size:11px;font-weight:700;color:${diff===0?'#E65100':isFuture?color:'#C8C5C0'};margin-top:2px">${diffLabel}</div>
-      </div>
-    </div>`;
-  };
-
-  let html = filterHtml;
-
-  if (upcoming.length > 0) {
-    html += `<div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
-      <div style="padding:12px 16px 8px;font-size:12px;font-weight:700;color:#B0ADA8;letter-spacing:.06em">今後の予約 (${upcoming.length}件)</div>
-      ${upcoming.map(bookingRow).join('')}
     </div>`;
   }
 
-  if (past.length > 0) {
-    html += `<div class="card" style="padding:0;overflow:hidden">
-      <div style="padding:12px 16px 8px;font-size:12px;font-weight:700;color:#B0ADA8;letter-spacing:.06em">過去の予約 (${past.length}件)</div>
-      ${past.map(bookingRow).join('')}
+  // 今後7日間のイベント
+  if (events.length === 0) {
+    html += `<div class="card" style="text-align:center;padding:32px 16px">
+      <div style="font-size:32px;margin-bottom:8px">🌙</div>
+      <div style="font-size:14px;font-weight:700;color:#1C1C1E">7日間予定なし</div>
+      <div style="font-size:12px;color:#B0ADA8;margin-top:4px">${nextBook ? `次の予約は${nextDiff}日後（${nextProp?.name||''}）` : '予約待機中'}</div>
+    </div>`;
+  } else {
+    // 日付でグループ化
+    const grouped = {};
+    events.forEach(e => {
+      const key = toStr(e.date);
+      if (!grouped[key]) grouped[key] = { date: e.date, diff: e.diff, items: [] };
+      grouped[key].items.push(e);
+    });
+
+    Object.values(grouped).forEach(({ date, diff, items }) => {
+      const label = diff === 0 ? '今日' : diff === 1 ? '明日' : `${date.getMonth()+1}/${date.getDate()}（${dayNames[date.getDay()]}）`;
+      const isToday = diff === 0;
+      const isTomorrow = diff === 1;
+
+      let rows = '';
+      items.forEach(({ type, booking: b }) => {
+        const pid = getBookingPropId(b);
+        const prop = properties.find(p => p.id === pid);
+        const color = getPropColor(pid);
+        const chk = b.code ? (bookingChecks[b.code] || {}) : {};
+        const icon = type === 'in' ? '🔑' : '🚪';
+        const actionLabel = type === 'in' ? 'チェックイン' : 'チェックアウト';
+        const checkField = type === 'in' ? 'formDone' : 'cleaningDone';
+        const checkDone = type === 'in' ? chk.formDone : chk.cleaningDone;
+        const checkLabel = type === 'in' ? (checkDone ? '📋 済' : '📋 確認') : (checkDone ? '🧹 済' : '🧹 手配');
+        const checkBg = checkDone ? (type==='in' ? '#E8F5E9' : '#E0F7FA') : '#F2F1EE';
+        const checkColor = checkDone ? (type==='in' ? '#1C9A52' : '#00796B') : '#B0ADA8';
+
+        rows += `<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #F2F1EE">
+          <div style="width:38px;height:38px;border-radius:10px;background:${type==='in'?'#FFF8F4':'#FFF0F0'};display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">${icon}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:700;color:#1C1C1E;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(b.guestName||'ゲスト')}</div>
+            <div style="font-size:12px;font-weight:700;color:${color};margin-top:1px">${prop?.name||''} · ${actionLabel} · ${b.nights}泊</div>
+          </div>
+          ${b.code ? `<button onclick="toggleCheckForDash('${b.code}','${checkField}')" style="font-size:12px;font-weight:700;padding:7px 12px;border-radius:10px;border:none;cursor:pointer;background:${checkBg};color:${checkColor};flex-shrink:0;white-space:nowrap">${checkLabel}</button>` : ''}
+        </div>`;
+      });
+
+      html += `<div class="card" style="margin-bottom:10px${isToday?';border-left:4px solid #F07C3F':''}">
+        <div style="font-size:13px;font-weight:700;color:${isToday?'#F07C3F':isTomorrow?'#1C1C1E':'#B0ADA8'};margin-bottom:4px">${label}</div>
+        ${rows}
+      </div>`;
+    });
+  }
+
+  // 未完了タスク詳細（折りたたみ）
+  if (hasPending) {
+    let taskRows = '';
+    [...pendingForm.map(b=>({b,type:'form'})), ...pendingClean.map(b=>({b,type:'clean'}))]
+      .sort((a,b2) => getCI(a.b) - getCI(b2.b))
+      .forEach(({b, type}) => {
+        const pid = getBookingPropId(b);
+        const prop = properties.find(p => p.id === pid);
+        const color = getPropColor(pid);
+        const d = getCI(b);
+        const diff = Math.round((d - now) / 86400000);
+        const diffLabel = diff === 0 ? '今日' : diff > 0 ? `${diff}日後` : `${-diff}日前`;
+        const checkField = type === 'form' ? 'formDone' : 'cleaningDone';
+        const icon = type === 'form' ? '📋' : '🧹';
+        taskRows += `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #F2F1EE">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:700;color:#1C1C1E">${icon} ${escHtml(b.guestName||'ゲスト')}</div>
+            <div style="font-size:12px;color:${color};margin-top:2px">${prop?.name||''} · チェックイン ${diffLabel}</div>
+          </div>
+          <button onclick="toggleCheckForDash('${b.code}','${checkField}')" style="font-size:12px;font-weight:700;padding:7px 12px;border-radius:10px;border:none;cursor:pointer;background:#F2F1EE;color:#B0ADA8;white-space:nowrap">${type==='form'?'確認する':'手配する'}</button>
+        </div>`;
+      });
+
+    html += `<div class="breakdown-card" style="margin-bottom:12px">
+      <button class="breakdown-toggle" onclick="toggleEl(this)">
+        <span>未完了タスク詳細 (${pendingForm.length + pendingClean.length}件)</span><span class="chevron">▼</span>
+      </button>
+      <div class="breakdown-body">${taskRows}</div>
     </div>`;
   }
 
   content.innerHTML = html;
+}
+
+function toggleCheckForDash(code, field) {
+  if (!bookingChecks[code]) bookingChecks[code] = {};
+  bookingChecks[code][field] = !bookingChecks[code][field];
+  saveBookingChecks();
+  renderDashboard();
 }
 
 function renderAnnual() {
@@ -2557,39 +2657,6 @@ function renderAnnual() {
     return bm >= 4 ? by : by - 1;
   }))].filter(y => !isNaN(y)).sort();
   if (!fiscalYears.includes(currentAnnualYear)) currentAnnualYear = fiscalYears[fiscalYears.length - 1] || new Date().getFullYear();
-
-  let html = '';
-
-  // ヘッダー
-  html += `<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:11px 14px;gap:8px">
-    <div style="flex:1;min-width:0">
-      <div style="font-size:13px;font-weight:700;color:#555">${airbnbBookings.length}件読み込み済み</div>
-      <div style="font-size:10px;color:#aaa;margin-top:1px">チェックイン日基準　${currentAnnualYear}年度（${currentAnnualYear}/4〜${currentAnnualYear+1}/3）</div>
-    </div>
-    <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
-      <div style="display:flex;flex-direction:column;align-items:center;gap:1px">
-        <button onclick="document.getElementById('csv-input').click()" style="font-size:11px;color:#F07C3F;background:none;border:1.5px solid #F07C3F;cursor:pointer;font-weight:700;padding:5px 10px;border-radius:8px">↺ Airbnb</button>
-        <span style="font-size:9px;color:#bbb">${fmtUpdatedAt('airbnb')}</span>
-      </div>
-      <div style="display:flex;flex-direction:column;align-items:center;gap:1px">
-        <button onclick="document.getElementById('forecast-input').click()" style="font-size:11px;color:#7b1fa2;background:none;border:1.5px solid #7b1fa2;cursor:pointer;font-weight:700;padding:5px 10px;border-radius:8px">📈 予測</button>
-        <span style="font-size:9px;color:#bbb">${fmtUpdatedAt('forecast')}</span>
-      </div>
-    </div>
-    <input type="file" id="csv-input" accept=".csv" style="display:none" onchange="handleCSVFile(this)">
-    <input type="file" id="forecast-input" accept=".xlsx" style="display:none" onchange="handleForecastFile(this)">
-  </div>`;
-
-  // 年タブ
-  if (fiscalYears.length > 1) {
-    html += `<div class="year-tabs">${fiscalYears.map(y => `<button class="year-tab${y===currentAnnualYear?' active':''}" onclick="currentAnnualYear=${y};renderAnnual()">${y}年度</button>`).join('')}</div>`;
-  }
-
-  // 物件フィルター
-  html += `<div class="prop-filter">
-    <button class="prop-filter-btn${annualPropFilter==='all'?' active':''}" onclick="annualPropFilter='all';renderAnnual()">全物件</button>
-    ${properties.map(p => `<button class="prop-filter-btn${annualPropFilter===String(p.id)?' active':''}" onclick="annualPropFilter='${p.id}';renderAnnual()">${p.name}</button>`).join('')}
-  </div>`;
 
   // フィルター適用（会計年度：currentAnnualYear/4〜currentAnnualYear+1/3）
   const yearBooks = airbnbBookings.filter(b => {
@@ -2638,6 +2705,86 @@ function renderAnnual() {
   });
 
   const validMonths = monthlyStats.filter(Boolean);
+
+  // 月別ビューモード
+  if (annualSelectedMonth) {
+    const { year: sY, month: sM } = annualSelectedMonth;
+    const mBooks = yearBooks.filter(b => {
+      const [by, bm] = b.checkin.split('/').map(Number);
+      return by === sY && bm === sM;
+    });
+    const ms = validMonths.find(v => v.month === sM);
+    const isMP = ms ? ms.profit >= 0 : true;
+    const dim = getDaysInMonth(sY, sM);
+    const activePropCount = Math.max((annualPropFilter==='all' ? properties.filter(p => isPropertyOperating(p,sY,sM)) : properties.filter(p => String(p.id)===String(annualPropFilter) && isPropertyOperating(p,sY,sM))).length, 1);
+    const maxNights = dim * activePropCount;
+    const occRate = ms ? ms.occRate : 0;
+
+    let mhtml = '';
+    // 年タブ
+    if (fiscalYears.length > 1) {
+      mhtml += `<div class="year-tabs">${fiscalYears.map(y => `<button class="year-tab${y===currentAnnualYear?' active':''}" onclick="currentAnnualYear=${y};annualSelectedMonth=null;renderAnnual()">${y}年度</button>`).join('')}</div>`;
+    }
+    // 物件フィルター
+    mhtml += `<div class="prop-filter"><button class="prop-filter-btn${annualPropFilter==='all'?' active':''}" onclick="annualPropFilter='all';renderAnnual()">全物件</button>${properties.map(p=>`<button class="prop-filter-btn${annualPropFilter===String(p.id)?' active':''}" onclick="annualPropFilter='${p.id}';renderAnnual()">${p.name}</button>`).join('')}</div>`;
+    // 月ナビ
+    mhtml += `<div style="display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;margin-bottom:10px">
+      <button class="prop-filter-btn" onclick="annualSelectedMonth=null;renderAnnual()" style="background:#F2F1EE;border-color:#E8E6E1;color:#666">← 全期間</button>
+      ${fyMonthOrder.map(m => {
+        const mYear = m >= 4 ? currentAnnualYear : currentAnnualYear + 1;
+        const hasDat = validMonths.some(v => v.month === m);
+        if (!hasDat) return '';
+        const isA = annualSelectedMonth?.month === m;
+        return `<button class="prop-filter-btn${isA?' active':''}" onclick="annualSelectedMonth={year:${mYear},month:${m}};renderAnnual()" style="${isA?'background:#F07C3F;color:white;border-color:#F07C3F':''}">${m}月</button>`;
+      }).join('')}
+    </div>`;
+
+    // 月サマリーカード
+    if (ms) {
+      mhtml += `<div class="card" style="margin-bottom:12px;border-top:3px solid #F07C3F">
+        <div style="font-size:16px;font-weight:800;color:#1C1C1E;margin-bottom:12px">${sM}月の実績</div>
+        <div class="month-stats">
+          <div class="month-stat"><div class="month-stat-label">予約数</div><div class="month-stat-value">${ms.bookings}件</div></div>
+          <div class="month-stat"><div class="month-stat-label">稼働率</div><div class="month-stat-value">${occRate}%</div><div class="occ-bar-wrap"><div class="occ-bar-fill" style="width:${occRate}%"></div></div></div>
+          <div class="month-stat"><div class="month-stat-label">稼働日数</div><div class="month-stat-value">${ms.nights}/${maxNights}日</div></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding-top:12px;border-top:1px solid #F2F1EE;margin-top:4px">
+          <span style="font-size:13px;color:#888">月間利益</span>
+          <span style="font-family:'Inter',sans-serif;font-size:26px;font-weight:900;color:${isMP?'#1C9A52':'#E53935'}">${isMP?'':'▲'}${fmtShort(Math.abs(ms.profit))}円</span>
+        </div>
+      </div>`;
+    }
+
+    // 予約リスト
+    if (mBooks.length === 0) {
+      mhtml += `<div class="empty-state">この月の予約データなし</div>`;
+    } else {
+      const fmtD = s => { if (!s) return '?'; const p = s.split('/'); return `${parseInt(p[1])}/${parseInt(p[2])}`; };
+      mhtml += `<div class="card" style="padding:0;overflow:hidden">
+        <div style="padding:12px 16px 8px;font-size:12px;font-weight:700;color:#B0ADA8;letter-spacing:.06em">予約一覧 (${mBooks.length}件)</div>
+        ${mBooks.map(b => {
+          const pid = getBookingPropId(b);
+          const prop = properties.find(p => p.id === pid);
+          const bColor = getPropColor(pid);
+          const coStr = getCheckout(b);
+          return `<div class="booking-row" style="--prop-color:${bColor}">
+            <div class="booking-info">
+              <div class="booking-prop">${prop?prop.name:'⚠️ 未設定'}${b.source==='pricelabs'?'<span style="font-size:9px;font-weight:700;background:#fff0eb;color:#e05a2b;padding:1px 5px;border-radius:3px;margin-left:5px">PL</span>':''}</div>
+              <div class="booking-guest">${escHtml(b.guestName||(b.source==='pricelabs'?'PriceLabs予約':''))}</div>
+              <div style="font-size:11px;color:#C8C5C0;margin-top:2px">${fmtD(b.checkin)} → ${fmtD(coStr)} · ${b.nights}泊</div>
+            </div>
+            <div class="booking-amounts">
+              <div style="font-family:'Inter',sans-serif;font-size:14px;font-weight:800;color:#1C1C1E">¥${fmt(b.revenue)}</div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+    }
+
+    content.innerHTML = mhtml;
+    return;
+  }
+
   const totalRevenue = validMonths.reduce((s, m) => s + m.revenue, 0);
   const totalProfit = validMonths.reduce((s, m) => s + m.profit, 0);
   const totalNights = validMonths.reduce((s, m) => s + m.nights, 0);
@@ -2645,6 +2792,50 @@ function renderAnnual() {
   const avgPerNight = totalNights > 0 ? Math.round(totalRevenue / totalNights) : 0;
   const bestMonth = validMonths.length > 0 ? validMonths.reduce((a, b) => b.profit > a.profit ? b : a) : null;
   const isAP = totalProfit >= 0;
+
+  let html = '';
+
+  // ヘッダー
+  html += `<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:11px 14px;gap:8px">
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:700;color:#555">${airbnbBookings.length}件読み込み済み</div>
+      <div style="font-size:10px;color:#aaa;margin-top:1px">チェックイン日基準　${currentAnnualYear}年度（${currentAnnualYear}/4〜${currentAnnualYear+1}/3）</div>
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:1px">
+        <button onclick="document.getElementById('csv-input').click()" style="font-size:11px;color:#F07C3F;background:none;border:1.5px solid #F07C3F;cursor:pointer;font-weight:700;padding:5px 10px;border-radius:8px">↺ Airbnb</button>
+        <span style="font-size:9px;color:#bbb">${fmtUpdatedAt('airbnb')}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:1px">
+        <button onclick="document.getElementById('forecast-input').click()" style="font-size:11px;color:#7b1fa2;background:none;border:1.5px solid #7b1fa2;cursor:pointer;font-weight:700;padding:5px 10px;border-radius:8px">📈 予測</button>
+        <span style="font-size:9px;color:#bbb">${fmtUpdatedAt('forecast')}</span>
+      </div>
+    </div>
+    <input type="file" id="csv-input" accept=".csv" style="display:none" onchange="handleCSVFile(this)">
+    <input type="file" id="forecast-input" accept=".xlsx" style="display:none" onchange="handleForecastFile(this)">
+  </div>`;
+
+  // 年タブ
+  if (fiscalYears.length > 1) {
+    html += `<div class="year-tabs">${fiscalYears.map(y => `<button class="year-tab${y===currentAnnualYear?' active':''}" onclick="currentAnnualYear=${y};renderAnnual()">${y}年度</button>`).join('')}</div>`;
+  }
+
+  // 物件フィルター
+  html += `<div class="prop-filter">
+    <button class="prop-filter-btn${annualPropFilter==='all'?' active':''}" onclick="annualPropFilter='all';renderAnnual()">全物件</button>
+    ${properties.map(p => `<button class="prop-filter-btn${annualPropFilter===String(p.id)?' active':''}" onclick="annualPropFilter='${p.id}';renderAnnual()">${p.name}</button>`).join('')}
+  </div>`;
+
+  // 月ナビ（年間ビュー用）
+  html += `<div style="display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;margin-bottom:10px">
+    <button class="prop-filter-btn active" style="background:#1C1C1E;color:white;border-color:#1C1C1E">全期間</button>
+    ${fyMonthOrder.map(m => {
+      const mYear = m >= 4 ? currentAnnualYear : currentAnnualYear + 1;
+      const hasDat = validMonths.some(v => v.month === m);
+      if (!hasDat) return '';
+      return `<button class="prop-filter-btn" onclick="annualSelectedMonth={year:${mYear},month:${m}};renderAnnual()">${m}月</button>`;
+    }).join('')}
+  </div>`;
 
   // 次の予約ウィジェット
   {
