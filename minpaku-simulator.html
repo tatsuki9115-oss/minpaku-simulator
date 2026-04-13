@@ -1869,7 +1869,11 @@ function renderInvestmentRecovery() {
     let totalRevenue = 0, totalVarCosts = 0;
     books.forEach(b => {
       totalRevenue += b.revenue;
-      totalVarCosts += p.perBookingCosts.reduce((s, c) => s + c.amount, 0);
+      const [by, bm] = b.checkin.split('/').map(Number);
+      // 実費入力済みの月は変動費を加算しない（実費に含まれているため）
+      if (!hasActualCosts(p.id, by, bm)) {
+        totalVarCosts += p.perBookingCosts.reduce((s, c) => s + c.amount, 0);
+      }
     });
 
     const cumulativeProfit = totalRevenue - totalFixedCosts - totalVarCosts;
@@ -1881,7 +1885,10 @@ function renderInvestmentRecovery() {
       const [y, mo] = b.checkin.split('/').map(Number);
       const key = `${y}-${String(mo).padStart(2,'0')}`;
       monthRevMap[key] = (monthRevMap[key] || 0) + b.revenue;
-      monthVarMap[key] = (monthVarMap[key] || 0) + p.perBookingCosts.reduce((s, c) => s + c.amount, 0);
+      // 実費入力済みの月は変動費を加算しない
+      if (!hasActualCosts(p.id, y, mo)) {
+        monthVarMap[key] = (monthVarMap[key] || 0) + p.perBookingCosts.reduce((s, c) => s + c.amount, 0);
+      }
     });
     // 営業開始〜現在の全月を列挙
     const allMonthProfits = [];
@@ -2156,8 +2163,8 @@ function showActualCostModal(year, month, propId) {
 
   const fixedCount = baseFixed.length;
 
-  // 変動費（清掃費・コインランドリー）の実績値：initCostsにあれば使う
-  const EXTRA_ITEMS = ['清掃費', 'コインランドリー'];
+  // 変動費（リネン・清掃費・コインランドリー）の実績値：initCostsにあれば使う
+  const EXTRA_ITEMS = ['リネン', '清掃費', 'コインランドリー'];
   const extraAmounts = EXTRA_ITEMS.map(name => {
     const found = initCosts.find((c, i) => i >= fixedCount && c.name === name);
     return found ? found.amount : 0;
@@ -2193,7 +2200,8 @@ function showActualCostModal(year, month, propId) {
       <div style="font-size:11px;color:#aaa;margin-bottom:16px">${prop.name}｜初期値は設定の概算値</div>
       ${fixedRows}
       <div style="border-top:1px solid #f0f0f0;margin:10px 0 10px;padding-top:10px">
-        <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:8px">変動費（月合計）</div>
+        <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:4px">変動費（月合計）</div>
+        <div style="font-size:10px;color:#E65100;background:#FFF8EC;border-radius:6px;padding:5px 8px;margin-bottom:8px">⚠️ 入力すると概算の変動費（清掃費・リネン）は加算されません</div>
         ${extraRows}
       </div>
       <div style="border-top:1px solid #f0f0f0;margin-top:4px;padding-top:10px;display:flex;justify-content:space-between;align-items:center">
@@ -2779,8 +2787,12 @@ function renderAnnual() {
     let rev = 0, varCosts = 0, nights = 0;
     mBooks.forEach(b => {
       rev += b.revenue;
-      const prop = properties.find(p => p.id === getBookingPropId(b));
-      if (prop) varCosts += prop.perBookingCosts.reduce((s, c) => s + c.amount, 0);
+      const pid = getBookingPropId(b);
+      const prop = properties.find(p => p.id === pid);
+      // 実費入力済みの物件は変動費を加算しない（実費に含まれているため）
+      if (prop && !hasActualCosts(pid, mYear, m)) {
+        varCosts += prop.perBookingCosts.reduce((s, c) => s + c.amount, 0);
+      }
       nights += b.nights;
     });
 
