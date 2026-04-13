@@ -1247,32 +1247,56 @@ function renderCalendarTab() {
     const ad = parseDateStr(a.checkin), bd = parseDateStr(b.checkin);
     return (ad||0) - (bd||0);
   });
+  const nowForCal = new Date(); nowForCal.setHours(0,0,0,0);
   const bookListHtml = sortedBooks.length === 0 ? '' : `
-    <div class="card" style="padding:0;overflow:hidden;margin-top:12px">
+    <div style="margin-top:12px">
       ${sortedBooks.map(b => {
         const prop = properties.find(p => p.id === getBookingPropId(b));
         const chk = b.code ? (bookingChecks[b.code] || {}) : {};
         const coStr = getCheckout(b);
         const fmtD = s => { if (!s) return '?'; const p = s.split('/'); return `${parseInt(p[1])}/${parseInt(p[2])}`; };
         const staffList = prop ? (prop.cleaningStaff || []) : [];
-        return `<div style="padding:10px 14px;border-bottom:1px solid #f5f5f5">
-          <div style="display:flex;align-items:center;gap:10px">
+        const cinParts = b.checkin ? b.checkin.split('/').map(Number) : null;
+        const cinDate = cinParts ? new Date(cinParts[0], cinParts[1]-1, cinParts[2]) : null;
+        const daysToCI = cinDate ? Math.round((cinDate - nowForCal) / 86400000) : 999;
+
+        // アラート状態判定
+        const formAlert = b.code && !chk.formDone && daysToCI <= 7 && daysToCI >= -3;
+        const cleanAlert = b.code && !chk.cleaningDone && daysToCI <= 14 && daysToCI >= -3;
+        const hasAlert = formAlert || cleanAlert;
+        const borderStyle = hasAlert ? 'border:2px solid #E53935' : 'border:1px solid #f0f0f0';
+
+        const formBg = chk.formDone ? '#e8f5e9' : formAlert ? '#FFEBEE' : '#f0f0f0';
+        const formColor = chk.formDone ? '#1C9A52' : formAlert ? '#D32F2F' : '#aaa';
+        const cleanBg = chk.cleaningDone ? '#e0f7fa' : cleanAlert ? '#FFF3E0' : '#f0f0f0';
+        const cleanColor = chk.cleaningDone ? '#00796b' : cleanAlert ? '#E65100' : '#aaa';
+
+        const diffLabel = daysToCI < 0 ? `${-daysToCI}日超過` : daysToCI === 0 ? '今日' : `あと${daysToCI}日`;
+        const diffColor = daysToCI < 0 ? '#D32F2F' : daysToCI <= 3 ? '#E65100' : daysToCI <= 7 ? '#F59E0B' : '#B0ADA8';
+
+        return `<div style="background:white;border-radius:14px;padding:12px 14px;margin-bottom:8px;${borderStyle}">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
             <div style="flex:1;min-width:0">
-              <div style="font-size:12px;font-weight:700;color:#F07C3F">${prop ? prop.name : '⚠️ 未設定'}</div>
-              <div style="font-size:13px;font-weight:700;color:#1a1a2e;margin:2px 0">${escHtml(b.guestName||'ゲスト')}</div>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                <span style="font-size:12px;font-weight:700;color:${prop ? getPropColor(getBookingPropId(b)) : '#aaa'}">${prop ? prop.name : '⚠️ 未設定'}</span>
+                <span style="font-size:11px;font-weight:800;color:${diffColor}">${diffLabel}</span>
+                ${hasAlert ? '<span style="font-size:10px;font-weight:800;color:#D32F2F;background:#FFEBEE;padding:1px 6px;border-radius:6px">要対応</span>' : ''}
+              </div>
+              <div style="font-size:14px;font-weight:700;color:#1a1a2e;margin:3px 0 1px">${escHtml(b.guestName||'ゲスト')}</div>
               <div style="font-size:10px;color:#aaa">${fmtD(b.checkin)} → ${fmtD(coStr)}（${b.nights}泊）</div>
             </div>
-            ${b.code ? `<button onclick="toggleCheckFromList('${b.code}','formDone')" style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:10px;border:none;cursor:pointer;flex-shrink:0;background:${chk.formDone?'#e8f5e9':'#f0f0f0'};color:${chk.formDone?'#1C9A52':'#aaa'}">📋 ${chk.formDone?'✅ 済':'未確認'}</button>` : ''}
           </div>
-          ${b.code ? `
-          <div style="display:flex;align-items:center;gap:6px;margin-top:7px">
-            ${staffList.length > 0
-              ? `<select style="flex:1;font-size:12px;border:1.5px solid ${chk.cleaningDone?'#80cbc4':'#e8e8e8'};border-radius:8px;padding:5px 8px;background:white;color:#555;min-width:0" onchange="toggleCheckStaffFromList('${b.code}',this.value)">
-                  <option value="">👤 担当スタッフを選択</option>
-                  ${staffList.map(s => `<option value="${escHtml(s.name)}" ${chk.cleaningStaffName===s.name?'selected':''}>${escHtml(s.name)}</option>`).join('')}
-                </select>`
-              : `<span style="flex:1;font-size:11px;color:#bbb">（設定タブでスタッフ登録可）</span>`}
-            <button onclick="toggleCheckFromList('${b.code}','cleaningDone')" style="font-size:11px;font-weight:700;padding:5px 12px;border-radius:10px;border:none;cursor:pointer;flex-shrink:0;background:${chk.cleaningDone?'#e0f7fa':'#f0f0f0'};color:${chk.cleaningDone?'#00796b':'#aaa'}">🧹 ${chk.cleaningDone?'✅ 済':'未手配'}</button>
+          ${b.code ? `<div style="display:flex;gap:6px">
+            <button onclick="toggleCheckFromList('${b.code}','formDone')" style="flex:1;font-size:12px;font-weight:700;padding:9px 6px;border-radius:10px;border:none;cursor:pointer;background:${formBg};color:${formColor}">📋 ${chk.formDone?'名簿 ✅ 済':'名簿 未提出'}</button>
+            <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+              ${staffList.length > 0
+                ? `<select style="font-size:11px;border:1.5px solid ${chk.cleaningDone?'#80cbc4':cleanAlert?'#E65100':'#e8e8e8'};border-radius:8px;padding:4px 6px;background:white;color:#555;width:100%" onchange="toggleCheckStaffFromList('${b.code}',this.value)">
+                    <option value="">👤 スタッフ選択</option>
+                    ${staffList.map(s => `<option value="${escHtml(s.name)}" ${chk.cleaningStaffName===s.name?'selected':''}>${escHtml(s.name)}</option>`).join('')}
+                  </select>`
+                : ''}
+              <button onclick="toggleCheckFromList('${b.code}','cleaningDone')" style="font-size:12px;font-weight:700;padding:${staffList.length>0?'5':'9'}px 6px;border-radius:10px;border:none;cursor:pointer;background:${cleanBg};color:${cleanColor};width:100%">🧹 ${chk.cleaningDone?'清掃 ✅ 済':'清掃 未手配'}</button>
+            </div>
           </div>` : ''}
         </div>`;
       }).join('')}
@@ -2493,13 +2517,17 @@ function renderDashboard() {
   }
   events.sort((a, b2) => a.date - b2.date || (a.type === 'out' ? -1 : 1));
 
-  // 未完了タスク（チェックイン7日以内）
-  const upcoming30 = airbnbBookings.filter(b => {
-    const d = getCI(b); const diff = Math.round((d - now) / 86400000);
-    return diff >= -1 && diff <= 30;
-  });
-  const pendingForm = upcoming30.filter(b => b.code && !bookingChecks[b.code]?.formDone);
-  const pendingClean = upcoming30.filter(b => b.code && !bookingChecks[b.code]?.cleaningDone);
+  // アラート対象（名簿：7日前、清掃：14日前から）
+  const alertForm = airbnbBookings.filter(b => {
+    if (!b.code || bookingChecks[b.code]?.formDone) return false;
+    const diff = Math.round((getCI(b) - now) / 86400000);
+    return diff >= -3 && diff <= 7; // チェックイン1週間前〜3日後まで表示
+  }).sort((a,b2) => getCI(a) - getCI(b2));
+  const alertClean = airbnbBookings.filter(b => {
+    if (!b.code || bookingChecks[b.code]?.cleaningDone) return false;
+    const diff = Math.round((getCI(b) - now) / 86400000);
+    return diff >= -3 && diff <= 14; // チェックイン2週間前〜3日後まで表示
+  }).sort((a,b2) => getCI(a) - getCI(b2));
 
   let html = '';
 
@@ -2521,23 +2549,55 @@ function renderDashboard() {
     </div>
   </div>`;
 
-  // タスクサマリー（未完了あるときだけ）
-  const hasPending = pendingForm.length > 0 || pendingClean.length > 0;
-  if (hasPending) {
-    html += `<div class="card" style="margin-bottom:12px;border-top:3px solid #F59E0B">
-      <div style="font-size:12px;font-weight:700;color:#B0ADA8;margin-bottom:10px">未完了タスク</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div style="background:${pendingForm.length>0?'#FFF8EC':'#F8F8F8'};border-radius:10px;padding:12px;text-align:center" onclick="document.getElementById('dash-tasks').style.display=document.getElementById('dash-tasks').style.display==='none'?'':'none'">
-          <div style="font-size:11px;font-weight:700;color:#B0ADA8;margin-bottom:4px">📋 フォーム確認</div>
-          <div style="font-family:'Inter',sans-serif;font-size:22px;font-weight:900;color:${pendingForm.length>0?'#E65100':'#1C9A52'}">${pendingForm.length}件</div>
-          <div style="font-size:10px;color:#B0ADA8">未完了</div>
+  // ========== アラートカード ==========
+  const hasAlerts = alertForm.length > 0 || alertClean.length > 0;
+  if (hasAlerts) {
+    const renderAlertRow = (b, type) => {
+      const pid = getBookingPropId(b);
+      const prop = properties.find(p => p.id === pid);
+      const color = getPropColor(pid);
+      const diff = Math.round((getCI(b) - now) / 86400000);
+      const diffLabel = diff < 0 ? `${-diff}日超過` : diff === 0 ? '今日' : `あと${diff}日`;
+      const isOver = diff < 0;
+      const isUrgent = diff <= 2;
+      const urgentColor = isOver ? '#D32F2F' : isUrgent ? '#E65100' : '#F59E0B';
+      const checkField = type === 'form' ? 'formDone' : 'cleaningDone';
+      const icon = type === 'form' ? '📋' : '🧹';
+      const label = type === 'form' ? '宿泊者名簿' : '清掃手配';
+      const btnLabel = type === 'form' ? '✅ 提出済みにする' : '✅ 手配済みにする';
+      return `<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid rgba(0,0,0,.06)">
+        <div style="flex-shrink:0;width:36px;height:36px;border-radius:10px;background:${isOver?'#FFEBEE':isUrgent?'#FFF3E0':'#FFFDE7'};display:flex;align-items:center;justify-content:center;font-size:18px">${icon}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;color:#1C1C1E;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(b.guestName||'ゲスト')}</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap">
+            <span style="font-size:11px;font-weight:700;color:${color}">${prop?.name||''}</span>
+            <span style="font-size:11px;color:#B0ADA8">·</span>
+            <span style="font-size:11px;font-weight:800;color:${urgentColor}">${label} ${diffLabel}</span>
+          </div>
         </div>
-        <div style="background:${pendingClean.length>0?'#F0FAFA':'#F8F8F8'};border-radius:10px;padding:12px;text-align:center">
-          <div style="font-size:11px;font-weight:700;color:#B0ADA8;margin-bottom:4px">🧹 清掃手配</div>
-          <div style="font-family:'Inter',sans-serif;font-size:22px;font-weight:900;color:${pendingClean.length>0?'#00796B':'#1C9A52'}">${pendingClean.length}件</div>
-          <div style="font-size:10px;color:#B0ADA8">未完了</div>
-        </div>
+        <button onclick="toggleCheckForDash('${b.code}','${checkField}')" style="font-size:11px;font-weight:700;padding:8px 10px;border-radius:10px;border:none;cursor:pointer;background:#1C1C1E;color:white;flex-shrink:0;white-space:nowrap;line-height:1.2;text-align:center">${btnLabel}</button>
+      </div>`;
+    };
+
+    let alertRows = '';
+    // 名簿アラート
+    if (alertForm.length > 0) {
+      alertRows += `<div style="font-size:10px;font-weight:800;color:#E65100;letter-spacing:.5px;margin:4px 0 2px">📋 宿泊者名簿（チェックイン1週間前までに）</div>`;
+      alertRows += alertForm.map(b => renderAlertRow(b, 'form')).join('');
+    }
+    // 清掃アラート
+    if (alertClean.length > 0) {
+      if (alertForm.length > 0) alertRows += `<div style="height:8px"></div>`;
+      alertRows += `<div style="font-size:10px;font-weight:800;color:#00796B;letter-spacing:.5px;margin:4px 0 2px">🧹 清掃手配（チェックイン2週間前までに）</div>`;
+      alertRows += alertClean.map(b => renderAlertRow(b, 'clean')).join('');
+    }
+
+    html += `<div class="card" style="margin-bottom:12px;border:2px solid #E53935;border-radius:14px;padding:12px 14px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+        <span style="font-size:16px">🚨</span>
+        <span style="font-size:13px;font-weight:800;color:#D32F2F">要対応 ${alertForm.length + alertClean.length}件</span>
       </div>
+      ${alertRows}
     </div>`;
   }
 
@@ -2570,11 +2630,22 @@ function renderDashboard() {
         const chk = b.code ? (bookingChecks[b.code] || {}) : {};
         const icon = type === 'in' ? '🔑' : '🚪';
         const actionLabel = type === 'in' ? 'チェックイン' : 'チェックアウト';
-        const checkField = type === 'in' ? 'formDone' : 'cleaningDone';
-        const checkDone = type === 'in' ? chk.formDone : chk.cleaningDone;
-        const checkLabel = type === 'in' ? (checkDone ? '📋 済' : '📋 確認') : (checkDone ? '🧹 済' : '🧹 手配');
-        const checkBg = checkDone ? (type==='in' ? '#E8F5E9' : '#E0F7FA') : '#F2F1EE';
-        const checkColor = checkDone ? (type==='in' ? '#1C9A52' : '#00796B') : '#B0ADA8';
+
+        // チェックインには名簿・清掃両方、チェックアウトには清掃のみ
+        const formDone = chk.formDone;
+        const cleanDone = chk.cleaningDone;
+        const formBg = formDone ? '#E8F5E9' : '#FFF3E0';
+        const formColor = formDone ? '#1C9A52' : '#E65100';
+        const cleanBg = cleanDone ? '#E0F7FA' : '#F3E5F5';
+        const cleanColor = cleanDone ? '#00796B' : '#7B1FA2';
+
+        const checkBtns = b.code ? (type === 'in'
+          ? `<div style="display:flex;gap:5px;flex-shrink:0">
+              <button onclick="toggleCheckForDash('${b.code}','formDone')" style="font-size:11px;font-weight:700;padding:6px 9px;border-radius:9px;border:none;cursor:pointer;background:${formBg};color:${formColor};white-space:nowrap">${formDone?'📋 済':'📋 名簿'}</button>
+              <button onclick="toggleCheckForDash('${b.code}','cleaningDone')" style="font-size:11px;font-weight:700;padding:6px 9px;border-radius:9px;border:none;cursor:pointer;background:${cleanBg};color:${cleanColor};white-space:nowrap">${cleanDone?'🧹 済':'🧹 清掃'}</button>
+            </div>`
+          : `<button onclick="toggleCheckForDash('${b.code}','cleaningDone')" style="font-size:11px;font-weight:700;padding:6px 9px;border-radius:9px;border:none;cursor:pointer;background:${cleanBg};color:${cleanColor};white-space:nowrap">${cleanDone?'🧹 済':'🧹 清掃'}</button>`)
+          : '';
 
         rows += `<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #F2F1EE">
           <div style="width:38px;height:38px;border-radius:10px;background:${type==='in'?'#FFF8F4':'#FFF0F0'};display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">${icon}</div>
@@ -2582,7 +2653,7 @@ function renderDashboard() {
             <div style="font-size:14px;font-weight:700;color:#1C1C1E;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(b.guestName||'ゲスト')}</div>
             <div style="font-size:12px;font-weight:700;color:${color};margin-top:1px">${prop?.name||''} · ${actionLabel} · ${b.nights}泊</div>
           </div>
-          ${b.code ? `<button onclick="toggleCheckForDash('${b.code}','${checkField}')" style="font-size:12px;font-weight:700;padding:7px 12px;border-radius:10px;border:none;cursor:pointer;background:${checkBg};color:${checkColor};flex-shrink:0;white-space:nowrap">${checkLabel}</button>` : ''}
+          ${checkBtns}
         </div>`;
       });
 
@@ -2591,37 +2662,6 @@ function renderDashboard() {
         ${rows}
       </div>`;
     });
-  }
-
-  // 未完了タスク詳細（折りたたみ）
-  if (hasPending) {
-    let taskRows = '';
-    [...pendingForm.map(b=>({b,type:'form'})), ...pendingClean.map(b=>({b,type:'clean'}))]
-      .sort((a,b2) => getCI(a.b) - getCI(b2.b))
-      .forEach(({b, type}) => {
-        const pid = getBookingPropId(b);
-        const prop = properties.find(p => p.id === pid);
-        const color = getPropColor(pid);
-        const d = getCI(b);
-        const diff = Math.round((d - now) / 86400000);
-        const diffLabel = diff === 0 ? '今日' : diff > 0 ? `${diff}日後` : `${-diff}日前`;
-        const checkField = type === 'form' ? 'formDone' : 'cleaningDone';
-        const icon = type === 'form' ? '📋' : '🧹';
-        taskRows += `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #F2F1EE">
-          <div style="flex:1;min-width:0">
-            <div style="font-size:13px;font-weight:700;color:#1C1C1E">${icon} ${escHtml(b.guestName||'ゲスト')}</div>
-            <div style="font-size:12px;color:${color};margin-top:2px">${prop?.name||''} · チェックイン ${diffLabel}</div>
-          </div>
-          <button onclick="toggleCheckForDash('${b.code}','${checkField}')" style="font-size:12px;font-weight:700;padding:7px 12px;border-radius:10px;border:none;cursor:pointer;background:#F2F1EE;color:#B0ADA8;white-space:nowrap">${type==='form'?'確認する':'手配する'}</button>
-        </div>`;
-      });
-
-    html += `<div class="breakdown-card" style="margin-bottom:12px">
-      <button class="breakdown-toggle" onclick="toggleEl(this)">
-        <span>未完了タスク詳細 (${pendingForm.length + pendingClean.length}件)</span><span class="chevron">▼</span>
-      </button>
-      <div class="breakdown-body">${taskRows}</div>
-    </div>`;
   }
 
   content.innerHTML = html;
