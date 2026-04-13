@@ -1496,9 +1496,9 @@ function renderSettings() {
   // Airbnb物件紐付け（データある場合のみ表示）
   if (airbnbBookings.length > 0) {
     const allListings = [...new Set(airbnbBookings.map(b => b.listing))];
-    settingsHTML += `<div class="property-item" style="background:#f8fafc">
-      <div class="property-header" style="background:linear-gradient(135deg,#37474f,#546e7a)">
-        <span style="color:white;font-size:14px;font-weight:700;flex:1">Airbnbリスティング → 物件の紐付け</span>
+    settingsHTML += `<div class="property-item">
+      <div class="property-header">
+        <span style="font-size:14px;font-weight:700;flex:1;color:#1C1C1E">Airbnbリスティング → 物件の紐付け</span>
       </div>
       <div class="cost-section">
         <div style="font-size:11px;color:#aaa;margin-bottom:12px">Airbnbのリスティング名と物件を対応付けてください</div>
