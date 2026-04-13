@@ -7,286 +7,292 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif; background: #F3F4F8; color: #1a1a2e; min-height: 100vh; }
+  body { font-family: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif; background: #F2F1EE; color: #1C1C1E; min-height: 100vh; }
 
   .header {
-    background: #1A56DB;
-    color: white; padding: 14px 20px;
-    padding-top: calc(14px + env(safe-area-inset-top));
+    background: white;
+    border-bottom: 1px solid #E8E6E1;
+    color: #1C1C1E;
+    padding: 13px 16px;
+    padding-top: calc(13px + env(safe-area-inset-top));
     display: flex; align-items: center; gap: 10px;
-    box-shadow: 0 2px 8px rgba(0,0,0,.2);
+    position: sticky; top: 0; z-index: 100;
   }
-  .header h1 { font-size: 17px; font-weight: 700; letter-spacing: -.3px; }
+  .header-icon { width: 30px; height: 30px; background: #F07C3F; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .header h1 { font-size: 15px; font-weight: 700; letter-spacing: -.3px; }
 
   .tabs {
-    background: #1649C5;
-    padding: 0 12px 12px; display: flex; gap: 6px;
+    background: white;
+    border-bottom: 1px solid #E8E6E1;
+    padding: 0 6px;
+    display: flex; gap: 0;
+    position: sticky; top: 56px; z-index: 99;
   }
   .tab {
-    flex: 1; padding: 9px 6px; text-align: center; font-size: 12px; font-weight: 700;
-    cursor: pointer; color: rgba(255,255,255,.6); border-radius: 20px;
-    transition: all .2s; border: none; background: none;
+    flex: 1; padding: 11px 4px 9px; text-align: center; font-size: 12px; font-weight: 600;
+    cursor: pointer; color: #B0ADA8;
+    border: none; border-bottom: 2.5px solid transparent; background: none;
+    transition: color .15s, border-color .15s;
   }
-  .tab.active { color: #1A56DB; background: white; font-weight: 700; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+  .tab.active { color: #F07C3F; border-bottom-color: #F07C3F; font-weight: 700; }
 
   .page { display: none; padding: 14px; max-width: 640px; margin: 0 auto; padding-bottom: 20px; }
   .page.active { display: block; }
   .page#page-settings { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 
-  .card { background: white; border-radius: 16px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 6px rgba(0,0,0,.06); }
-  .card-title { font-size: 11px; font-weight: 700; color: #999; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 10px; }
+  .card { background: white; border-radius: 12px; padding: 14px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .card-title { font-size: 11px; font-weight: 700; color: #B0ADA8; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 10px; }
 
   /* 物件選択 */
-  .prop-select { width: 100%; border: 2px solid #e8e8e8; border-radius: 10px; padding: 11px 14px; font-size: 16px; font-weight: 600; background: white; color: #1a1a2e; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; }
-  .prop-select:focus { outline: none; border-color: #1A56DB; }
+  .prop-select { width: 100%; border: 1.5px solid #E8E6E1; border-radius: 10px; padding: 11px 14px; font-size: 15px; font-weight: 600; background: #FAFAF9; color: #1C1C1E; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23B0ADA8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; }
+  .prop-select:focus { outline: none; border-color: #F07C3F; background: white; }
 
   /* 入力 */
   .input-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px; }
-  .input-group label { font-size: 11px; font-weight: 700; color: #999; display: block; margin-bottom: 4px; letter-spacing: .04em; }
-  .input-group input { width: 100%; border: 2px solid #e8e8e8; border-radius: 10px; padding: 10px 10px; font-size: 20px; font-weight: 800; text-align: right; color: #1a1a2e; transition: border-color .15s; }
-  .input-group input:focus { outline: none; border-color: #1A56DB; }
-  .input-unit { font-size: 11px; color: #bbb; text-align: right; margin-top: 3px; font-weight: 600; }
-  .sub-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-top: 12px; border-top: 1px solid #f0f0f0; }
-  .sub-input-group label { font-size: 11px; font-weight: 700; color: #bbb; display: block; margin-bottom: 4px; }
-  .sub-input-group input { width: 100%; border: 1.5px solid #e8e8e8; border-radius: 8px; padding: 8px 10px; font-size: 16px; font-weight: 700; text-align: right; color: #555; background: #fafafa; }
-  .sub-input-group input:focus { outline: none; border-color: #1A56DB; background: white; }
-  .sub-unit { font-size: 10px; color: #ccc; text-align: right; margin-top: 2px; font-weight: 600; }
-  .btn-reset { display: block; width: 100%; padding: 8px; border: none; background: none; color: #bbb; font-size: 12px; cursor: pointer; margin-top: 4px; border-radius: 8px; }
-  .btn-reset:active { background: #f5f5f5; }
+  .input-group label { font-size: 11px; font-weight: 700; color: #B0ADA8; display: block; margin-bottom: 4px; letter-spacing: .04em; }
+  .input-group input { width: 100%; border: 1.5px solid #E8E6E1; border-radius: 10px; padding: 10px 10px; font-family: 'Inter', sans-serif; font-size: 20px; font-weight: 800; text-align: right; color: #1C1C1E; background: #FAFAF9; transition: border-color .15s, background .15s; }
+  .input-group input:focus { outline: none; border-color: #F07C3F; background: white; }
+  .input-unit { font-size: 11px; color: #C8C5C0; text-align: right; margin-top: 3px; font-weight: 600; }
+  .sub-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-top: 12px; border-top: 1px solid #F2F1EE; }
+  .sub-input-group label { font-size: 11px; font-weight: 700; color: #C8C5C0; display: block; margin-bottom: 4px; }
+  .sub-input-group input { width: 100%; border: 1.5px solid #E8E6E1; border-radius: 8px; padding: 8px 10px; font-family: 'Inter', sans-serif; font-size: 16px; font-weight: 700; text-align: right; color: #666; background: #FAFAF9; }
+  .sub-input-group input:focus { outline: none; border-color: #F07C3F; background: white; }
+  .sub-unit { font-size: 10px; color: #C8C5C0; text-align: right; margin-top: 2px; font-weight: 600; }
+  .btn-reset { display: block; width: 100%; padding: 8px; border: none; background: none; color: #C8C5C0; font-size: 12px; cursor: pointer; margin-top: 4px; border-radius: 8px; }
+  .btn-reset:active { background: #F2F1EE; }
 
   /* 結果カード */
-  .result-card { border-radius: 20px; padding: 18px 18px 14px; margin-bottom: 12px; }
-  .result-card.profit { background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); }
-  .result-card.loss { background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%); }
+  .result-card { background: white; border-radius: 12px; padding: 18px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); border-left: 4px solid #1C9A52; }
+  .result-card.profit { border-left-color: #1C9A52; background: white; }
+  .result-card.loss { border-left-color: #E53935; background: white; }
   .result-main { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 14px; }
-  .result-label { font-size: 11px; font-weight: 700; color: #777; letter-spacing: .06em; margin-bottom: 3px; }
-  .result-amount { font-size: 42px; font-weight: 900; line-height: 1; letter-spacing: -1px; }
-  .result-amount.profit { color: #1b5e20; }
-  .result-amount.loss { color: #b71c1c; }
-  .yen { font-size: 18px; font-weight: 500; }
-  .en { font-size: 18px; font-weight: 500; margin-left: 2px; }
+  .result-label { font-size: 11px; font-weight: 700; color: #B0ADA8; letter-spacing: .06em; margin-bottom: 3px; }
+  .result-amount { font-family: 'Inter', sans-serif; font-size: 40px; font-weight: 900; line-height: 1; letter-spacing: -1px; }
+  .result-amount.profit { color: #1C9A52; }
+  .result-amount.loss { color: #E53935; }
+  .yen { font-size: 16px; font-weight: 500; }
+  .en { font-size: 16px; font-weight: 500; margin-left: 2px; }
   .result-margin { text-align: right; }
-  .result-margin-label { font-size: 10px; font-weight: 700; color: #888; margin-bottom: 2px; }
-  .result-margin-value { font-size: 32px; font-weight: 900; line-height: 1; }
-  .result-margin-value.profit { color: #1b5e20; }
-  .result-margin-value.loss { color: #b71c1c; }
+  .result-margin-label { font-size: 10px; font-weight: 700; color: #B0ADA8; margin-bottom: 2px; }
+  .result-margin-value { font-family: 'Inter', sans-serif; font-size: 28px; font-weight: 900; line-height: 1; }
+  .result-margin-value.profit { color: #1C9A52; }
+  .result-margin-value.loss { color: #E53935; }
 
   /* 損益分岐点 */
-  .breakeven-box { border-top: 1px solid rgba(0,0,0,.08); padding-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .breakeven-box { border-top: 1px solid #F2F1EE; padding-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .be-full { grid-column: 1 / -1; }
-  .be-item { background: rgba(255,255,255,.5); border-radius: 10px; padding: 8px 10px; }
-  .be-label { font-size: 10px; font-weight: 700; color: #888; margin-bottom: 3px; }
-  .be-value { font-size: 15px; font-weight: 800; color: #1a1a2e; }
-  .be-value.ok { color: #2e7d32; }
-  .be-value.ng { color: #c62828; }
+  .be-item { background: #FAFAF9; border-radius: 10px; padding: 8px 10px; }
+  .be-label { font-size: 10px; font-weight: 700; color: #B0ADA8; margin-bottom: 3px; }
+  .be-value { font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 800; color: #1C1C1E; }
+  .be-value.ok { color: #1C9A52; }
+  .be-value.ng { color: #E53935; }
 
   /* 内訳 */
-  .breakdown-card { background: white; border-radius: 16px; box-shadow: 0 1px 6px rgba(0,0,0,.06); overflow: hidden; margin-bottom: 12px; }
-  .breakdown-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 13px 16px; border: none; background: none; cursor: pointer; font-size: 13px; font-weight: 700; color: #555; }
-  .breakdown-toggle .chevron { transition: transform .2s; color: #bbb; font-size: 11px; }
+  .breakdown-card { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); overflow: hidden; margin-bottom: 10px; }
+  .breakdown-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 13px 16px; border: none; background: none; cursor: pointer; font-size: 13px; font-weight: 700; color: #666; }
+  .breakdown-toggle .chevron { transition: transform .2s; color: #C8C5C0; font-size: 11px; }
   .breakdown-toggle.open .chevron { transform: rotate(180deg); }
   .breakdown-body { padding: 0 16px 14px; display: none; }
   .breakdown-body.open { display: block; }
-  .bd-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 7px 0; border-bottom: 1px solid #f5f5f5; gap: 8px; }
+  .bd-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 7px 0; border-bottom: 1px solid #F2F1EE; gap: 8px; }
   .bd-row:last-child { border-bottom: none; }
-  .bd-name { font-size: 13px; color: #444; flex: 1; }
-  .bd-sub { font-size: 10px; color: #bbb; margin-top: 1px; }
-  .bd-amount { font-size: 13px; font-weight: 700; white-space: nowrap; }
-  .bd-amount.blue { color: #1A56DB; }
-  .bd-amount.red { color: #c62828; }
-  .bd-section-label { font-size: 10px; font-weight: 700; color: #bbb; letter-spacing: .06em; padding: 8px 0 4px; }
-  .bd-total-row { display: flex; justify-content: space-between; padding: 10px 0 0; border-top: 2px solid #eee; margin-top: 4px; font-weight: 700; font-size: 14px; }
+  .bd-name { font-size: 13px; color: #555; flex: 1; }
+  .bd-sub { font-size: 10px; color: #C8C5C0; margin-top: 1px; }
+  .bd-amount { font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 700; white-space: nowrap; }
+  .bd-amount.blue { color: #F07C3F; }
+  .bd-amount.red { color: #E53935; }
+  .bd-section-label { font-size: 10px; font-weight: 700; color: #C8C5C0; letter-spacing: .06em; padding: 8px 0 4px; }
+  .bd-total-row { display: flex; justify-content: space-between; padding: 10px 0 0; border-top: 1.5px solid #E8E6E1; margin-top: 4px; font-weight: 700; font-size: 14px; }
 
   /* 履歴 */
-  .history-card { background: white; border-radius: 16px; box-shadow: 0 1px 6px rgba(0,0,0,.06); overflow: hidden; margin-bottom: 12px; }
-  .history-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 13px 16px; border: none; background: none; cursor: pointer; font-size: 13px; font-weight: 700; color: #555; }
-  .history-toggle .chevron { transition: transform .2s; color: #bbb; font-size: 11px; }
+  .history-card { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); overflow: hidden; margin-bottom: 10px; }
+  .history-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 13px 16px; border: none; background: none; cursor: pointer; font-size: 13px; font-weight: 700; color: #666; }
+  .history-toggle .chevron { transition: transform .2s; color: #C8C5C0; font-size: 11px; }
   .history-toggle.open .chevron { transform: rotate(180deg); }
   .history-body { display: none; }
   .history-body.open { display: block; }
-  .history-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-top: 1px solid #f5f5f5; gap: 8px; cursor: pointer; }
-  .history-item:active { background: #f9f9f9; }
-  .history-meta { font-size: 11px; color: #aaa; margin-top: 2px; }
-  .history-name { font-size: 13px; font-weight: 600; color: #444; }
-  .history-profit { font-size: 14px; font-weight: 800; }
-  .history-profit.profit { color: #2e7d32; }
-  .history-profit.loss { color: #c62828; }
-  .history-clear { width: 100%; padding: 10px; border: none; background: none; color: #ccc; font-size: 12px; cursor: pointer; border-top: 1px solid #f5f5f5; }
-  .history-empty { text-align: center; color: #ccc; font-size: 13px; padding: 16px; }
+  .history-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-top: 1px solid #F2F1EE; gap: 8px; cursor: pointer; }
+  .history-item:active { background: #FAFAF9; }
+  .history-meta { font-size: 11px; color: #B0ADA8; margin-top: 2px; }
+  .history-name { font-size: 13px; font-weight: 600; color: #555; }
+  .history-profit { font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 800; }
+  .history-profit.profit { color: #1C9A52; }
+  .history-profit.loss { color: #E53935; }
+  .history-clear { width: 100%; padding: 10px; border: none; background: none; color: #C8C5C0; font-size: 12px; cursor: pointer; border-top: 1px solid #F2F1EE; }
+  .history-empty { text-align: center; color: #C8C5C0; font-size: 13px; padding: 16px; }
 
   /* 月次サマリー */
   .month-selector { display: flex; align-items: center; gap: 10px; }
-  .month-selector input { flex: 1; border: 2px solid #e8e8e8; border-radius: 10px; padding: 10px 12px; font-size: 15px; font-weight: 600; color: #333; }
-  .month-selector input:focus { outline: none; border-color: #1A56DB; }
-  .monthly-booking { background: #f9f9fb; border-radius: 12px; padding: 12px; margin-bottom: 8px; position: relative; }
+  .month-selector input { flex: 1; border: 1.5px solid #E8E6E1; border-radius: 10px; padding: 10px 12px; font-size: 15px; font-weight: 600; color: #1C1C1E; background: #FAFAF9; }
+  .month-selector input:focus { outline: none; border-color: #F07C3F; background: white; }
+  .monthly-booking { background: #FAFAF9; border-radius: 10px; padding: 12px; margin-bottom: 8px; position: relative; border: 1px solid #F2F1EE; }
   .monthly-booking-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-  .monthly-booking-name { font-size: 13px; font-weight: 700; color: #1A56DB; }
+  .monthly-booking-name { font-size: 13px; font-weight: 700; color: #F07C3F; }
   .monthly-booking-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-  .mb-field label { font-size: 10px; font-weight: 700; color: #aaa; display: block; margin-bottom: 3px; }
-  .mb-field input { width: 100%; border: 1.5px solid #e8e8e8; border-radius: 8px; padding: 7px 8px; font-size: 15px; font-weight: 700; text-align: right; background: white; }
-  .mb-field input:focus { outline: none; border-color: #1A56DB; }
-  .mb-field select { width: 100%; border: 1.5px solid #e8e8e8; border-radius: 8px; padding: 7px 8px; font-size: 13px; font-weight: 600; background: white; }
-  .mb-profit { text-align: right; margin-top: 8px; font-size: 13px; font-weight: 700; color: #555; }
-  .btn-remove-booking { background: none; border: none; color: #ddd; font-size: 18px; cursor: pointer; padding: 2px 6px; }
-  .btn-remove-booking:active { color: #e53935; }
-  .btn-add-booking { width: 100%; padding: 14px; border: 2px dashed #ddd; border-radius: 12px; background: white; color: #aaa; font-size: 13px; font-weight: 700; cursor: pointer; margin-bottom: 12px; }
-  .btn-add-booking:active { border-color: #1A56DB; color: #1A56DB; }
-  .monthly-summary { background: linear-gradient(135deg, #1A56DB, #2563EB); color: white; border-radius: 16px; padding: 16px; }
-  .ms-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.1); font-size: 14px; }
+  .mb-field label { font-size: 10px; font-weight: 700; color: #B0ADA8; display: block; margin-bottom: 3px; }
+  .mb-field input { width: 100%; border: 1.5px solid #E8E6E1; border-radius: 8px; padding: 7px 8px; font-size: 15px; font-weight: 700; text-align: right; background: white; }
+  .mb-field input:focus { outline: none; border-color: #F07C3F; }
+  .mb-field select { width: 100%; border: 1.5px solid #E8E6E1; border-radius: 8px; padding: 7px 8px; font-size: 13px; font-weight: 600; background: white; }
+  .mb-profit { text-align: right; margin-top: 8px; font-size: 13px; font-weight: 700; color: #666; }
+  .btn-remove-booking { background: none; border: none; color: #C8C5C0; font-size: 18px; cursor: pointer; padding: 2px 6px; }
+  .btn-remove-booking:active { color: #E53935; }
+  .btn-add-booking { width: 100%; padding: 14px; border: 1.5px dashed #E8E6E1; border-radius: 10px; background: white; color: #B0ADA8; font-size: 13px; font-weight: 700; cursor: pointer; margin-bottom: 10px; }
+  .btn-add-booking:active { border-color: #F07C3F; color: #F07C3F; }
+  .monthly-summary { background: white; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.06); border-top: 3px solid #F07C3F; }
+  .ms-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid #F2F1EE; font-size: 14px; }
   .ms-row:last-child { border-bottom: none; }
-  .ms-label { color: rgba(255,255,255,.7); }
-  .ms-value { font-weight: 700; }
-  .ms-total { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; margin-top: 4px; border-top: 2px solid rgba(255,255,255,.2); }
-  .ms-total-label { font-size: 13px; color: rgba(255,255,255,.8); }
-  .ms-total-value { font-size: 28px; font-weight: 900; }
-  .ms-total-value.profit { color: #a5d6a7; }
-  .ms-total-value.loss { color: #ef9a9a; }
+  .ms-label { color: #888; }
+  .ms-value { font-family: 'Inter', sans-serif; font-weight: 700; color: #1C1C1E; }
+  .ms-total { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; margin-top: 4px; border-top: 1.5px solid #E8E6E1; }
+  .ms-total-label { font-size: 13px; color: #888; }
+  .ms-total-value { font-family: 'Inter', sans-serif; font-size: 26px; font-weight: 900; }
+  .ms-total-value.profit { color: #1C9A52; }
+  .ms-total-value.loss { color: #E53935; }
 
   /* 物件フィルター */
-  .prop-filter { display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+  .prop-filter { display: flex; gap: 6px; margin-bottom: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
   .prop-filter::-webkit-scrollbar { display: none; }
-  .prop-filter-btn { padding: 7px 14px; border-radius: 20px; border: none; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; background: white; color: #555; box-shadow: 0 1px 4px rgba(0,0,0,.08); flex-shrink: 0; }
-  .prop-filter-btn.active { background: #1A56DB; color: white; }
+  .prop-filter-btn { padding: 7px 14px; border-radius: 20px; border: 1.5px solid #E8E6E1; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; background: white; color: #666; flex-shrink: 0; }
+  .prop-filter-btn.active { background: #1C1C1E; color: white; border-color: #1C1C1E; }
 
   /* KPIカード */
-  .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
-  .kpi-card { background: white; border-radius: 14px; padding: 12px 14px; box-shadow: 0 1px 6px rgba(0,0,0,.06); }
-  .kpi-label { font-size: 10px; font-weight: 700; color: #aaa; letter-spacing: .06em; margin-bottom: 4px; }
-  .kpi-value { font-size: 18px; font-weight: 900; color: #1a1a2e; line-height: 1.2; }
-  .kpi-value.profit { color: #2e7d32; }
-  .kpi-value.loss { color: #c62828; }
-  .kpi-sub { font-size: 11px; color: #aaa; margin-top: 3px; }
-
-  /* 試算タブ 3色KPIカード (unused) */
+  .kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .kpi-card { background: white; border-radius: 12px; padding: 12px 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .kpi-label { font-size: 10px; font-weight: 700; color: #B0ADA8; letter-spacing: .06em; margin-bottom: 4px; }
+  .kpi-value { font-family: 'Inter', sans-serif; font-size: 18px; font-weight: 900; color: #1C1C1E; line-height: 1.2; }
+  .kpi-value.profit { color: #1C9A52; }
+  .kpi-value.loss { color: #E53935; }
+  .kpi-sub { font-size: 11px; color: #B0ADA8; margin-top: 3px; }
 
   /* 棒グラフ */
-  .chart-wrap { background: white; border-radius: 14px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 6px rgba(0,0,0,.06); }
-  .chart-title { font-size: 11px; font-weight: 700; color: #aaa; letter-spacing: .06em; margin-bottom: 10px; }
+  .chart-wrap { background: white; border-radius: 12px; padding: 14px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .chart-title { font-size: 11px; font-weight: 700; color: #B0ADA8; letter-spacing: .06em; margin-bottom: 10px; }
 
   /* 月別テーブル */
   .month-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  .month-table th { font-size: 10px; font-weight: 700; color: #aaa; padding: 6px 4px; text-align: right; border-bottom: 1.5px solid #eee; }
+  .month-table th { font-size: 10px; font-weight: 700; color: #B0ADA8; padding: 6px 4px; text-align: right; border-bottom: 1.5px solid #E8E6E1; }
   .month-table th:first-child { text-align: left; }
-  .month-table td { padding: 8px 4px; border-bottom: 1px solid #f5f5f5; text-align: right; font-size: 12px; }
+  .month-table td { padding: 8px 4px; border-bottom: 1px solid #F2F1EE; text-align: right; font-size: 12px; }
   .month-table td:first-child { text-align: left; font-weight: 700; color: #555; }
-  .month-table .total-row td { border-top: 2px solid #eee; border-bottom: none; font-weight: 800; }
-  .td-profit.profit { color: #2e7d32; font-weight: 700; }
-  .td-profit.loss { color: #c62828; font-weight: 700; }
+  .month-table .total-row td { border-top: 1.5px solid #E8E6E1; border-bottom: none; font-weight: 800; }
+  .td-profit.profit { color: #1C9A52; font-weight: 700; }
+  .td-profit.loss { color: #E53935; font-weight: 700; }
 
   /* 月次統計 */
-  .month-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px; }
-  .month-stat { background: white; border-radius: 12px; padding: 10px 12px 10px 14px; box-shadow: 0 1px 6px rgba(0,0,0,.06); text-align: left; }
-  .month-stat:nth-child(1) { border-left: 4px solid #1A56DB; }
-  .month-stat:nth-child(2) { border-left: 4px solid #F59E0B; }
-  .month-stat:nth-child(3) { border-left: 4px solid #15803D; }
-  .month-stat-label { font-size: 10px; color: #888; font-weight: 700; margin-bottom: 4px; }
-  .month-stat-value { font-size: 16px; font-weight: 900; }
-  .month-stat:nth-child(1) .month-stat-value { color: #1A56DB; }
+  .month-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .month-stat { background: white; border-radius: 10px; padding: 10px 12px 10px 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); text-align: left; }
+  .month-stat:nth-child(1) { border-left: 3px solid #F07C3F; }
+  .month-stat:nth-child(2) { border-left: 3px solid #F59E0B; }
+  .month-stat:nth-child(3) { border-left: 3px solid #1C9A52; }
+  .month-stat-label { font-size: 10px; color: #B0ADA8; font-weight: 700; margin-bottom: 4px; }
+  .month-stat-value { font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 900; }
+  .month-stat:nth-child(1) .month-stat-value { color: #F07C3F; }
   .month-stat:nth-child(2) .month-stat-value { color: #D97706; }
-  .month-stat:nth-child(3) .month-stat-value { color: #15803D; }
+  .month-stat:nth-child(3) .month-stat-value { color: #1C9A52; }
 
   /* 稼働率バー */
-  .occ-bar-wrap { background: #E8ECF8; border-radius: 4px; height: 5px; margin-top: 5px; }
-  .occ-bar-fill { height: 5px; border-radius: 4px; background: #1A56DB; transition: width .3s; }
+  .occ-bar-wrap { background: #F2F1EE; border-radius: 4px; height: 5px; margin-top: 5px; }
+  .occ-bar-fill { height: 5px; border-radius: 4px; background: #F07C3F; transition: width .3s; }
 
   /* 物件設定 */
-  .property-item { background: white; border-radius: 16px; margin-bottom: 14px; box-shadow: 0 1px 6px rgba(0,0,0,.06); overflow: hidden; }
-  .property-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; background: #1A56DB; }
-  .property-name-input { background: transparent; border: none; border-bottom: 1.5px solid rgba(255,255,255,.4); color: white; font-size: 16px; font-weight: 700; flex: 1; padding: 2px 6px; }
-  .property-name-input::placeholder { color: rgba(255,255,255,.5); }
-  .property-name-input:focus { outline: none; border-bottom-color: white; }
-  .btn-delete { background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.3); color: white; padding: 6px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; font-weight: 600; white-space: nowrap; }
-  .btn-delete:active { background: rgba(220,50,50,.5); }
+  .property-item { background: white; border-radius: 12px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); overflow: hidden; }
+  .property-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; background: #F2F1EE; border-bottom: 1px solid #E8E6E1; }
+  .property-name-input { background: transparent; border: none; border-bottom: 1.5px solid #C8C5C0; color: #1C1C1E; font-size: 16px; font-weight: 700; flex: 1; padding: 2px 6px; }
+  .property-name-input::placeholder { color: #C8C5C0; }
+  .property-name-input:focus { outline: none; border-bottom-color: #F07C3F; }
+  .btn-delete { background: white; border: 1.5px solid #E8E6E1; color: #888; padding: 6px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; font-weight: 600; white-space: nowrap; }
+  .btn-delete:active { background: #FFF0F0; color: #E53935; border-color: #E53935; }
   .cost-section { padding: 14px 16px; }
-  .cost-section-title { font-size: 11px; font-weight: 700; color: #aaa; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 10px; }
+  .cost-section-title { font-size: 11px; font-weight: 700; color: #B0ADA8; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 10px; }
   .cost-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
-  .cost-name { flex: 1; border: 1.5px solid #eee; border-radius: 8px; padding: 9px 10px; font-size: 13px; min-width: 0; }
-  .cost-amount { width: 90px; border: 1.5px solid #eee; border-radius: 8px; padding: 9px 10px; font-size: 13px; text-align: right; flex-shrink: 0; }
-  .cost-unit { font-size: 11px; color: #bbb; white-space: nowrap; flex-shrink: 0; }
-  .cost-name:focus, .cost-amount:focus { outline: none; border-color: #1A56DB; }
-  .btn-remove-row { background: none; border: none; color: #ddd; font-size: 20px; cursor: pointer; line-height: 1; padding: 2px 4px; flex-shrink: 0; }
-  .btn-remove-row:active { color: #e53935; }
-  .btn-add-row { background: none; border: 1.5px dashed #ddd; border-radius: 8px; padding: 8px; font-size: 12px; color: #bbb; cursor: pointer; width: 100%; margin-top: 2px; font-weight: 600; }
-  .btn-add-row:active { border-color: #1A56DB; color: #1A56DB; }
-  .divider { height: 1px; background: #f5f5f5; margin: 12px 0; }
-  .btn-add-property { width: 100%; padding: 16px; border: 2px dashed #ddd; border-radius: 16px; background: white; color: #bbb; font-size: 14px; font-weight: 700; cursor: pointer; }
-  .btn-add-property:active { border-color: #1A56DB; color: #1A56DB; }
-  .save-bar { position: fixed; bottom: 0; left: 0; right: 0; background: white; border-top: 1px solid #eee; padding: 12px 16px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
-  .btn-save { width: 100%; max-width: 640px; margin: 0 auto; display: block; background: #1A56DB; color: white; border: none; border-radius: 12px; padding: 15px; font-size: 15px; font-weight: 700; cursor: pointer; transition: all .1s; box-shadow: 0 4px 0 #1237A0; }
-  .btn-save:active { transform: translateY(3px); box-shadow: 0 1px 0 #1237A0; }
-  .btn-save.saved { background: linear-gradient(135deg, #2e7d32, #388e3c); box-shadow: 0 4px 0 #1b5e20; }
-  .empty-state { text-align: center; color: #ccc; padding: 40px 20px; font-size: 14px; }
+  .cost-name { flex: 1; border: 1.5px solid #E8E6E1; border-radius: 8px; padding: 9px 10px; font-size: 13px; min-width: 0; background: #FAFAF9; }
+  .cost-amount { width: 90px; border: 1.5px solid #E8E6E1; border-radius: 8px; padding: 9px 10px; font-size: 13px; text-align: right; flex-shrink: 0; background: #FAFAF9; }
+  .cost-unit { font-size: 11px; color: #C8C5C0; white-space: nowrap; flex-shrink: 0; }
+  .cost-name:focus, .cost-amount:focus { outline: none; border-color: #F07C3F; background: white; }
+  .btn-remove-row { background: none; border: none; color: #C8C5C0; font-size: 20px; cursor: pointer; line-height: 1; padding: 2px 4px; flex-shrink: 0; }
+  .btn-remove-row:active { color: #E53935; }
+  .btn-add-row { background: none; border: 1.5px dashed #E8E6E1; border-radius: 8px; padding: 8px; font-size: 12px; color: #C8C5C0; cursor: pointer; width: 100%; margin-top: 2px; font-weight: 600; }
+  .btn-add-row:active { border-color: #F07C3F; color: #F07C3F; }
+  .divider { height: 1px; background: #F2F1EE; margin: 12px 0; }
+  .btn-add-property { width: 100%; padding: 16px; border: 1.5px dashed #E8E6E1; border-radius: 12px; background: white; color: #C8C5C0; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .btn-add-property:active { border-color: #F07C3F; color: #F07C3F; }
+  .save-bar { position: fixed; bottom: 0; left: 0; right: 0; background: white; border-top: 1px solid #E8E6E1; padding: 12px 16px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .btn-save { width: 100%; max-width: 640px; margin: 0 auto; display: block; background: #F07C3F; color: white; border: none; border-radius: 12px; padding: 15px; font-size: 15px; font-weight: 700; cursor: pointer; transition: all .1s; box-shadow: 0 3px 0 #C85A1F; }
+  .btn-save:active { transform: translateY(2px); box-shadow: 0 1px 0 #C85A1F; }
+  .btn-save.saved { background: #1C9A52; box-shadow: 0 3px 0 #157A3E; }
+  .empty-state { text-align: center; color: #C8C5C0; padding: 40px 20px; font-size: 14px; }
 
   /* 年間管理 */
-  .csv-drop-area { border: 2px dashed #d0d8e4; border-radius: 14px; padding: 32px 20px; text-align: center; cursor: pointer; transition: all .2s; background: #f8fafc; }
-  .csv-drop-area:active, .csv-drop-area.dragover { border-color: #1A56DB; background: #EEF2FF; }
-  .csv-drop-icon { font-size: 32px; margin-bottom: 8px; }
-  .csv-drop-text { font-size: 14px; font-weight: 700; color: #1A56DB; margin-bottom: 4px; }
-  .csv-drop-sub { font-size: 11px; color: #aaa; }
-  .year-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
-  .year-tab { flex: 1; padding: 9px 6px; border-radius: 10px; border: none; font-size: 13px; font-weight: 700; cursor: pointer; background: white; color: #555; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
-  .year-tab.active { background: #1A56DB; color: white; }
-  .annual-summary { background: linear-gradient(135deg, #1A56DB, #2563EB); color: white; border-radius: 16px; padding: 16px; margin-bottom: 12px; }
-  .annual-prop-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.1); font-size: 13px; }
+  .csv-drop-area { border: 1.5px dashed #E8E6E1; border-radius: 12px; padding: 28px 20px; text-align: center; cursor: pointer; transition: all .2s; background: #FAFAF9; }
+  .csv-drop-area:active, .csv-drop-area.dragover { border-color: #F07C3F; background: #FFF8F4; }
+  .csv-drop-icon { font-size: 28px; margin-bottom: 8px; }
+  .csv-drop-text { font-size: 14px; font-weight: 700; color: #F07C3F; margin-bottom: 4px; }
+  .csv-drop-sub { font-size: 11px; color: #B0ADA8; }
+  .year-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .year-tab { flex: 1; padding: 9px 6px; border-radius: 8px; border: 1.5px solid #E8E6E1; font-size: 13px; font-weight: 700; cursor: pointer; background: white; color: #666; }
+  .year-tab.active { background: #F07C3F; color: white; border-color: #F07C3F; }
+  .annual-summary { background: white; border-radius: 12px; padding: 16px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); border-top: 3px solid #F07C3F; }
+  .annual-prop-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid #F2F1EE; font-size: 13px; }
   .annual-prop-row:last-child { border-bottom: none; }
-  .annual-total-row { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; margin-top: 4px; border-top: 2px solid rgba(255,255,255,.2); }
-  .annual-total-value { font-size: 28px; font-weight: 900; }
-  .annual-total-value.profit { color: #a5d6a7; }
-  .annual-total-value.loss { color: #ef9a9a; }
-  .month-card { background: white; border-radius: 16px; margin-bottom: 10px; box-shadow: 0 1px 6px rgba(0,0,0,.06); overflow: hidden; }
-  .month-card-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-bottom: 1px solid #f5f5f5; }
-  .month-label { font-size: 15px; font-weight: 800; color: #1a1a2e; }
+  .annual-total-row { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; margin-top: 4px; border-top: 1.5px solid #E8E6E1; }
+  .annual-total-value { font-family: 'Inter', sans-serif; font-size: 26px; font-weight: 900; }
+  .annual-total-value.profit { color: #1C9A52; }
+  .annual-total-value.loss { color: #E53935; }
+  .month-card { background: white; border-radius: 12px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.06); overflow: hidden; }
+  .month-card-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-bottom: 1px solid #F2F1EE; }
+  .month-label { font-size: 15px; font-weight: 800; color: #1C1C1E; }
   .month-profit { text-align: right; }
-  .month-profit-rev { font-size: 11px; color: #aaa; }
-  .month-profit-val { font-size: 17px; font-weight: 800; }
-  .booking-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 14px; border-bottom: 1px solid #f9f9f9; gap: 8px; }
+  .month-profit-rev { font-size: 11px; color: #B0ADA8; }
+  .month-profit-val { font-family: 'Inter', sans-serif; font-size: 16px; font-weight: 800; }
+  .booking-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 14px; border-bottom: 1px solid #F9F8F7; gap: 8px; }
   .booking-row:last-child { border-bottom: none; }
   .booking-info { min-width: 0; }
-  .booking-prop { font-size: 12px; font-weight: 700; color: #1A56DB; }
-  .booking-guest { font-size: 11px; color: #aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .booking-prop { font-size: 12px; font-weight: 700; color: #F07C3F; }
+  .booking-guest { font-size: 11px; color: #B0ADA8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .booking-amounts { text-align: right; flex-shrink: 0; }
-  .booking-rev { font-size: 11px; color: #aaa; }
-  .booking-profit { font-size: 13px; font-weight: 700; }
-  .map-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; background: #f8fafc; border-radius: 10px; padding: 10px; }
-  .map-listing { font-size: 11px; color: #555; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .map-select { border: 1.5px solid #e8e8e8; border-radius: 8px; padding: 7px 8px; font-size: 13px; font-weight: 600; background: white; flex-shrink: 0; width: 140px; }
+  .booking-rev { font-size: 11px; color: #B0ADA8; }
+  .booking-profit { font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 700; }
+  .map-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; background: #FAFAF9; border-radius: 10px; padding: 10px; border: 1px solid #F2F1EE; }
+  .map-listing { font-size: 11px; color: #666; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .map-select { border: 1.5px solid #E8E6E1; border-radius: 8px; padding: 7px 8px; font-size: 13px; font-weight: 600; background: white; flex-shrink: 0; width: 140px; }
 
   /* 月別詳細折りたたみ */
   .month-detail-body { display: none; }
   .month-detail-body.open { display: block; }
   .month-card-header { cursor: pointer; user-select: none; }
-  .month-card-header:active { background: #fafafa; }
-  .mchev { color: #bbb; font-size: 11px; transition: transform .2s; flex-shrink: 0; }
+  .month-card-header:active { background: #FAFAF9; }
+  .mchev { color: #C8C5C0; font-size: 11px; transition: transform .2s; flex-shrink: 0; }
 
   /* セクション見出し */
   .section-label { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; }
-  .section-label span { font-size: 10px; font-weight: 700; color: #bbb; letter-spacing: .06em; white-space: nowrap; }
-  .section-label::before, .section-label::after { content: ''; flex: 1; height: 1px; background: #eee; }
+  .section-label span { font-size: 10px; font-weight: 700; color: #C8C5C0; letter-spacing: .06em; white-space: nowrap; }
+  .section-label::before, .section-label::after { content: ''; flex: 1; height: 1px; background: #E8E6E1; }
 
   /* 投資回収 */
-  .recovery-card { background: white; border-radius: 16px; margin-bottom: 12px; box-shadow: 0 1px 6px rgba(0,0,0,.06); overflow: hidden; }
-  .recovery-header { background: #1A56DB; color: white; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; }
+  .recovery-card { background: white; border-radius: 12px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); overflow: hidden; }
+  .recovery-header { background: #F2F1EE; color: #1C1C1E; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #E8E6E1; }
   .recovery-header-title { font-size: 13px; font-weight: 700; }
-  .recovery-header-sub { font-size: 11px; color: rgba(255,255,255,.7); margin-top: 2px; }
+  .recovery-header-sub { font-size: 11px; color: #888; margin-top: 2px; }
   .recovery-body { padding: 14px 16px; }
-  .recovery-prop-row { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #f0f0f0; }
+  .recovery-prop-row { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px solid #F2F1EE; }
   .recovery-prop-row:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
-  .recovery-prop-name { font-size: 12px; font-weight: 700; color: #1A56DB; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
-  .recovery-pct { font-size: 20px; font-weight: 900; color: #1a1a2e; }
-  .recovery-bar-wrap { background: #f0f2f5; border-radius: 6px; height: 10px; margin-bottom: 10px; overflow: hidden; }
-  .recovery-bar-fill { height: 10px; border-radius: 6px; background: linear-gradient(90deg, #ef5350, #ffa726, #66bb6a); background-size: 300% 100%; transition: width .5s; }
+  .recovery-prop-name { font-size: 12px; font-weight: 700; color: #F07C3F; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+  .recovery-pct { font-family: 'Inter', sans-serif; font-size: 20px; font-weight: 900; color: #1C1C1E; }
+  .recovery-bar-wrap { background: #F2F1EE; border-radius: 6px; height: 8px; margin-bottom: 10px; overflow: hidden; }
+  .recovery-bar-fill { height: 8px; border-radius: 6px; background: linear-gradient(90deg, #ef5350, #ffa726, #66bb6a); background-size: 300% 100%; transition: width .5s; }
   .recovery-stats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
-  .recovery-stat { background: #f8fafc; border-radius: 8px; padding: 7px 8px; text-align: center; }
-  .recovery-stat-label { font-size: 9px; font-weight: 700; color: #aaa; letter-spacing: .04em; margin-bottom: 2px; }
-  .recovery-stat-value { font-size: 12px; font-weight: 800; color: #1a1a2e; line-height: 1.2; }
-  .recovery-stat-value.profit { color: #2e7d32; }
-  .recovery-stat-value.loss { color: #c62828; }
+  .recovery-stat { background: #FAFAF9; border-radius: 8px; padding: 7px 8px; text-align: center; border: 1px solid #F2F1EE; }
+  .recovery-stat-label { font-size: 9px; font-weight: 700; color: #B0ADA8; letter-spacing: .04em; margin-bottom: 2px; }
+  .recovery-stat-value { font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 800; color: #1C1C1E; line-height: 1.2; }
+  .recovery-stat-value.profit { color: #1C9A52; }
+  .recovery-stat-value.loss { color: #E53935; }
   .recovery-stat-value.warn { color: #e65100; }
-  .recovery-total { background: linear-gradient(135deg, #f3f4f6, #e8ecf1); border-radius: 12px; padding: 12px 14px; margin-top: 4px; }
+  .recovery-total { background: #FAFAF9; border-radius: 10px; padding: 12px 14px; margin-top: 4px; border: 1px solid #F2F1EE; }
   .recovery-total-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; margin-bottom: 4px; }
-  .recovery-total-row:last-child { margin-bottom: 0; font-weight: 800; font-size: 14px; padding-top: 8px; border-top: 1.5px solid #dde0e6; margin-top: 4px; }
+  .recovery-total-row:last-child { margin-bottom: 0; font-weight: 800; font-size: 14px; padding-top: 8px; border-top: 1.5px solid #E8E6E1; margin-top: 4px; }
 
   @media (max-width: 380px) {
     .input-grid { grid-template-columns: 1fr 1fr; }
@@ -295,42 +301,42 @@
   }
 
   /* カレンダー詳細モーダル */
-  .day-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1000; display: flex; align-items: flex-end; justify-content: center; animation: fadeIn .15s; }
+  .day-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 1000; display: flex; align-items: flex-end; justify-content: center; animation: fadeIn .15s; }
   .day-modal { background: white; border-radius: 20px 20px 0 0; padding: 20px 18px calc(20px + env(safe-area-inset-bottom)); width: 100%; max-width: 640px; max-height: 70vh; overflow-y: auto; animation: slideUp .2s; }
-  .day-modal-title { font-size: 14px; font-weight: 800; color: #1a1a2e; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
-  .day-modal-booking { background: #f8f9fb; border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; }
+  .day-modal-title { font-size: 14px; font-weight: 800; color: #1C1C1E; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
+  .day-modal-booking { background: #FAFAF9; border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; border: 1px solid #F2F1EE; }
   .day-modal-booking:last-child { margin-bottom: 0; }
-  .day-modal-prop { font-size: 11px; font-weight: 700; color: #1A56DB; margin-bottom: 4px; }
-  .day-modal-guest { font-size: 14px; font-weight: 700; color: #1a1a2e; margin-bottom: 6px; }
-  .day-modal-row { display: flex; justify-content: space-between; font-size: 12px; color: #666; margin-bottom: 2px; }
-  .day-modal-row span:last-child { font-weight: 700; color: #1a1a2e; }
+  .day-modal-prop { font-size: 11px; font-weight: 700; color: #F07C3F; margin-bottom: 4px; }
+  .day-modal-guest { font-size: 14px; font-weight: 700; color: #1C1C1E; margin-bottom: 6px; }
+  .day-modal-row { display: flex; justify-content: space-between; font-size: 12px; color: #777; margin-bottom: 2px; }
+  .day-modal-row span:last-child { font-weight: 700; color: #1C1C1E; }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
   /* シナリオ比較 */
   .scenario-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 12px; }
-  .scenario-card { border-radius: 12px; padding: 10px 10px; text-align: center; }
+  .scenario-card { border-radius: 10px; padding: 10px; text-align: center; }
   .scenario-label { font-size: 10px; font-weight: 700; margin-bottom: 4px; }
   .scenario-occ { font-size: 11px; color: #888; margin-bottom: 6px; }
-  .scenario-profit { font-size: 16px; font-weight: 900; }
+  .scenario-profit { font-family: 'Inter', sans-serif; font-size: 16px; font-weight: 900; }
 
   /* チェック管理 */
-  .check-section { margin-top: 10px; padding-top: 10px; border-top: 1px solid #eee; }
-  .check-section-title { font-size: 10px; font-weight: 700; color: #aaa; letter-spacing: .06em; margin-bottom: 8px; }
+  .check-section { margin-top: 10px; padding-top: 10px; border-top: 1px solid #F2F1EE; }
+  .check-section-title { font-size: 10px; font-weight: 700; color: #B0ADA8; letter-spacing: .06em; margin-bottom: 8px; }
   .check-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; gap: 8px; }
   .check-label { font-size: 13px; color: #555; flex: 1; }
   .check-btn { display: flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 20px; border: none; cursor: pointer; font-size: 12px; font-weight: 700; transition: all .15s; flex-shrink: 0; }
-  .check-btn.done { background: #e8f5e9; color: #2e7d32; }
-  .check-btn.pending { background: #f5f5f5; color: #aaa; }
+  .check-btn.done { background: #F0FBF5; color: #1C9A52; }
+  .check-btn.pending { background: #F2F1EE; color: #B0ADA8; }
   .check-btn:active { opacity: 0.7; }
-  .staff-select { flex: 1; border: 1.5px solid #e8e8e8; border-radius: 8px; padding: 6px 8px; font-size: 12px; background: white; min-width: 0; }
-  .phone-link { display: flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: 20px; background: #e3f2fd; color: #1A56DB; font-size: 11px; font-weight: 700; text-decoration: none; flex-shrink: 0; }
+  .staff-select { flex: 1; border: 1.5px solid #E8E6E1; border-radius: 8px; padding: 6px 8px; font-size: 12px; background: white; min-width: 0; }
+  .phone-link { display: flex; align-items: center; gap: 4px; padding: 6px 10px; border-radius: 20px; background: #FFF8F4; color: #F07C3F; font-size: 11px; font-weight: 700; text-decoration: none; flex-shrink: 0; }
 </style>
 </head>
 <body>
 
 <div class="header">
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
+  <div class="header-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg></div>
   <h1>民泊利益シミュレーター</h1>
 </div>
 
@@ -796,7 +802,7 @@ function calcProfit() {
   const shortfall = totalCost - revenue;
 
   const fmt = n => n.toLocaleString('ja-JP');
-  const color = isProfit ? '#1b5e20' : '#b71c1c';
+  const color = isProfit ? '#1C9A52' : '#E53935';
   const borderColor = isProfit ? '#a5d6a7' : '#ef9a9a';
 
   const fixedRows = prop.monthlyFixedCosts.map(c => {
@@ -840,8 +846,8 @@ function calcProfit() {
         </div>
         <div class="be-item be-full" style="background:${isProfit ? 'rgba(46,125,50,.1)' : 'rgba(198,40,40,.08)'};border-radius:10px;padding:10px 12px;text-align:center">
           ${isProfit
-            ? `<div style="font-size:11px;color:#2e7d32;font-weight:700;margin-bottom:2px">黒字 ✓</div><div style="font-size:22px;font-weight:900;color:#1b5e20;line-height:1">1泊あたり ${fmt(currentPerNight - breakEvenPerNight)}円 の余裕</div>`
-            : `<div style="font-size:11px;color:#c62828;font-weight:700;margin-bottom:2px">黒字にするには</div><div style="font-size:22px;font-weight:900;color:#b71c1c;line-height:1">あと ${fmt(breakEvenPerNight - currentPerNight)}円/泊 上げれば黒字</div>`
+            ? `<div style="font-size:11px;color:#1C9A52;font-weight:700;margin-bottom:2px">黒字 ✓</div><div style="font-size:22px;font-weight:900;color:#1C9A52;line-height:1">1泊あたり ${fmt(currentPerNight - breakEvenPerNight)}円 の余裕</div>`
+            : `<div style="font-size:11px;color:#E53935;font-weight:700;margin-bottom:2px">黒字にするには</div><div style="font-size:22px;font-weight:900;color:#E53935;line-height:1">あと ${fmt(breakEvenPerNight - currentPerNight)}円/泊 上げれば黒字</div>`
           }
         </div>
         ${!isProfit ? `
@@ -861,7 +867,7 @@ function calcProfit() {
         <div class="bd-row"><div class="bd-name">受取金額</div><div class="bd-amount blue">＋${fmt(revenue)}円</div></div>
         <div class="bd-section-label">月額固定費（按分）</div>${fixedRows}
         <div class="bd-section-label">1予約あたりのコスト</div>${varRows}
-        <div class="bd-total-row"><span>コスト合計</span><span style="color:#c62828">−${fmt(totalCost)}円</span></div>
+        <div class="bd-total-row"><span>コスト合計</span><span style="color:#E53935">−${fmt(totalCost)}円</span></div>
         <div class="bd-total-row" style="font-size:16px;margin-top:6px;padding-top:10px;border-top:2px solid ${borderColor}">
           <span>利益</span><span style="color:${color}">${isProfit ? '' : '▲'}${fmt(Math.abs(profit))}円</span>
         </div>
@@ -871,8 +877,8 @@ function calcProfit() {
   // 3シナリオ比較（稼働率±20%で想定）
   const scenarioMultipliers = [
     { label: '悲観', occ: -20, bg: '#fff3e0', labelColor: '#e65100', borderColor: '#ffcc80' },
-    { label: '標準', occ: 0,   bg: '#f8f9fb', labelColor: '#1A56DB', borderColor: '#cfd8dc' },
-    { label: '楽観', occ: +20, bg: '#e8f5e9', labelColor: '#2e7d32', borderColor: '#a5d6a7' },
+    { label: '標準', occ: 0,   bg: '#f8f9fb', labelColor: '#F07C3F', borderColor: '#cfd8dc' },
+    { label: '楽観', occ: +20, bg: '#e8f5e9', labelColor: '#1C9A52', borderColor: '#a5d6a7' },
   ];
   const scenarioHtml = scenarioMultipliers.map(s => {
     const sRev = Math.round(revenue * (1 + s.occ / 100));
@@ -881,7 +887,7 @@ function calcProfit() {
     return `<div class="scenario-card" style="background:${s.bg};border:1.5px solid ${s.borderColor}">
       <div class="scenario-label" style="color:${s.labelColor}">${s.label}</div>
       <div class="scenario-occ">${s.occ >= 0 ? '+' : ''}${s.occ}%</div>
-      <div class="scenario-profit" style="color:${sIsP?'#1b5e20':'#b71c1c'}">${sIsP?'':'▲'}${fmt(Math.abs(sProfit))}<span style="font-size:10px;font-weight:400">円</span></div>
+      <div class="scenario-profit" style="color:${sIsP?'#1C9A52':'#E53935'}">${sIsP?'':'▲'}${fmt(Math.abs(sProfit))}<span style="font-size:10px;font-weight:400">円</span></div>
     </div>`;
   }).join('');
   area.innerHTML += `<div class="card" style="margin-top:8px">
@@ -1068,7 +1074,7 @@ function renderMonthly() {
             </div>
             <div class="booking-amounts">
               <div class="booking-rev">${fmt(b.revenue)}円</div>
-              ${pf !== null ? `<div class="booking-profit" style="color:${bIsP?'#2e7d32':'#c62828'}">${bIsP?'':'▲'}${fmt(Math.abs(pf))}円</div>` : '<div style="font-size:11px;color:#ccc">-</div>'}
+              ${pf !== null ? `<div class="booking-profit" style="color:${bIsP?'#1C9A52':'#E53935'}">${bIsP?'':'▲'}${fmt(Math.abs(pf))}円</div>` : '<div style="font-size:11px;color:#ccc">-</div>'}
             </div>
           </div>`;
         }).join('');
@@ -1115,7 +1121,7 @@ function renderMonthly() {
       const profit = calcBookingProfit(b);
       return `<div class="monthly-booking">
         <div class="monthly-booking-header">
-          <select class="mb-field" style="border:none;background:none;font-size:13px;font-weight:700;color:#1A56DB;padding:0" onchange="updateMonthlyBooking(${i},'propId',this.value)">${properties.map(p => `<option value="${p.id}" ${parseInt(b.propId) === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}</select>
+          <select class="mb-field" style="border:none;background:none;font-size:13px;font-weight:700;color:#F07C3F;padding:0" onchange="updateMonthlyBooking(${i},'propId',this.value)">${properties.map(p => `<option value="${p.id}" ${parseInt(b.propId) === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}</select>
           <button class="btn-remove-booking" onclick="removeMonthlyBooking(${i})">×</button>
         </div>
         <div class="monthly-booking-grid">
@@ -1123,7 +1129,7 @@ function renderMonthly() {
           <div class="mb-field"><label>組数</label><input type="number" value="${b.groups||1}" inputmode="numeric" onchange="updateMonthlyBooking(${i},'groups',this.value)"><div style="font-size:10px;color:#ccc;text-align:right">組</div></div>
           <div class="mb-field"><label>受取金額</label><input type="number" value="${b.revenue||''}" inputmode="numeric" placeholder="0" onchange="updateMonthlyBooking(${i},'revenue',this.value)"><div style="font-size:10px;color:#ccc;text-align:right">円</div></div>
         </div>
-        ${profit !== null ? `<div class="mb-profit" style="color:${profit>=0?'#2e7d32':'#c62828'}">利益: ${profit>=0?'':'▲'}${fmt(Math.abs(profit))}円</div>` : ''}
+        ${profit !== null ? `<div class="mb-profit" style="color:${profit>=0?'#1C9A52':'#E53935'}">利益: ${profit>=0?'':'▲'}${fmt(Math.abs(profit))}円</div>` : ''}
       </div>`;
     }).join('');
 
@@ -1209,11 +1215,11 @@ function renderCalendarTab() {
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <div style="flex:1;background:white;border-radius:12px;padding:10px;box-shadow:0 1px 6px rgba(0,0,0,.06);text-align:center">
         <div style="font-size:10px;color:#aaa;font-weight:700;margin-bottom:4px">📋 フォーム確認</div>
-        <div style="font-size:18px;font-weight:900;color:${formDoneCount===totalBookings?'#2e7d32':'#e65100'}">${formDoneCount}/${totalBookings}</div>
+        <div style="font-size:18px;font-weight:900;color:${formDoneCount===totalBookings?'#1C9A52':'#e65100'}">${formDoneCount}/${totalBookings}</div>
       </div>
       <div style="flex:1;background:white;border-radius:12px;padding:10px;box-shadow:0 1px 6px rgba(0,0,0,.06);text-align:center">
         <div style="font-size:10px;color:#aaa;font-weight:700;margin-bottom:4px">🧹 清掃手配</div>
-        <div style="font-size:18px;font-weight:900;color:${cleanDoneCount===totalBookings?'#2e7d32':'#e65100'}">${cleanDoneCount}/${totalBookings}</div>
+        <div style="font-size:18px;font-weight:900;color:${cleanDoneCount===totalBookings?'#1C9A52':'#e65100'}">${cleanDoneCount}/${totalBookings}</div>
       </div>
     </div>` : '';
 
@@ -1233,11 +1239,11 @@ function renderCalendarTab() {
         return `<div style="padding:10px 14px;border-bottom:1px solid #f5f5f5">
           <div style="display:flex;align-items:center;gap:10px">
             <div style="flex:1;min-width:0">
-              <div style="font-size:12px;font-weight:700;color:#1A56DB">${prop ? prop.name : '⚠️ 未設定'}</div>
+              <div style="font-size:12px;font-weight:700;color:#F07C3F">${prop ? prop.name : '⚠️ 未設定'}</div>
               <div style="font-size:13px;font-weight:700;color:#1a1a2e;margin:2px 0">${escHtml(b.guestName||'ゲスト')}</div>
               <div style="font-size:10px;color:#aaa">${fmtD(b.checkin)} → ${fmtD(coStr)}（${b.nights}泊）</div>
             </div>
-            ${b.code ? `<button onclick="toggleCheckFromList('${b.code}','formDone')" style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:10px;border:none;cursor:pointer;flex-shrink:0;background:${chk.formDone?'#e8f5e9':'#f0f0f0'};color:${chk.formDone?'#2e7d32':'#aaa'}">📋 ${chk.formDone?'✅ 済':'未確認'}</button>` : ''}
+            ${b.code ? `<button onclick="toggleCheckFromList('${b.code}','formDone')" style="font-size:11px;font-weight:700;padding:4px 10px;border-radius:10px;border:none;cursor:pointer;flex-shrink:0;background:${chk.formDone?'#e8f5e9':'#f0f0f0'};color:${chk.formDone?'#1C9A52':'#aaa'}">📋 ${chk.formDone?'✅ 済':'未確認'}</button>` : ''}
           </div>
           ${b.code ? `
           <div style="display:flex;align-items:center;gap:6px;margin-top:7px">
@@ -1255,12 +1261,12 @@ function renderCalendarTab() {
 
   document.getElementById('calendar-content').innerHTML = `
     <div class="card" style="padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between">
-      <button onclick="calendarMove(-1)" style="background:none;border:none;font-size:22px;color:#1A56DB;cursor:pointer;padding:4px 10px;border-radius:8px;line-height:1">‹</button>
+      <button onclick="calendarMove(-1)" style="background:none;border:none;font-size:22px;color:#F07C3F;cursor:pointer;padding:4px 10px;border-radius:8px;line-height:1">‹</button>
       <div style="text-align:center">
         <div style="font-size:17px;font-weight:800;color:#1a1a2e">${y}年${m}月</div>
         <div style="font-size:10px;color:#aaa;margin-top:1px">${totalBookings}件の予約</div>
       </div>
-      <button onclick="calendarMove(1)" style="background:none;border:none;font-size:22px;color:#1A56DB;cursor:pointer;padding:4px 10px;border-radius:8px;line-height:1">›</button>
+      <button onclick="calendarMove(1)" style="background:none;border:none;font-size:22px;color:#F07C3F;cursor:pointer;padding:4px 10px;border-radius:8px;line-height:1">›</button>
     </div>
     ${filterHtml}
     ${checkSummary}
@@ -1303,7 +1309,7 @@ function renderCalendar(year, month, propFilter) {
   });
 
   // 物件カラー（複数物件を色で区別）
-  const propColors = ['#1a1a2e', '#1A56DB', '#2e7d32', '#6a1b9a', '#c62828'];
+  const propColors = ['#1a1a2e', '#F07C3F', '#1C9A52', '#6a1b9a', '#E53935'];
   const propColorMap = {};
   properties.forEach((p, i) => { propColorMap[p.id] = propColors[i % propColors.length]; });
 
@@ -1330,7 +1336,7 @@ function renderCalendar(year, month, propFilter) {
       if (!day) { html += '<div style="min-height:28px"></div>'; return; }
       const isToday = year === todayY && month === todayM && day === todayD;
       const isSun = col === 0, isSat = col === 6;
-      const color = isToday ? '#e65100' : isSun ? '#ef5350' : isSat ? '#1A56DB' : '#444';
+      const color = isToday ? '#e65100' : isSun ? '#ef5350' : isSat ? '#F07C3F' : '#444';
       html += '<div style="text-align:center;font-size:11px;font-weight:'+(isToday?'800':'500')+';color:'+color+';padding:4px 2px;min-height:28px;'+(isToday?'background:#fff3e0;border-radius:50%;':'')+'">'+day+'</div>';
     });
     html += '</div>';
@@ -1445,7 +1451,7 @@ function renderSettings() {
           </div>`).join('')}
         <button class="btn-add-row" onclick="addCostRow(${pi},'booking')">＋ 項目を追加</button>
         <div class="divider"></div>
-        <div class="cost-section-title" style="color:#2e7d32">🧹 清掃スタッフ（物件ごとに登録）</div>
+        <div class="cost-section-title" style="color:#1C9A52">🧹 清掃スタッフ（物件ごとに登録）</div>
         <div style="font-size:11px;color:#bbb;margin-bottom:8px">チェックイン後の清掃を担当するスタッフ候補を登録してください</div>
         ${(p.cleaningStaff||[]).map((s,si) => `
           <div class="cost-row" style="margin-bottom:6px">
@@ -1723,7 +1729,7 @@ function getOverlapInnerHTML() {
       .sort((a, b) => (parseDateStr(a.checkin) || 0) - (parseDateStr(b.checkin) || 0));
 
     html += `<div style="margin-bottom:16px">
-      <div style="font-size:12px;font-weight:700;color:#1A56DB;margin-bottom:6px;padding:6px 8px;background:#eef4fb;border-radius:8px">${prop.name}（${books.length}件）</div>`;
+      <div style="font-size:12px;font-weight:700;color:#F07C3F;margin-bottom:6px;padding:6px 8px;background:#eef4fb;border-radius:8px">${prop.name}（${books.length}件）</div>`;
 
     if (books.length === 0) {
       html += `<div style="font-size:12px;color:#ccc;padding:4px 8px">予約なし</div>`;
@@ -1738,7 +1744,7 @@ function getOverlapInnerHTML() {
       let rowBg = '#f8fafc', borderLeft = '', warningHtml = '';
       if (nextCiD && coD && coD > nextCiD) {
         rowBg = '#ffebee'; borderLeft = 'border-left:3px solid #e53935;';
-        warningHtml = `<div style="font-size:10px;color:#c62828;font-weight:700;margin-top:2px;padding-left:4px">⚠️ 重複！次の予約(${nextB.guestName})とチェックアウト前にチェックインが重なっています</div>`;
+        warningHtml = `<div style="font-size:10px;color:#E53935;font-weight:700;margin-top:2px;padding-left:4px">⚠️ 重複！次の予約(${nextB.guestName})とチェックアウト前にチェックインが重なっています</div>`;
         hasAnyOverlap = true;
       } else if (nextCiD && coD && coD.getTime() === nextCiD.getTime()) {
         rowBg = '#fffde7'; borderLeft = 'border-left:3px solid #f9a825;';
@@ -1748,9 +1754,9 @@ function getOverlapInnerHTML() {
       html += `<div style="margin-bottom:4px">
         <div style="display:flex;align-items:center;gap:6px;padding:7px 8px;background:${rowBg};border-radius:8px;${borderLeft}">
           <div style="font-size:11px;white-space:nowrap;color:#777">
-            <span style="background:#e3f2fd;color:#1A56DB;font-weight:700;font-size:9px;padding:1px 4px;border-radius:4px;margin-right:2px">IN</span>${fmtD(b.checkin)}
+            <span style="background:#e3f2fd;color:#F07C3F;font-weight:700;font-size:9px;padding:1px 4px;border-radius:4px;margin-right:2px">IN</span>${fmtD(b.checkin)}
             <span style="color:#ccc;margin:0 3px">→</span>
-            <span style="background:#fce4ec;color:#c62828;font-weight:700;font-size:9px;padding:1px 4px;border-radius:4px;margin-right:2px">OUT</span>${fmtD(coStr)}
+            <span style="background:#fce4ec;color:#E53935;font-weight:700;font-size:9px;padding:1px 4px;border-radius:4px;margin-right:2px">OUT</span>${fmtD(coStr)}
             <span style="color:#bbb;margin-left:4px">${b.nights}泊</span>
           </div>
           <div style="flex:1;min-width:0;font-size:11px;color:#555;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${b.guestName}</div>
@@ -1763,7 +1769,7 @@ function getOverlapInnerHTML() {
   });
 
   if (!hasAnyOverlap) {
-    html += `<div style="text-align:center;font-size:12px;color:#2e7d32;font-weight:700;padding:8px;background:#e8f5e9;border-radius:8px;margin-top:4px">✅ 重複なし・すべての予約は正常です</div>`;
+    html += `<div style="text-align:center;font-size:12px;color:#1C9A52;font-weight:700;padding:8px;background:#e8f5e9;border-radius:8px;margin-top:4px">✅ 重複なし・すべての予約は正常です</div>`;
   }
 
   return html;
@@ -1910,9 +1916,9 @@ function renderInvestmentRecovery() {
         <div style="font-size:9px;color:#666">実績利益</div>
         <div style="font-size:9px;color:#666">＋ 予測利益（残${remainingMonthsForSummary}ヶ月）</div>
         <div style="font-size:9px;color:#666">= トータル残り回収額</div>
-        <div style="font-size:12px;font-weight:700;color:#2e7d32">${fmtS(x.cumulativeProfit)}</div>
-        <div style="font-size:12px;font-weight:700;color:#1A56DB">${fmtS(forecastProfitForSummary)}</div>
-        <div style="font-size:12px;font-weight:700;color:${totalRemainingWithForecast===0?'#2e7d32':'#e65100'}">${totalRemainingWithForecast===0?'回収完了見込み':fmtS(totalRemainingWithForecast)}</div>
+        <div style="font-size:12px;font-weight:700;color:#1C9A52">${fmtS(x.cumulativeProfit)}</div>
+        <div style="font-size:12px;font-weight:700;color:#F07C3F">${fmtS(forecastProfitForSummary)}</div>
+        <div style="font-size:12px;font-weight:700;color:${totalRemainingWithForecast===0?'#1C9A52':'#e65100'}">${totalRemainingWithForecast===0?'回収完了見込み':fmtS(totalRemainingWithForecast)}</div>
       </div>` : '';
 
     // PriceLabs詳細ブロック（アコーディオン）
@@ -1964,11 +1970,11 @@ function renderInvestmentRecovery() {
                 ${fmtS(cappedRev)}
                 <div style="font-size:9px;font-weight:400;color:#aaa">${overLimit ? '元予測 '+fmtS(shortRev)+' / '+estimatedDays+'日→'+cappedDays+'日' : '稼働 '+cappedDays+'日'}</div>
               </div>
-              <div style="font-size:12px;font-weight:700;color:${forecastProfit>=0?'#2e7d32':'#c62828'}">${fmtS(forecastProfit)}</div>
-              <div style="font-size:12px;font-weight:700;color:${projRemaining===0?'#2e7d32':'#e65100'}">${projRemaining===0?'回収完了見込み':fmtS(projRemaining)}</div>
+              <div style="font-size:12px;font-weight:700;color:${forecastProfit>=0?'#1C9A52':'#E53935'}">${fmtS(forecastProfit)}</div>
+              <div style="font-size:12px;font-weight:700;color:${projRemaining===0?'#1C9A52':'#e65100'}">${projRemaining===0?'回収完了見込み':fmtS(projRemaining)}</div>
             </div>
           </div>
-          ${hasLong ? '<div style="border-top:1px solid #e1bee7;padding-top:5px"><div style="font-size:9px;color:#ab47bc;font-weight:700;margin-bottom:3px">🎁 マンスリー（28+nights）ボーナス</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px"><div style="font-size:9px;color:#999">予測売上（残'+monthlyMaxDays+'日×50%）</div><div style="font-size:9px;color:#999">予測利益（変動費控除）</div><div style="font-size:9px;color:#999">想定稼働日数</div><div style="font-size:12px;font-weight:700;color:#6a1b9a">'+fmtS(cappedLongRev)+'</div><div style="font-size:12px;font-weight:700;color:'+(longProfit>=0?'#2e7d32':'#c62828')+'">'+fmtS(longProfit)+'</div><div style="font-size:12px;font-weight:700;color:#6a1b9a">'+longDays+'日</div></div></div>' : ''}
+          ${hasLong ? '<div style="border-top:1px solid #e1bee7;padding-top:5px"><div style="font-size:9px;color:#ab47bc;font-weight:700;margin-bottom:3px">🎁 マンスリー（28+nights）ボーナス</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px"><div style="font-size:9px;color:#999">予測売上（残'+monthlyMaxDays+'日×50%）</div><div style="font-size:9px;color:#999">予測利益（変動費控除）</div><div style="font-size:9px;color:#999">想定稼働日数</div><div style="font-size:12px;font-weight:700;color:#6a1b9a">'+fmtS(cappedLongRev)+'</div><div style="font-size:12px;font-weight:700;color:'+(longProfit>=0?'#1C9A52':'#E53935')+'">'+fmtS(longProfit)+'</div><div style="font-size:12px;font-weight:700;color:#6a1b9a">'+longDays+'日</div></div></div>' : ''}
           <div style="font-size:9px;color:#bbb;margin-top:4px">※残り${remainingMonths}ヶ月分で按分 / 変動費 ${fmtS(perBookingCost)}/件（通常 約${estBookings}件・マンスリー 約${estLongBookings}件）</div>
         </div>
       </div>`;
@@ -1978,14 +1984,14 @@ function renderInvestmentRecovery() {
     const displayRemainingLabel = displayRemaining === 0
       ? (hasForecastForSummary ? '回収完了見込み' : '回収完了')
       : fmtS(displayRemaining);
-    const displayRemainingColor = displayRemaining === 0 ? '#2e7d32' : '#e65100';
+    const displayRemainingColor = displayRemaining === 0 ? '#1C9A52' : '#e65100';
 
     html += `<div class="recovery-prop-row">
       <!-- ヘッダー: ドーナツ + 物件名 -->
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
         ${donutSvg}
         <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:700;color:#1A56DB">${x.prop.name}</div>
+          <div style="font-size:13px;font-weight:700;color:#F07C3F">${x.prop.name}</div>
           <div style="font-size:11px;color:#888;margin-top:2px">実績 <strong style="color:#66bb6a">${x.pct}%</strong>${hasForecastForSummary ? ' + 予測 <strong style="color:#42a5f5">'+forecastPctForDonut+'%</strong>' : ''}</div>
           ${x.monthsNeeded !== null ? '<div style="font-size:10px;color:#888;margin-top:2px">実績ベース: あと約<strong style="color:#e65100">'+x.monthsNeeded+'ヶ月</strong>で回収見込み</div>' : ''}
         </div>
@@ -1995,12 +2001,12 @@ function renderInvestmentRecovery() {
       <div style="display:grid;grid-template-columns:1fr 18px 1fr 18px 1fr;align-items:center;gap:2px;padding:10px;background:#f8f9fb;border-radius:12px;margin-bottom:8px">
         <div style="text-align:center">
           <div style="font-size:9px;color:#888;margin-bottom:4px">実績利益</div>
-          <div style="font-size:13px;font-weight:800;color:${x.cumulativeProfit>=0?'#2e7d32':'#c62828'}">${x.cumulativeProfit<0?'▲':''}${fmtS(Math.abs(x.cumulativeProfit))}</div>
+          <div style="font-size:13px;font-weight:800;color:${x.cumulativeProfit>=0?'#1C9A52':'#E53935'}">${x.cumulativeProfit<0?'▲':''}${fmtS(Math.abs(x.cumulativeProfit))}</div>
         </div>
         <div style="text-align:center;font-size:14px;color:#bbb;font-weight:300">＋</div>
         <div style="text-align:center">
           <div style="font-size:9px;color:#888;margin-bottom:4px">${hasForecastForSummary ? '予測利益（残'+remainingMonthsForSummary+'ヶ月）' : '予測利益'}</div>
-          <div style="font-size:13px;font-weight:800;color:${hasForecastForSummary?'#1A56DB':'#ddd'}">${hasForecastForSummary ? (forecastProfitForSummary<0?'▲':'')+fmtS(Math.abs(forecastProfitForSummary)) : '−'}</div>
+          <div style="font-size:13px;font-weight:800;color:${hasForecastForSummary?'#F07C3F':'#ddd'}">${hasForecastForSummary ? (forecastProfitForSummary<0?'▲':'')+fmtS(Math.abs(forecastProfitForSummary)) : '−'}</div>
         </div>
         <div style="text-align:center;font-size:14px;color:#bbb;font-weight:300">＝</div>
         <div style="text-align:center">
@@ -2068,13 +2074,13 @@ function renderInvestmentRecovery() {
 
   html += `<div class="recovery-total">
     <div class="recovery-total-row"><span style="color:#666">総初期投資</span><span style="font-weight:700">${fmtS(totalInitial)}</span></div>
-    <div class="recovery-total-row"><span style="color:#666">累積実績利益合計</span><span style="font-weight:700;color:${totalProfit>=0?'#2e7d32':'#c62828'}">${totalProfit<0?'▲':''}${fmtS(Math.abs(totalProfit))}</span></div>
-    ${fyForecastTotal !== null ? `<div class="recovery-total-row"><span style="color:#7b1fa2">PL年間予測利益合計（残月按分）</span><span style="font-weight:700;color:${fyForecastTotal>=0?'#7b1fa2':'#c62828'}">${fyForecastTotal<0?'▲':''}${fmtS(Math.abs(fyForecastTotal))}</span></div>` : ''}
+    <div class="recovery-total-row"><span style="color:#666">累積実績利益合計</span><span style="font-weight:700;color:${totalProfit>=0?'#1C9A52':'#E53935'}">${totalProfit<0?'▲':''}${fmtS(Math.abs(totalProfit))}</span></div>
+    ${fyForecastTotal !== null ? `<div class="recovery-total-row"><span style="color:#7b1fa2">PL年間予測利益合計（残月按分）</span><span style="font-weight:700;color:${fyForecastTotal>=0?'#7b1fa2':'#E53935'}">${fyForecastTotal<0?'▲':''}${fmtS(Math.abs(fyForecastTotal))}</span></div>` : ''}
     <div class="recovery-total-row">
       <span style="color:#444">純損益（実績ベース）</span>
-      <span style="color:${netPos>=0?'#1b5e20':'#b71c1c'}">${netPos>=0?'':'▲'}${fmtS(Math.abs(netPos))}</span>
+      <span style="color:${netPos>=0?'#1C9A52':'#E53935'}">${netPos>=0?'':'▲'}${fmtS(Math.abs(netPos))}</span>
     </div>
-    ${fyForecastTotal !== null ? (() => { const netWithForecast = totalProfit + fyForecastTotal - totalInitial; return `<div class="recovery-total-row" style="border-top:1px dashed #e0e0e0;padding-top:6px;margin-top:2px"><span style="color:#7b1fa2;font-weight:700">純損益（予測込み）</span><span style="font-weight:700;color:${netWithForecast>=0?'#1b5e20':'#b71c1c'}">${netWithForecast>=0?'':'▲'}${fmtS(Math.abs(netWithForecast))}</span></div>`; })() : ''}
+    ${fyForecastTotal !== null ? (() => { const netWithForecast = totalProfit + fyForecastTotal - totalInitial; return `<div class="recovery-total-row" style="border-top:1px dashed #e0e0e0;padding-top:6px;margin-top:2px"><span style="color:#7b1fa2;font-weight:700">純損益（予測込み）</span><span style="font-weight:700;color:${netWithForecast>=0?'#1C9A52':'#E53935'}">${netWithForecast>=0?'':'▲'}${fmtS(Math.abs(netWithForecast))}</span></div>`; })() : ''}
   </div>
   </div></div>`;
 
@@ -2115,7 +2121,7 @@ function showActualCostModal(year, month, propId) {
         <button onclick="deleteActualCost('${key}')" style="font-size:11px;color:#e53935;background:none;border:none;cursor:pointer;padding:4px 0">概算に戻す</button>
         <div style="display:flex;gap:8px">
           <button onclick="document.body.removeChild(document.querySelector('[data-actual-cost-modal]'))" style="padding:9px 16px;border:1.5px solid #eee;border-radius:8px;font-weight:700;background:white;cursor:pointer;color:#888;font-size:13px">キャンセル</button>
-          <button onclick="saveActualCostFromModal('${key}',${initCosts.length})" style="padding:9px 18px;border:none;border-radius:8px;font-weight:700;background:#1A56DB;color:white;cursor:pointer;font-size:13px">保存</button>
+          <button onclick="saveActualCostFromModal('${key}',${initCosts.length})" style="padding:9px 18px;border:none;border-radius:8px;font-weight:700;background:#F07C3F;color:white;cursor:pointer;font-size:13px">保存</button>
         </div>
       </div>
     </div>`;
@@ -2468,7 +2474,7 @@ function renderAnnual() {
     </div>
     <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
       <div style="display:flex;flex-direction:column;align-items:center;gap:1px">
-        <button onclick="document.getElementById('csv-input').click()" style="font-size:11px;color:#1A56DB;background:none;border:1.5px solid #1A56DB;cursor:pointer;font-weight:700;padding:5px 10px;border-radius:8px">↺ Airbnb</button>
+        <button onclick="document.getElementById('csv-input').click()" style="font-size:11px;color:#F07C3F;background:none;border:1.5px solid #F07C3F;cursor:pointer;font-weight:700;padding:5px 10px;border-radius:8px">↺ Airbnb</button>
         <span style="font-size:9px;color:#bbb">${fmtUpdatedAt('airbnb')}</span>
       </div>
       <div style="display:flex;flex-direction:column;align-items:center;gap:1px">
@@ -2572,7 +2578,7 @@ function renderAnnual() {
         const coStr = getCheckout(b);
         html += `<div style="display:flex;align-items:center;gap:12px;${i>0?'margin-top:10px;padding-top:10px;border-top:1px solid #f0f0f0':''}">
           <div style="min-width:48px;text-align:center;padding:8px 6px;background:${diff===0?'#fff3e0':diff<=2?'#e3f2fd':'#f5f5f5'};border-radius:10px">
-            <div style="font-size:16px;font-weight:900;color:${diff===0?'#e65100':diff<=2?'#1A56DB':'#444'};line-height:1">${parts[2]}</div>
+            <div style="font-size:16px;font-weight:900;color:${diff===0?'#e65100':diff<=2?'#F07C3F':'#444'};line-height:1">${parts[2]}</div>
             <div style="font-size:9px;color:#aaa;margin-top:1px">${parts[1]}月</div>
           </div>
           <div style="flex:1;min-width:0">
@@ -2580,8 +2586,8 @@ function renderAnnual() {
             <div style="font-size:11px;color:#888;margin-top:2px">${prop?prop.name:'物件未設定'} · ${b.nights}泊 · ${b.checkin}〜${coStr}</div>
           </div>
           <div style="text-align:right;flex-shrink:0">
-            <div style="font-size:13px;font-weight:800;color:#1A56DB">${fmtSW(b.revenue)}</div>
-            <div style="font-size:10px;color:${diff===0?'#e65100':diff<=2?'#1A56DB':'#aaa'};font-weight:700;margin-top:2px">${diffLabel}</div>
+            <div style="font-size:13px;font-weight:800;color:#F07C3F">${fmtSW(b.revenue)}</div>
+            <div style="font-size:10px;color:${diff===0?'#e65100':diff<=2?'#F07C3F':'#aaa'};font-weight:700;margin-top:2px">${diffLabel}</div>
           </div>
         </div>`;
       });
@@ -2649,13 +2655,13 @@ function renderAnnual() {
         html += `<div style="margin-bottom:14px${isAlert?';background:#fff5f5;border-radius:12px;padding:10px;border:1.5px solid #ffcdd2':''}">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
             <div style="font-size:13px;font-weight:700;color:#333">${escHtml(p.name)}<span style="font-size:10px;font-weight:400;color:#aaa;margin-left:6px">${licenseLabel}</span></div>
-            <div style="font-size:14px;font-weight:800;color:${barColor}">${used}日${max ? ' / ' + max + '日' : ''}${remainingDays !== null ? '<span style="font-size:10px;font-weight:'+(isAlert?'700':'400')+';color:'+(isAlert?'#c62828':isWarn?'#e65100':'#aaa')+';margin-left:4px">残り'+remainingDays+'日</span>' : ''}</div>
+            <div style="font-size:14px;font-weight:800;color:${barColor}">${used}日${max ? ' / ' + max + '日' : ''}${remainingDays !== null ? '<span style="font-size:10px;font-weight:'+(isAlert?'700':'400')+';color:'+(isAlert?'#E53935':isWarn?'#e65100':'#aaa')+';margin-left:4px">残り'+remainingDays+'日</span>' : ''}</div>
           </div>
           ${max ? `
           <div style="background:#f0f0f0;border-radius:6px;height:10px;overflow:hidden">
             <div style="width:${pct}%;height:100%;background:${barColor};border-radius:6px;transition:width .3s"></div>
           </div>
-          ${isAlert ? `<div style="font-size:11px;color:#c62828;font-weight:700;margin-top:5px;display:flex;align-items:center;gap:4px">⚠️ 残り${remainingDays}日！新規受付は慎重に</div>` : isWarn ? `<div style="font-size:11px;color:#e65100;margin-top:3px">⚡ 残り${remainingDays}日 — 上限に近づいています</div>` : ''}
+          ${isAlert ? `<div style="font-size:11px;color:#E53935;font-weight:700;margin-top:5px;display:flex;align-items:center;gap:4px">⚠️ 残り${remainingDays}日！新規受付は慎重に</div>` : isWarn ? `<div style="font-size:11px;color:#e65100;margin-top:3px">⚡ 残り${remainingDays}日 — 上限に近づいています</div>` : ''}
           ` : `<div style="font-size:11px;color:#bbb;margin-top:2px">旅館業 — 法的上限なし</div>`}
         </div>`;
       });
@@ -2714,7 +2720,7 @@ function renderAnnual() {
     const isFutureMonth = (ms.year > todayY) || (ms.year === todayY && ms.month > todayM);
     const actBtns = (ms.operatingProps || []).map(p =>
       `<button onclick="event.stopPropagation();showActualCostModal(${ms.year},${ms.month},${p.id})"
-        style="font-size:9px;padding:2px 7px;border-radius:5px;border:1px solid ${hasActualCosts(p.id,ms.year,ms.month)?'#2e7d32':'#bbb'};background:${hasActualCosts(p.id,ms.year,ms.month)?'#e8f5e9':'#f8f8f8'};color:${hasActualCosts(p.id,ms.year,ms.month)?'#2e7d32':'#888'};cursor:pointer;font-weight:700;white-space:nowrap">
+        style="font-size:9px;padding:2px 7px;border-radius:5px;border:1px solid ${hasActualCosts(p.id,ms.year,ms.month)?'#1C9A52':'#bbb'};background:${hasActualCosts(p.id,ms.year,ms.month)?'#e8f5e9':'#f8f8f8'};color:${hasActualCosts(p.id,ms.year,ms.month)?'#1C9A52':'#888'};cursor:pointer;font-weight:700;white-space:nowrap">
         ${hasActualCosts(p.id,ms.year,ms.month)?'✓ 実費':'✏️ 実費'} ${(ms.operatingProps||[]).length>1?p.name:''}
       </button>`
     ).join('');
@@ -2727,18 +2733,18 @@ function renderAnnual() {
             ${!isFutureMonth ? `<div style="display:flex;gap:4px;flex-wrap:wrap">${actBtns}</div>` : ''}
           </div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:3px">
-            <div style="flex:1;max-width:80px;height:4px;background:#E8ECF8;border-radius:2px"><div style="width:${ms.occRate}%;height:100%;background:#1A56DB;border-radius:2px"></div></div>
+            <div style="flex:1;max-width:80px;height:4px;background:#E8ECF8;border-radius:2px"><div style="width:${ms.occRate}%;height:100%;background:#F07C3F;border-radius:2px"></div></div>
             <div style="font-size:10px;color:#aaa">${ms.occRate}% (${ms.nights}/${ms.maxNights}日)</div>
           </div>
         </div>
         <div style="text-align:right;margin-left:8px">
           <div style="font-size:10px;color:#aaa">${fmtShort(ms.revenue)}円</div>
-          <div style="font-size:15px;font-weight:800;color:${isMP?'#2e7d32':'#c62828'}">${isMP?'':'▲'}${fmtShort(Math.abs(ms.profit))}円</div>
+          <div style="font-size:15px;font-weight:800;color:${isMP?'#1C9A52':'#E53935'}">${isMP?'':'▲'}${fmtShort(Math.abs(ms.profit))}円</div>
         </div>
         <span class="mchev" style="margin-left:6px">▼</span>
       </div>
       <div class="month-detail-body">
-        <div style="padding:0 14px 4px;font-size:10px;color:#bbb">固定費 ${fmt(ms.monthFixedCosts)}円${ms.isActual?' <span style="color:#2e7d32;font-weight:700">[実費]</span>':' <span style="color:#bbb">[概算]</span>'} / 変動費 ${fmt(ms.varCosts)}円</div>
+        <div style="padding:0 14px 4px;font-size:10px;color:#bbb">固定費 ${fmt(ms.monthFixedCosts)}円${ms.isActual?' <span style="color:#1C9A52;font-weight:700">[実費]</span>':' <span style="color:#bbb">[概算]</span>'} / 変動費 ${fmt(ms.varCosts)}円</div>
         ${mBooks.length === 0
           ? `<div style="padding:12px 14px;font-size:12px;color:#ccc;text-align:center">この月の予約なし（固定費のみ発生）</div>`
           : mBooks.map(b => {
@@ -2751,9 +2757,9 @@ function renderAnnual() {
                   <div class="booking-prop">${prop ? prop.name : '⚠️ 未設定'}${b.source==='pricelabs'?'<span style="font-size:8px;font-weight:700;background:#fff0eb;color:#e05a2b;padding:1px 4px;border-radius:3px;margin-left:5px">PL</span>':''}</div>
                   <div class="booking-guest">${b.guestName || (b.source==='pricelabs' ? 'PriceLabs予約' : '')}</div>
                   <div style="font-size:10px;color:#bbb;margin-top:1px">
-                    <span style="background:#e3f2fd;color:#1A56DB;font-size:8px;font-weight:700;padding:1px 3px;border-radius:3px;margin-right:2px">IN</span>${fmtD(b.checkin)}
+                    <span style="background:#e3f2fd;color:#F07C3F;font-size:8px;font-weight:700;padding:1px 3px;border-radius:3px;margin-right:2px">IN</span>${fmtD(b.checkin)}
                     <span style="color:#ddd;margin:0 2px">→</span>
-                    <span style="background:#fce4ec;color:#c62828;font-size:8px;font-weight:700;padding:1px 3px;border-radius:3px;margin-right:2px">OUT</span>${fmtD(coStr)}
+                    <span style="background:#fce4ec;color:#E53935;font-size:8px;font-weight:700;padding:1px 3px;border-radius:3px;margin-right:2px">OUT</span>${fmtD(coStr)}
                     （${b.nights}泊）
                   </div>
                 </div>
@@ -2942,7 +2948,7 @@ function showDayDetail(year, month, day) {
       <div class="day-modal-row"><span>チェックアウト</span><span>${coStr}</span></div>
       <div class="day-modal-row"><span>宿泊数</span><span>${b.nights}泊</span></div>
       <div class="day-modal-row"><span>売上</span><span>${fmtS(b.revenue)}</span></div>
-      ${profit !== null ? `<div class="day-modal-row"><span>利益</span><span style="color:${profit>=0?'#2e7d32':'#c62828'}">${profit<0?'▲':''}${fmtS(Math.abs(profit))}</span></div>` : ''}
+      ${profit !== null ? `<div class="day-modal-row"><span>利益</span><span style="color:${profit>=0?'#1C9A52':'#E53935'}">${profit<0?'▲':''}${fmtS(Math.abs(profit))}</span></div>` : ''}
       ${b.listing ? `<div class="day-modal-row"><span>リスティング</span><span style="font-size:11px">${b.listing}</span></div>` : ''}
       ${checkSection}
     </div>`;
