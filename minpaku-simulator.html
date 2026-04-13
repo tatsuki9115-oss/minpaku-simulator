@@ -1424,7 +1424,7 @@ function renderSettings() {
     <div class="property-item" id="prop-item-${p.id}">
       <div class="property-header" style="cursor:pointer" onclick="togglePropertyAccordion(${p.id})">
         <input class="property-name-input" type="text" value="${escHtml(p.name)}" placeholder="物件名" oninput="updateName(${pi},this.value)" onclick="event.stopPropagation()">
-        <span id="prop-chevron-${p.id}" style="color:rgba(255,255,255,.6);margin-left:8px;transition:transform .2s;flex-shrink:0">▼</span>
+        <span id="prop-chevron-${p.id}" style="color:#B0ADA8;margin-left:8px;transition:transform .2s;flex-shrink:0;font-size:11px">▼</span>
       </div>
       <div class="cost-section" id="prop-body-${p.id}" style="display:none">
         <div class="cost-section-title">営業開始月</div>
