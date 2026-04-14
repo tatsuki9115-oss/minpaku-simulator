@@ -1269,10 +1269,12 @@ function renderCalendarTab() {
         const hasAlert = formAlert || cleanAlert;
         const borderStyle = hasAlert ? 'border:2px solid #E53935' : 'border:1px solid #f0f0f0';
 
-        const formBg = chk.formDone ? '#e8f5e9' : formAlert ? '#FFEBEE' : '#f0f0f0';
-        const formColor = chk.formDone ? '#1C9A52' : formAlert ? '#D32F2F' : '#aaa';
-        const cleanBg = chk.cleaningDone ? '#e0f7fa' : cleanAlert ? '#FFF3E0' : '#f0f0f0';
-        const cleanColor = chk.cleaningDone ? '#00796b' : cleanAlert ? '#E65100' : '#aaa';
+        const formBg = chk.formDone ? '#dcfce7' : formAlert ? '#FFEBEE' : '#f5f5f5';
+        const formColor = chk.formDone ? '#15803d' : formAlert ? '#D32F2F' : '#999';
+        const formBorder = chk.formDone ? '#16a34a' : formAlert ? '#E53935' : '#ddd';
+        const cleanBg = chk.cleaningDone ? '#e0f2fe' : cleanAlert ? '#FFF3E0' : '#f5f5f5';
+        const cleanColor = chk.cleaningDone ? '#0369a1' : cleanAlert ? '#E65100' : '#999';
+        const cleanBorder = chk.cleaningDone ? '#0284c7' : cleanAlert ? '#f97316' : '#ddd';
 
         const diffLabel = daysToCI < 0 ? `${-daysToCI}日超過` : daysToCI === 0 ? '今日' : `あと${daysToCI}日`;
         const diffColor = daysToCI < 0 ? '#D32F2F' : daysToCI <= 3 ? '#E65100' : daysToCI <= 7 ? '#F59E0B' : '#B0ADA8';
@@ -1290,15 +1292,15 @@ function renderCalendarTab() {
             </div>
           </div>
           ${b.code ? `<div style="display:flex;gap:6px">
-            <button onclick="toggleCheckFromList('${b.code}','formDone')" style="flex:1;font-size:12px;font-weight:700;padding:9px 6px;border-radius:10px;border:none;cursor:pointer;background:${formBg};color:${formColor}">📋 ${chk.formDone?'名簿 ✅ 済':'名簿 未提出'}</button>
+            <button onclick="toggleCheckFromList('${b.code}','formDone')" style="flex:1;font-size:13px;font-weight:800;padding:10px 6px;border-radius:10px;border:2px solid ${formBorder};cursor:pointer;background:${formBg};color:${formColor}">📋 ${chk.formDone?'名簿 ✓ 済':'名簿 未提出'}</button>
             <div style="flex:1;display:flex;flex-direction:column;gap:4px">
               ${staffList.length > 0
-                ? `<select style="font-size:11px;border:1.5px solid ${chk.cleaningDone?'#80cbc4':cleanAlert?'#E65100':'#e8e8e8'};border-radius:8px;padding:4px 6px;background:white;color:#555;width:100%" onchange="toggleCheckStaffFromList('${b.code}',this.value)">
+                ? `<select style="font-size:11px;border:1.5px solid ${chk.cleaningDone?'#0284c7':cleanAlert?'#E65100':'#e8e8e8'};border-radius:8px;padding:4px 6px;background:white;color:#555;width:100%" onchange="toggleCheckStaffFromList('${b.code}',this.value)">
                     <option value="">👤 スタッフ選択</option>
                     ${staffList.map(s => `<option value="${escHtml(s.name)}" ${chk.cleaningStaffName===s.name?'selected':''}>${escHtml(s.name)}</option>`).join('')}
                   </select>`
                 : ''}
-              <button onclick="toggleCheckFromList('${b.code}','cleaningDone')" style="font-size:12px;font-weight:700;padding:${staffList.length>0?'5':'9'}px 6px;border-radius:10px;border:none;cursor:pointer;background:${cleanBg};color:${cleanColor};width:100%">🧹 ${chk.cleaningDone?'清掃 ✅ 済':'清掃 未手配'}</button>
+              <button onclick="toggleCheckFromList('${b.code}','cleaningDone')" style="font-size:13px;font-weight:800;padding:${staffList.length>0?'5':'10'}px 6px;border-radius:10px;border:2px solid ${cleanBorder};cursor:pointer;background:${cleanBg};color:${cleanColor};width:100%">🧹 ${chk.cleaningDone?'清掃 ✓ 済':'清掃 未手配'}</button>
             </div>
           </div>` : ''}
         </div>`;
@@ -1355,7 +1357,7 @@ function renderCalendar(year, month, propFilter) {
   });
 
   // 物件カラー（複数物件を色で区別）
-  const propColors = ['#1a1a2e', '#F07C3F', '#1C9A52', '#6a1b9a', '#E53935'];
+  const propColors = ['#1E6FBF', '#E8640A', '#1C9A52', '#7C3AED', '#DC2626'];
   const propColorMap = {};
   properties.forEach((p, i) => { propColorMap[p.id] = propColors[i % propColors.length]; });
 
@@ -1425,13 +1427,13 @@ function renderCalendar(year, month, propFilter) {
 
         // チェック状態ドット
         const chk = b.code ? (bookingChecks[b.code] || {}) : {};
-        const formDot = `<span style="width:6px;height:6px;border-radius:50%;background:${chk.formDone?'#a5d6a7':'rgba(255,255,255,.3)'};flex-shrink:0;display:inline-block" title="Googleフォーム${chk.formDone?'済':'未'}"></span>`;
-        const cleanDot = `<span style="width:6px;height:6px;border-radius:50%;background:${chk.cleaningDone?'#80cbc4':'rgba(255,255,255,.3)'};flex-shrink:0;display:inline-block" title="清掃手配${chk.cleaningDone?'済':'未'}"></span>`;
-        const statusDots = isStart && b.code ? `<span style="display:flex;gap:2px;flex-shrink:0">${formDot}${cleanDot}</span>` : '';
+        const formDot = `<span style="width:10px;height:10px;border-radius:50%;${chk.formDone?'background:#4ade80':'background:transparent;border:1.5px solid rgba(255,255,255,0.65)'};flex-shrink:0;display:inline-flex;align-items:center;justify-content:center" title="名簿${chk.formDone?'済':'未'}">${chk.formDone?'<span style="font-size:7px;color:#166534;font-weight:900;line-height:1">✓</span>':''}</span>`;
+        const cleanDot = `<span style="width:10px;height:10px;border-radius:50%;${chk.cleaningDone?'background:#38bdf8':'background:transparent;border:1.5px solid rgba(255,255,255,0.65)'};flex-shrink:0;display:inline-flex;align-items:center;justify-content:center" title="清掃${chk.cleaningDone?'済':'未'}">${chk.cleaningDone?'<span style="font-size:7px;color:#0c4a6e;font-weight:900;line-height:1">✓</span>':''}</span>`;
+        const statusDots = isStart && b.code ? `<span style="display:flex;gap:3px;flex-shrink:0;align-items:center">${formDot}${cleanDot}</span>` : '';
 
-        html += '<div style="margin-left:'+leftPct+'%;width:'+widthPct+'%;box-sizing:border-box;background:'+bgColor+';border-radius:'+br+';height:24px;display:flex;align-items:center;gap:5px;padding:0 '+(isStart?'8px':'4px')+' 0 '+(isStart?'6px':'4px')+';cursor:pointer;overflow:hidden;white-space:nowrap" onclick="showDayDetail('+year+','+month+','+clipStart+')">'
+        html += '<div style="margin-left:'+leftPct+'%;width:'+widthPct+'%;box-sizing:border-box;background:'+bgColor+';border-radius:'+br+';height:26px;display:flex;align-items:center;gap:5px;padding:0 '+(isStart?'8px':'4px')+' 0 '+(isStart?'6px':'4px')+';cursor:pointer;overflow:hidden;white-space:nowrap" onclick="showDayDetail('+year+','+month+','+clipStart+')">'
           + (isStart ? '<div style="width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,.25);color:white;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+initial+'</div>'
-            + '<span style="font-size:10px;font-weight:600;color:white;overflow:hidden;text-overflow:ellipsis;flex:1">'+escHtml(b.guestName||'ゲスト')+(prop?' · '+prop.name:'')+'</span>'
+            + '<span style="font-size:11px;font-weight:700;color:white;overflow:hidden;text-overflow:ellipsis;flex:1">'+escHtml(b.guestName||'ゲスト')+(prop?' · '+prop.name:'')+'</span>'
             + statusDots
             : '')
           + '</div>';
@@ -2696,11 +2698,11 @@ function renderDashboard() {
         const cleanColor = cleanDone ? '#00796B' : '#7B1FA2';
 
         const checkBtns = b.code ? (type === 'in'
-          ? `<div style="display:flex;gap:5px;flex-shrink:0">
-              <button onclick="toggleCheckForDash('${b.code}','formDone')" style="font-size:11px;font-weight:700;padding:6px 9px;border-radius:9px;border:none;cursor:pointer;background:${formBg};color:${formColor};white-space:nowrap">${formDone?'📋 済':'📋 名簿'}</button>
-              <button onclick="toggleCheckForDash('${b.code}','cleaningDone')" style="font-size:11px;font-weight:700;padding:6px 9px;border-radius:9px;border:none;cursor:pointer;background:${cleanBg};color:${cleanColor};white-space:nowrap">${cleanDone?'🧹 済':'🧹 清掃'}</button>
+          ? `<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+              <button onclick="toggleCheckForDash('${b.code}','formDone')" style="font-size:12px;font-weight:800;padding:7px 10px;border-radius:10px;border:2px solid ${formDone?'#16a34a':'#f97316'};cursor:pointer;background:${formDone?'#dcfce7':'#fff7ed'};color:${formDone?'#15803d':'#c2410c'};white-space:nowrap;min-width:76px;text-align:center">${formDone?'📋 済':'📋 名簿'}</button>
+              <button onclick="toggleCheckForDash('${b.code}','cleaningDone')" style="font-size:12px;font-weight:800;padding:7px 10px;border-radius:10px;border:2px solid ${cleanDone?'#0284c7':'#a855f7'};cursor:pointer;background:${cleanDone?'#e0f2fe':'#faf5ff'};color:${cleanDone?'#0369a1':'#7e22ce'};white-space:nowrap;min-width:76px;text-align:center">${cleanDone?'🧹 済':'🧹 清掃'}</button>
             </div>`
-          : `<button onclick="toggleCheckForDash('${b.code}','cleaningDone')" style="font-size:11px;font-weight:700;padding:6px 9px;border-radius:9px;border:none;cursor:pointer;background:${cleanBg};color:${cleanColor};white-space:nowrap">${cleanDone?'🧹 済':'🧹 清掃'}</button>`)
+          : `<button onclick="toggleCheckForDash('${b.code}','cleaningDone')" style="font-size:12px;font-weight:800;padding:7px 10px;border-radius:10px;border:2px solid ${cleanDone?'#0284c7':'#a855f7'};cursor:pointer;background:${cleanDone?'#e0f2fe':'#faf5ff'};color:${cleanDone?'#0369a1':'#7e22ce'};white-space:nowrap;min-width:76px;text-align:center">${cleanDone?'🧹 済':'🧹 清掃'}</button>`)
           : '';
 
         rows += `<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #F2F1EE">
