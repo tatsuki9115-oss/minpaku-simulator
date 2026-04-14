@@ -501,6 +501,9 @@ const DEFAULT_PROPERTIES = [
   }
 ];
 
+const AIRBNB_FEE_RATE = 0.15; // Airbnbホストサービス料（約15%）
+function getGuestPayment(hostPayout) { return Math.round(hostPayout / (1 - AIRBNB_FEE_RATE)); }
+
 let properties = loadData();
 let history = loadHistory();
 let monthlyData = loadMonthly();
@@ -2885,8 +2888,9 @@ function renderAnnual() {
               <div class="booking-guest">${escHtml(b.guestName||(b.source==='pricelabs'?'PriceLabs予約':''))}</div>
               <div style="font-size:11px;color:#C8C5C0;margin-top:2px">${fmtD(b.checkin)} → ${fmtD(coStr)} · ${b.nights}泊</div>
             </div>
-            <div class="booking-amounts">
-              <div style="font-family:'Inter',sans-serif;font-size:14px;font-weight:800;color:#1C1C1E">¥${fmt(b.revenue)}</div>
+            <div class="booking-amounts" style="text-align:right">
+              <div style="font-size:10px;color:#C8C5C0">ゲスト <span style="font-weight:700;color:#999">¥${fmt(getGuestPayment(b.revenue))}</span></div>
+              <div style="font-family:'Inter',sans-serif;font-size:14px;font-weight:800;color:#1C1C1E;margin-top:1px">¥${fmt(b.revenue)}</div>
             </div>
           </div>`;
         }).join('')}
@@ -3000,21 +3004,34 @@ function renderAnnual() {
   const kpiPeriodLabel = hasFutureBooks ? `確定予約含む ${currentAnnualYear}/4〜${currentAnnualYear+1}/3` : `実績ベース ${currentAnnualYear}/4〜${todayY}/${todayM}`;
 
   // KPIカード（最優先表示）
-  html += `<div class="kpi-grid">
-    <div class="kpi-card">
-      <div class="kpi-label">売上（${currentAnnualYear}年度）</div>
-      <div class="kpi-value">${fmtShort(totalRevenue)}円</div>
-      <div class="kpi-sub">${totalBookings}件・${totalNights}泊</div>
+  const totalGuestPayment = getGuestPayment(totalRevenue);
+  html += `
+  <div class="card" style="margin-bottom:10px">
+    <div style="font-size:11px;font-weight:700;color:#B0ADA8;letter-spacing:.06em;margin-bottom:10px">${currentAnnualYear}年度 収支サマリー（${totalBookings}件・${totalNights}泊）</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+      <div style="background:#F9F8F6;border-radius:10px;padding:10px 12px">
+        <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:4px">ゲスト支払</div>
+        <div style="font-family:'Inter',sans-serif;font-size:18px;font-weight:900;color:#1C1C1E;line-height:1.1">${fmtShort(totalGuestPayment)}円</div>
+        <div style="font-size:9px;color:#C8C5C0;margin-top:2px">Airbnb手数料込</div>
+      </div>
+      <div style="background:#F9F8F6;border-radius:10px;padding:10px 12px">
+        <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:4px">ホスト受取</div>
+        <div style="font-family:'Inter',sans-serif;font-size:18px;font-weight:900;color:#1C1C1E;line-height:1.1">${fmtShort(totalRevenue)}円</div>
+        <div style="font-size:9px;color:#C8C5C0;margin-top:2px">入金額（手数料差引後）</div>
+      </div>
+      <div style="background:${isAP?'#F0FBF5':'#FFF5F5'};border-radius:10px;padding:10px 12px">
+        <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:4px">利益</div>
+        <div style="font-family:'Inter',sans-serif;font-size:18px;font-weight:900;color:${isAP?'#1C9A52':'#E53935'};line-height:1.1">${isAP?'':'▲'}${fmtShort(Math.abs(totalProfit))}円</div>
+        <div style="font-size:9px;color:#C8C5C0;margin-top:2px">固定費・変動費差引後</div>
+      </div>
     </div>
-    <div class="kpi-card">
-      <div class="kpi-label">利益（${currentAnnualYear}年度）</div>
-      <div class="kpi-value ${isAP?'profit':'loss'}">${isAP?'':'▲'}${fmtShort(Math.abs(totalProfit))}円</div>
-      <div class="kpi-sub">${kpiPeriodLabel}</div>
-    </div>
+    <div style="font-size:10px;color:#C8C5C0;margin-top:8px">${kpiPeriodLabel}</div>
+  </div>
+  <div class="kpi-grid">
     <div class="kpi-card">
       <div class="kpi-label">平均単価/泊</div>
       <div class="kpi-value">${fmt(avgPerNight)}円</div>
-      <div class="kpi-sub">総稼働 ${totalNights}泊</div>
+      <div class="kpi-sub">総稼働 ${totalNights}泊（ホスト受取ベース）</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">最高月</div>
@@ -3081,22 +3098,26 @@ function renderAnnual() {
     })())}
     <div style="height:1px;background:#f0f0f0;margin:14px 0 12px"></div>
     <table class="month-table">
-      <thead><tr><th>月</th><th>件数</th><th>売上</th><th>利益</th><th>稼働</th></tr></thead>
+      <thead><tr><th>月</th><th>件</th><th>ゲスト支払</th><th>受取</th><th>利益</th><th>稼働</th></tr></thead>
       <tbody>
         ${monthlyStats.map((ms, i) => {
           const mo = fyMonthOrder[i];
-          if (!ms) return `<tr><td style="color:#ddd">${mo}月</td><td colspan="4" style="color:#eee;text-align:center">−</td></tr>`;
+          if (!ms) return `<tr><td style="color:#ddd">${mo}月</td><td colspan="5" style="color:#eee;text-align:center">−</td></tr>`;
           const isMP = ms.profit >= 0;
+          const gp = getGuestPayment(ms.revenue);
           return `<tr style="cursor:pointer" onclick="document.getElementById('mcard-${ms.month}').querySelector('.month-detail-body').classList.toggle('open');var ch=document.getElementById('mcard-${ms.month}').querySelector('.mchev');ch.style.transform=document.getElementById('mcard-${ms.month}').querySelector('.month-detail-body').classList.contains('open')?'rotate(180deg)':''">
             <td>${ms.month}月</td>
-            <td>${ms.bookings}件</td>
+            <td>${ms.bookings}</td>
+            <td style="color:#888">${fmtShort(gp)}</td>
             <td>${fmtShort(ms.revenue)}</td>
             <td class="td-profit ${isMP?'profit':'loss'}">${isMP?'':'▲'}${fmtShort(Math.abs(ms.profit))}</td>
             <td>${ms.occRate}%</td>
           </tr>`;
         }).join('')}
         <tr class="total-row">
-          <td>合計</td><td>${totalBookings}件</td><td>${fmtShort(totalRevenue)}</td>
+          <td>合計</td><td>${totalBookings}件</td>
+          <td style="color:#888">${fmtShort(totalGuestPayment)}</td>
+          <td>${fmtShort(totalRevenue)}</td>
           <td class="td-profit ${isAP?'profit':'loss'}">${isAP?'':'▲'}${fmtShort(Math.abs(totalProfit))}</td><td>−</td>
         </tr>
       </tbody>
@@ -3134,9 +3155,10 @@ function renderAnnual() {
             <div style="font-size:10px;color:#aaa">${ms.occRate}% (${ms.nights}/${ms.maxNights}日)</div>
           </div>
         </div>
-        <div style="text-align:right;margin-left:8px">
-          <div style="font-size:10px;color:#aaa">${fmtShort(ms.revenue)}円</div>
-          <div style="font-size:15px;font-weight:800;color:${isMP?'#1C9A52':'#E53935'}">${isMP?'':'▲'}${fmtShort(Math.abs(ms.profit))}円</div>
+        <div style="text-align:right;margin-left:8px;min-width:90px">
+          <div style="font-size:10px;color:#C8C5C0">ゲスト <span style="font-weight:700;color:#999">${fmtShort(getGuestPayment(ms.revenue))}円</span></div>
+          <div style="font-size:10px;color:#C8C5C0;margin-top:1px">受取 <span style="font-weight:700;color:#666">${fmtShort(ms.revenue)}円</span></div>
+          <div style="font-size:14px;font-weight:800;color:${isMP?'#1C9A52':'#E53935'};margin-top:2px">${isMP?'':'▲'}${fmtShort(Math.abs(ms.profit))}円</div>
         </div>
         <span class="mchev" style="margin-left:6px">▼</span>
       </div>
@@ -3156,8 +3178,9 @@ function renderAnnual() {
                   <div class="booking-guest">${b.guestName || (b.source==='pricelabs' ? 'PriceLabs予約' : '')}</div>
                   <div style="font-size:11px;color:#bbb;margin-top:2px">${fmtD(b.checkin)} → ${fmtD(coStr)} · ${b.nights}泊</div>
                 </div>
-                <div class="booking-amounts">
-                  <div class="booking-rev">${fmt(b.revenue)}円</div>
+                <div class="booking-amounts" style="text-align:right">
+                  <div style="font-size:10px;color:#C8C5C0">ゲスト <span style="font-weight:700;color:#999">${fmt(getGuestPayment(b.revenue))}円</span></div>
+                  <div class="booking-rev" style="margin-top:1px">${fmt(b.revenue)}円</div>
                 </div>
               </div>`;
             }).join('')}
