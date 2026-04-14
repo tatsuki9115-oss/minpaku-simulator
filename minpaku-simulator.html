@@ -2796,7 +2796,9 @@ function renderAnnual() {
   if (!fiscalYears.includes(currentAnnualYear)) currentAnnualYear = fiscalYears[fiscalYears.length - 1] || new Date().getFullYear();
 
   // フィルター適用（会計年度：currentAnnualYear/4〜currentAnnualYear+1/3）
+  // ¥0の予約（ブロック期間・キャンセル等）は除外
   const yearBooks = airbnbBookings.filter(b => {
+    if (!b.revenue || b.revenue === 0) return false;
     const [by, bm] = b.checkin.split('/').map(Number);
     const inFY = (by === currentAnnualYear && bm >= 4) || (by === currentAnnualYear + 1 && bm <= 3);
     if (!inFY) return false;
@@ -2828,6 +2830,7 @@ function renderAnnual() {
 
     let rev = 0, varCosts = 0, nights = 0;
     mBooks.forEach(b => {
+      if (!b.revenue || b.revenue === 0) return; // ¥0予約はスキップ
       rev += b.revenue;
       const pid = getBookingPropId(b);
       const prop = properties.find(p => p.id === pid);
@@ -2925,7 +2928,7 @@ function renderAnnual() {
           const prop = properties.find(p => p.id === pid);
           const bColor = getPropColor(pid);
           const coStr = getCheckout(b);
-          const bVarCost = prop && !hasActualCosts(pid, sY, sM) ? prop.perBookingCosts.reduce((s,c)=>s+c.amount,0) : 0;
+          const bVarCost = (b.revenue > 0 && prop && !hasActualCosts(pid, sY, sM)) ? prop.perBookingCosts.reduce((s,c)=>s+c.amount,0) : 0;
           const bProfit = b.revenue - bVarCost;
           const bIsP = bProfit >= 0;
           return `<div class="booking-row" style="--prop-color:${bColor}">
