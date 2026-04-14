@@ -2889,9 +2889,26 @@ function renderAnnual() {
           <div class="month-stat"><div class="month-stat-label">稼働率</div><div class="month-stat-value">${occRate}%</div><div class="occ-bar-wrap"><div class="occ-bar-fill" style="width:${occRate}%"></div></div></div>
           <div class="month-stat"><div class="month-stat-label">稼働日数</div><div class="month-stat-value">${ms.nights}/${maxNights}日</div></div>
         </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding-top:12px;border-top:1px solid #F2F1EE;margin-top:4px">
-          <span style="font-size:13px;color:#888">月間利益</span>
-          <span style="font-family:'Inter',sans-serif;font-size:26px;font-weight:900;color:${isMP?'#1C9A52':'#E53935'}">${isMP?'':'▲'}${fmtShort(Math.abs(ms.profit))}円</span>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding-top:12px;border-top:1px solid #F2F1EE;margin-top:4px">
+          <div style="background:#F9F8F6;border-radius:10px;padding:10px 12px">
+            <div style="font-size:10px;font-weight:700;color:#C8C5C0;margin-bottom:4px">ゲスト支払</div>
+            <div style="font-family:'Inter',sans-serif;font-size:15px;font-weight:800;color:#999">${fmtShort(getGuestPayment(ms.revenue))}円</div>
+            <div style="font-size:9px;color:#D0CCC8;margin-top:2px">手数料込</div>
+          </div>
+          <div style="background:#F9F8F6;border-radius:10px;padding:10px 12px">
+            <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:4px">ホスト受取</div>
+            <div style="font-family:'Inter',sans-serif;font-size:15px;font-weight:800;color:#1C1C1E">${fmtShort(ms.revenue)}円</div>
+            <div style="font-size:9px;color:#C8C5C0;margin-top:2px">入金額</div>
+          </div>
+          <div style="background:${isMP?'#F0FBF5':'#FFF5F5'};border-radius:10px;padding:10px 12px">
+            <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:4px">利益</div>
+            <div style="font-family:'Inter',sans-serif;font-size:15px;font-weight:800;color:${isMP?'#1C9A52':'#E53935'}">${isMP?'':'▲'}${fmtShort(Math.abs(ms.profit))}円</div>
+            <div style="font-size:9px;color:#C8C5C0;margin-top:2px">費用差引後</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;padding-top:8px;font-size:11px;color:#C8C5C0">
+          <span>固定費 ${fmtShort(ms.monthFixedCosts)}円${ms.isActual?' <span style="color:#1C9A52;font-weight:700">[実費]</span>':''}</span>
+          <span>変動費 ${fmtShort(ms.varCosts)}円</span>
         </div>
       </div>`;
     }
@@ -2908,18 +2925,40 @@ function renderAnnual() {
           const prop = properties.find(p => p.id === pid);
           const bColor = getPropColor(pid);
           const coStr = getCheckout(b);
+          const bVarCost = prop && !hasActualCosts(pid, sY, sM) ? prop.perBookingCosts.reduce((s,c)=>s+c.amount,0) : 0;
+          const bProfit = b.revenue - bVarCost;
+          const bIsP = bProfit >= 0;
           return `<div class="booking-row" style="--prop-color:${bColor}">
             <div class="booking-info">
               <div class="booking-prop">${prop?prop.name:'⚠️ 未設定'}${b.source==='pricelabs'?'<span style="font-size:11px;font-weight:700;background:#fff0eb;color:#e05a2b;padding:1px 5px;border-radius:3px;margin-left:5px">PL</span>':''}</div>
               <div class="booking-guest">${escHtml(b.guestName||(b.source==='pricelabs'?'PriceLabs予約':''))}</div>
               <div style="font-size:11px;color:#C8C5C0;margin-top:2px">${fmtD(b.checkin)} → ${fmtD(coStr)} · ${b.nights}泊</div>
             </div>
-            <div class="booking-amounts" style="text-align:right">
-              <div style="font-size:10px;color:#C8C5C0">ゲスト <span style="font-weight:700;color:#999">¥${fmt(getGuestPayment(b.revenue))}</span></div>
-              <div style="font-family:'Inter',sans-serif;font-size:14px;font-weight:800;color:#1C1C1E;margin-top:1px">¥${fmt(b.revenue)}</div>
+            <div class="booking-amounts" style="text-align:right;min-width:90px">
+              <div style="font-size:10px;color:#C8C5C0">ゲスト <span style="font-weight:700;color:#aaa">¥${fmt(getGuestPayment(b.revenue))}</span></div>
+              <div style="font-size:13px;font-weight:800;color:#1C1C1E;margin-top:1px">¥${fmt(b.revenue)}</div>
+              <div style="font-size:11px;font-weight:700;color:${bIsP?'#1C9A52':'#E53935'};margin-top:2px">${bIsP?'':'▲'}¥${fmt(Math.abs(bProfit))}<span style="font-size:9px;font-weight:400;color:#C8C5C0;margin-left:2px">変動費後</span></div>
             </div>
           </div>`;
         }).join('')}
+        ${ms ? (() => {
+          const totalGP = getGuestPayment(ms.revenue);
+          const isTP = ms.profit >= 0;
+          return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border-top:2px solid #F2F1EE;background:#FAFAF9">
+            <div style="padding:10px 14px;border-right:1px solid #F2F1EE">
+              <div style="font-size:9px;font-weight:700;color:#C8C5C0;margin-bottom:3px">合計 ゲスト支払</div>
+              <div style="font-size:14px;font-weight:800;color:#aaa">¥${fmt(totalGP)}</div>
+            </div>
+            <div style="padding:10px 14px;border-right:1px solid #F2F1EE">
+              <div style="font-size:9px;font-weight:700;color:#B0ADA8;margin-bottom:3px">合計 ホスト受取</div>
+              <div style="font-size:14px;font-weight:800;color:#1C1C1E">¥${fmt(ms.revenue)}</div>
+            </div>
+            <div style="padding:10px 14px;background:${isTP?'#F0FBF5':'#FFF5F5'}">
+              <div style="font-size:9px;font-weight:700;color:#B0ADA8;margin-bottom:3px">合計 利益</div>
+              <div style="font-size:14px;font-weight:800;color:${isTP?'#1C9A52':'#E53935'}">${isTP?'':'▲'}¥${fmt(Math.abs(ms.profit))}</div>
+            </div>
+          </div>`;
+        })() : ''}
       </div>`;
     }
 
