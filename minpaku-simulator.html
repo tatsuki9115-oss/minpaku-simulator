@@ -1750,19 +1750,18 @@ function renderProfitChart(monthlyStats, monthlyTarget) {
     const y = p >= 0 ? baseline - bh : baseline;
     const fill = p >= 0 ? '#4caf50' : '#ef5350';
     svgBars += '<rect x="'+(cx - barW/2).toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+bh.toFixed(1)+'" fill="'+fill+'" rx="2"/>';
-    // 金額ラベル（常時表示）
-    const lx = cx.toFixed(1);
+    // 金額ラベル（常時表示・端の棒ははみ出さないようanchor調整）
+    const anchor = cx < 30 ? 'start' : cx > W - 30 ? 'end' : 'middle';
+    const lx = anchor === 'start' ? (cx - barW/2).toFixed(1) : anchor === 'end' ? (cx + barW/2).toFixed(1) : cx.toFixed(1);
     const labelText = fmtBar(p);
     if (p >= 0) {
       // 黒字：棒の上に表示
       const ly = (baseline - bh - 4).toFixed(1);
-      svgBars += '<rect x="'+(cx - barW/2 - 1).toFixed(1)+'" y="'+(parseFloat(ly) - 9).toFixed(1)+'" width="'+(barW + 2).toFixed(1)+'" height="10" fill="white" opacity="0.75" rx="2"/>';
-      svgBars += '<text x="'+lx+'" y="'+ly+'" text-anchor="middle" font-size="9" font-weight="800" fill="#2e7d32">'+labelText+'</text>';
+      svgBars += '<text x="'+lx+'" y="'+ly+'" text-anchor="'+anchor+'" font-size="9" font-weight="800" fill="#2e7d32" stroke="white" stroke-width="2.5" paint-order="stroke">'+labelText+'</text>';
     } else {
-      // 赤字：棒の下に表示（棒が小さくても見えるよう余白を固定）
+      // 赤字：棒の下に表示
       const ly = (baseline + Math.max(bh, 4) + 10).toFixed(1);
-      svgBars += '<rect x="'+(cx - barW/2 - 1).toFixed(1)+'" y="'+(parseFloat(ly) - 9).toFixed(1)+'" width="'+(barW + 2).toFixed(1)+'" height="10" fill="white" opacity="0.75" rx="2"/>';
-      svgBars += '<text x="'+lx+'" y="'+ly+'" text-anchor="middle" font-size="9" font-weight="800" fill="#c62828">'+labelText+'</text>';
+      svgBars += '<text x="'+lx+'" y="'+ly+'" text-anchor="'+anchor+'" font-size="9" font-weight="800" fill="#c62828" stroke="white" stroke-width="2.5" paint-order="stroke">'+labelText+'</text>';
     }
   });
 
