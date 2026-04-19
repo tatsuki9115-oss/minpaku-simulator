@@ -1665,6 +1665,7 @@ function totalMonthsOperating(prop) {
 
 // ある月の固定費合計（フィルター考慮）
 function getPropMonthFixedCosts(prop, year, month) {
+  if (!isPropertyOperating(prop, year, month)) return 0; // 営業開始前は0
   const key = `${prop.id}_${year}_${month}`;
   const ac = actualCosts[key];
   if (ac && Array.isArray(ac)) return ac.reduce((s, c) => s + (c.amount || 0), 0);
