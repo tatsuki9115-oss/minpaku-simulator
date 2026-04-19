@@ -1755,12 +1755,14 @@ function renderProfitChart(monthlyStats, monthlyTarget) {
     const labelText = fmtBar(p);
     if (p >= 0) {
       // 黒字：棒の上に表示
-      const ly = (baseline - bh - 3).toFixed(1);
-      svgBars += '<text x="'+lx+'" y="'+ly+'" text-anchor="middle" font-size="7.5" font-weight="700" fill="#2e7d32">'+labelText+'</text>';
+      const ly = (baseline - bh - 4).toFixed(1);
+      svgBars += '<rect x="'+(cx - barW/2 - 1).toFixed(1)+'" y="'+(parseFloat(ly) - 9).toFixed(1)+'" width="'+(barW + 2).toFixed(1)+'" height="10" fill="white" opacity="0.75" rx="2"/>';
+      svgBars += '<text x="'+lx+'" y="'+ly+'" text-anchor="middle" font-size="9" font-weight="800" fill="#2e7d32">'+labelText+'</text>';
     } else {
-      // 赤字：棒の下に表示
-      const ly = (baseline + bh + 9).toFixed(1);
-      svgBars += '<text x="'+lx+'" y="'+ly+'" text-anchor="middle" font-size="7.5" font-weight="700" fill="#c62828">'+labelText+'</text>';
+      // 赤字：棒の下に表示（棒が小さくても見えるよう余白を固定）
+      const ly = (baseline + Math.max(bh, 4) + 10).toFixed(1);
+      svgBars += '<rect x="'+(cx - barW/2 - 1).toFixed(1)+'" y="'+(parseFloat(ly) - 9).toFixed(1)+'" width="'+(barW + 2).toFixed(1)+'" height="10" fill="white" opacity="0.75" rx="2"/>';
+      svgBars += '<text x="'+lx+'" y="'+ly+'" text-anchor="middle" font-size="9" font-weight="800" fill="#c62828">'+labelText+'</text>';
     }
   });
 
