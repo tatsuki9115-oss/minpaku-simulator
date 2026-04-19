@@ -2613,21 +2613,27 @@ function renderDashboard() {
 
   let html = '';
 
-  // ヘッダーカード
-  const nextDiff = nextBook ? Math.round((getCI(nextBook) - now) / 86400000) : null;
-  const nextProp = nextBook ? properties.find(p => p.id === getBookingPropId(nextBook)) : null;
-  const nextColor = nextBook ? getPropColor(getBookingPropId(nextBook)) : '#B0ADA8';
+  // ヘッダーカード（物件ごとの次の予約）
+  const nextPerProp = properties.map(p => {
+    const nb = [...airbnbBookings]
+      .filter(b => getCI(b) > now && getBookingPropId(b) === p.id)
+      .sort((a, b2) => getCI(a) - getCI(b2))[0];
+    const diff = nb ? Math.round((getCI(nb) - now) / 86400000) : null;
+    return { prop: p, book: nb, diff, color: getPropColor(p.id) };
+  });
+  const nextBadges = nextPerProp.map(n => `
+    <div style="text-align:center;background:#F8F8F8;border-radius:12px;padding:8px 12px;min-width:64px">
+      <div style="font-size:10px;color:#B0ADA8;font-weight:700;margin-bottom:2px;white-space:nowrap">次の予約まで</div>
+      <div style="font-family:'Inter',sans-serif;font-size:20px;font-weight:900;color:${n.diff !== null ? n.color : '#B0ADA8'};line-height:1">${n.diff === null ? '－' : n.diff === 0 ? '今日' : n.diff+'日'}</div>
+      <div style="font-size:10px;color:#B0ADA8;margin-top:2px">${n.prop.name}</div>
+    </div>`).join('');
   html += `<div class="card" style="margin-bottom:12px">
     <div style="display:flex;align-items:center;justify-content:space-between">
       <div>
         <div style="font-size:24px;font-weight:900;color:#1C1C1E;line-height:1">${now.getMonth()+1}月${now.getDate()}日</div>
         <div style="font-size:13px;color:#B0ADA8;margin-top:3px">${now.getFullYear()}年（${dayNames[now.getDay()]}）</div>
       </div>
-      ${nextBook ? `<div style="text-align:right;background:#F8F8F8;border-radius:12px;padding:10px 14px">
-        <div style="font-size:11px;color:#B0ADA8;font-weight:700;margin-bottom:2px">次の予約まで</div>
-        <div style="font-family:'Inter',sans-serif;font-size:22px;font-weight:900;color:${nextColor};line-height:1">${nextDiff === 0 ? '今日' : nextDiff+'日'}</div>
-        <div style="font-size:11px;color:#B0ADA8;margin-top:2px">${nextProp?.name||''}</div>
-      </div>` : ''}
+      <div style="display:flex;gap:8px">${nextBadges}</div>
     </div>
   </div>`;
 
