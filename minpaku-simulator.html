@@ -1994,7 +1994,7 @@ function renderInvestmentRecovery() {
       const perBookingCostPre = x.prop.perBookingCosts.reduce((s,c)=>s+c.amount,0);
       const propBooksPre = airbnbBookings.filter(b => getBookingPropId(b) === x.prop.id && b.nights > 0);
       const avgNightsPre = propBooksPre.length > 0 ? propBooksPre.reduce((s,b)=>s+b.nights,0)/propBooksPre.length : 3;
-      const shortRevPre = pfPre.shortTermRevenue || pfPre.revenue || 0;
+      const shortRevPre = pfPre.revenue || pfPre.shortTermRevenue || 0; // revenue（最新更新値）を優先
       const estDaysPre = Math.round(pfPre.occupancy / 100 * 365);
       const maxDaysPre = x.prop.maxAnnualNights;
       const cappedDaysPre = maxDaysPre && estDaysPre > maxDaysPre ? maxDaysPre : estDaysPre;
@@ -2035,7 +2035,7 @@ function renderInvestmentRecovery() {
       const perBookingCost = x.prop.perBookingCosts.reduce((s,c)=>s+c.amount,0);
       const propBooks = airbnbBookings.filter(b => getBookingPropId(b) === x.prop.id && b.nights > 0);
       const avgNights = propBooks.length > 0 ? propBooks.reduce((s,b)=>s+b.nights,0)/propBooks.length : 3;
-      const shortRev = pf.shortTermRevenue || pf.revenue || 0;
+      const shortRev = pf.revenue || pf.shortTermRevenue || 0; // revenue（最新更新値）を優先
       const estimatedDays = Math.round(pf.occupancy / 100 * 365);
       const maxDays = x.prop.maxAnnualNights;
       const overLimit = maxDays && estimatedDays > maxDays;
@@ -2162,7 +2162,7 @@ function renderInvestmentRecovery() {
       const perBookingCost = x.prop.perBookingCosts.reduce((s,c)=>s+c.amount,0);
       const propBooks = airbnbBookings.filter(b => getBookingPropId(b) === x.prop.id && b.nights > 0);
       const avgNights = propBooks.length > 0 ? propBooks.reduce((s,b)=>s+b.nights,0)/propBooks.length : 3;
-      const shortRev = pf.shortTermRevenue || pf.revenue || 0;
+      const shortRev = pf.revenue || pf.shortTermRevenue || 0; // revenue（最新更新値）を優先
       const estDays = Math.round(pf.occupancy / 100 * 365);
       const maxDays = x.prop.maxAnnualNights;
       const cappedDays = maxDays && estDays > maxDays ? maxDays : estDays;
