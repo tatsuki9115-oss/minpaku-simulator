@@ -3236,15 +3236,6 @@ function renderAnnual() {
     </div>`;
   }
 
-  // 予約カレンダー・重複チェック（アコーディオン・デフォルト閉じ）
-  html += `<div class="breakdown-card" style="margin-bottom:12px">
-    <button class="breakdown-toggle" onclick="toggleEl(this)">
-      <span>📅 予約カレンダー・重複チェック</span><span class="chevron">▼</span>
-    </button>
-    <div class="breakdown-body" style="padding:0 16px 14px">
-      ${getOverlapInnerHTML()}
-    </div>
-  </div>`;
 
   // 複数月の利益推移グラフ（全期間ローリング）
   {
