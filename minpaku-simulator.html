@@ -2587,6 +2587,8 @@ function renderDashboard() {
   const nextBook = [...airbnbBookings]
     .filter(b => getCI(b) > now)
     .sort((a,b2) => getCI(a) - getCI(b2))[0];
+  const nextDiff = nextBook ? Math.round((getCI(nextBook) - now) / 86400000) : null;
+  const nextProp = nextBook ? properties.find(p => p.id === getBookingPropId(nextBook)) : null;
 
   // 今日〜7日後のイベント
   const events = []; // { date, type:'in'|'out', booking }
