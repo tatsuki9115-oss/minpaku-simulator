@@ -1291,7 +1291,7 @@ function renderCalendarTab() {
               <div style="font-size:10px;color:#aaa">${fmtD(b.checkin)} → ${fmtD(coStr)}（${b.nights}泊）</div>
             </div>
           </div>
-          ${b.code ? `<div style="display:flex;gap:6px">
+          ${b.code ? `<div style="display:flex;gap:6px;margin-bottom:6px">
             <button onclick="toggleCheckFromList('${b.code}','formDone')" style="flex:1;font-size:13px;font-weight:800;padding:10px 6px;border-radius:10px;border:2px solid ${formBorder};cursor:pointer;background:${formBg};color:${formColor}">📋 ${chk.formDone?'名簿 ✓ 済':'名簿 未提出'}</button>
             <div style="flex:1;display:flex;flex-direction:column;gap:4px">
               ${staffList.length > 0
@@ -1302,7 +1302,8 @@ function renderCalendarTab() {
                 : ''}
               <button onclick="toggleCheckFromList('${b.code}','cleaningDone')" style="font-size:13px;font-weight:800;padding:${staffList.length>0?'5':'10'}px 6px;border-radius:10px;border:2px solid ${cleanBorder};cursor:pointer;background:${cleanBg};color:${cleanColor};width:100%">🧹 ${chk.cleaningDone?'清掃 ✓ 済':'清掃 未手配'}</button>
             </div>
-          </div>` : ''}
+          </div>
+          <button onclick="generateBookingLineMsg('${b.code}')" style="width:100%;padding:9px 6px;font-size:13px;font-weight:800;border-radius:10px;border:2px solid #00B900;background:white;color:#00B900;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;box-sizing:border-box"><span>📱</span><span>清掃依頼LINE生成</span></button>` : ''}
         </div>`;
       }).join('')}
     </div>`;
@@ -3269,6 +3270,79 @@ function renderAnnual() {
 renderSimPropertySelect();
 renderHistory();
 initFirebaseSync();
+
+// ==================== 清掃依頼LINE文生成 ====================
+function generateBookingLineMsg(code) {
+  const b = airbnbBookings.find(x => x.code === code);
+  if (!b) return;
+
+  const prop = properties.find(p => p.id === getBookingPropId(b));
+  const propName = prop ? prop.name : '物件';
+  const coStr = getCheckout(b);
+  const dayNames = ['日','月','火','水','木','金','土'];
+
+  function fmtDateLine(dateStr) {
+    if (!dateStr) return '不明';
+    const parts = dateStr.split('/').map(Number);
+    const d = new Date(parts[0], parts[1]-1, parts[2]);
+    return `${parts[1]}/${parts[2]}（${dayNames[d.getDay()]}）`;
+  }
+
+  function guestLine(booking) {
+    const a = booking.adults != null ? booking.adults : '?';
+    const c = booking.children != null ? booking.children : '?';
+    const i = booking.infants != null ? booking.infants : '?';
+    return `　大人${a}名・子ども${c}名・乳幼児${i}名`;
+  }
+
+  // 同物件で次のチェックイン（チェックアウト日以降で最も近い）
+  const propId = getBookingPropId(b);
+  const coDate = parseDateStr(coStr);
+  const nextEntry = airbnbBookings
+    .filter(x => x.code !== code && getBookingPropId(x) === propId && x.checkin)
+    .map(x => ({ x, d: parseDateStr(x.checkin) }))
+    .filter(({ d }) => d && d >= coDate)
+    .sort((a, z) => a.d - z.d)[0];
+
+  const lines = [];
+  lines.push(`🏠 ${propName}`);
+  lines.push('');
+  lines.push(`【チェックアウト10時】${fmtDateLine(coStr)}`);
+  lines.push(guestLine(b));
+  lines.push('');
+  if (nextEntry) {
+    lines.push(`【次のチェックイン15時】${fmtDateLine(nextEntry.x.checkin)}`);
+    lines.push(guestLine(nextEntry.x));
+  } else {
+    lines.push('【次のチェックイン】現時点で予約なし');
+  }
+  lines.push('');
+  lines.push('よろしくお願いします。→清掃入れますか？');
+
+  showLineMessageModal(lines.join('\n'));
+}
+
+function showLineMessageModal(msg) {
+  const existing = document.querySelector('[data-line-modal]');
+  if (existing) document.body.removeChild(existing);
+
+  const overlay = document.createElement('div');
+  overlay.setAttribute('data-line-modal', '1');
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:white;border-radius:20px 20px 0 0;padding:20px 16px 36px;width:100%;max-width:600px;max-height:82vh;display:flex;flex-direction:column;box-sizing:border-box">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-shrink:0">
+        <div style="font-size:15px;font-weight:800;color:#1a1a2e">📱 清掃依頼LINE文</div>
+        <button onclick="document.body.removeChild(document.querySelector('[data-line-modal]'))" style="background:none;border:none;font-size:24px;color:#bbb;cursor:pointer;line-height:1;padding:0 4px">×</button>
+      </div>
+      <textarea id="line-msg-area" readonly style="flex:1;min-height:220px;border:1.5px solid #eee;border-radius:12px;padding:14px;font-size:14px;line-height:1.8;color:#333;resize:none;font-family:inherit;background:#f8f8f8;white-space:pre">${escHtml(msg)}</textarea>
+      <button onclick="(function(){const t=document.getElementById('line-msg-area');if(navigator.clipboard){navigator.clipboard.writeText(t.value).then(()=>showToast('コピーしました！LINEに貼り付けてください','success')).catch(()=>{t.select();document.execCommand('copy');showToast('コピーしました！','success')});}else{t.select();document.execCommand('copy');showToast('コピーしました！','success');}})()" style="margin-top:12px;flex-shrink:0;width:100%;padding:15px;background:#00B900;border:none;border-radius:12px;color:white;font-size:15px;font-weight:800;cursor:pointer;letter-spacing:.5px">
+        コピーしてLINEに貼り付け
+      </button>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) document.body.removeChild(overlay); });
+}
 
 // ==================== カレンダー日付詳細モーダル ====================
 function showDayDetail(year, month, day) {
