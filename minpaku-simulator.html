@@ -3305,6 +3305,9 @@ function generateBookingLineMsg(code) {
     .sort((a, z) => a.d - z.d)[0];
 
   const lines = [];
+  lines.push('お世話になります！');
+  lines.push('清掃スケジュールのご確認お願いします。');
+  lines.push('');
   lines.push(`🏠 ${propName}`);
   lines.push('');
   lines.push(`【チェックアウト10時】${fmtDateLine(coStr)}`);
@@ -3317,7 +3320,8 @@ function generateBookingLineMsg(code) {
     lines.push('【次のチェックイン】現時点で予約なし');
   }
   lines.push('');
-  lines.push('よろしくお願いします。→清掃入れますか？');
+  lines.push('ご都合いかがでしょうか。');
+  lines.push('お返事お待ちしてます。');
 
   showLineMessageModal(lines.join('\n'));
 }
