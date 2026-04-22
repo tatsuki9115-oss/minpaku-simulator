@@ -1586,14 +1586,17 @@ function removeCostRow(pi, type, ci) {
 function updateCleaningStaff(pi, si, field, val) {
   if (!properties[pi].cleaningStaff) properties[pi].cleaningStaff = [];
   properties[pi].cleaningStaff[si][field] = val;
+  saveData();
 }
 function addCleaningStaff(pi) {
   if (!properties[pi].cleaningStaff) properties[pi].cleaningStaff = [];
   properties[pi].cleaningStaff.push({ name: '', phone: '' });
+  saveData();
   renderSettingsKeepOpen();
 }
 function removeCleaningStaff(pi, si) {
   properties[pi].cleaningStaff.splice(si, 1);
+  saveData();
   renderSettingsKeepOpen();
 }
 
