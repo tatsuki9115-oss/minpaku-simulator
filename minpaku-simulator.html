@@ -1066,7 +1066,7 @@ function renderMonthly() {
     csvBooks.forEach(b => {
       totalRevenue += b.revenue;
       const prop = properties.find(p => p.id === getBookingPropId(b));
-      if (prop) totalVarCosts += prop.perBookingCosts.reduce((s, c) => s + c.amount, 0);
+      if (prop) totalVarCosts += getPerBookingTotal(b, prop);
       totalNights += b.nights;
     });
     // 固定費：この月に営業中の物件全体
@@ -1515,10 +1515,18 @@ function renderSettings() {
         <div class="cost-section-title" style="color:#1C9A52">🧹 清掃スタッフ（物件ごとに登録）</div>
         <div style="font-size:11px;color:#bbb;margin-bottom:8px">チェックイン後の清掃を担当するスタッフ候補を登録してください</div>
         ${(p.cleaningStaff||[]).map((s,si) => `
-          <div class="cost-row" style="margin-bottom:6px">
-            <input class="cost-name" type="text" value="${escHtml(s.name)}" placeholder="スタッフ名（例: 田中さん）" oninput="updateCleaningStaff(${pi},${si},'name',this.value)">
-            <input class="cost-amount" type="tel" value="${escHtml(s.phone||'')}" placeholder="090-xxxx-xxxx" style="width:130px;font-size:12px;text-align:left" oninput="updateCleaningStaff(${pi},${si},'phone',this.value)">
-            <button class="btn-remove-row" onclick="removeCleaningStaff(${pi},${si})">×</button>
+          <div style="margin-bottom:10px;padding:8px 10px;background:#f7f7f7;border-radius:10px;border:1px solid #ebebeb">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+              <input class="cost-name" type="text" value="${escHtml(s.name)}" placeholder="スタッフ名（例: 田中さん）" style="flex:1" oninput="updateCleaningStaff(${pi},${si},'name',this.value)">
+              <button class="btn-remove-row" onclick="removeCleaningStaff(${pi},${si})">×</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <input type="tel" value="${escHtml(s.phone||'')}" placeholder="090-xxxx-xxxx" style="flex:1;padding:6px 8px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:12px;color:#333;box-sizing:border-box" oninput="updateCleaningStaff(${pi},${si},'phone',this.value)">
+              <div style="display:flex;align-items:center;gap:3px;flex-shrink:0">
+                <input type="number" value="${s.fee!=null&&s.fee!==''?s.fee:''}" placeholder="清掃料金" inputmode="numeric" min="0" step="100" style="width:88px;padding:6px 8px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateCleaningStaff(${pi},${si},'fee',this.value)">
+                <span style="font-size:11px;color:#999;white-space:nowrap">円</span>
+              </div>
+            </div>
           </div>`).join('')}
         <button class="btn-add-row" onclick="addCleaningStaff(${pi})">＋ スタッフを追加</button>
         <div class="divider"></div>
@@ -1930,7 +1938,7 @@ function renderInvestmentRecovery() {
       const [by, bm] = b.checkin.split('/').map(Number);
       // 実費入力済みの月は変動費を加算しない（実費に含まれているため）
       if (!hasActualCosts(p.id, by, bm)) {
-        totalVarCosts += p.perBookingCosts.reduce((s, c) => s + c.amount, 0);
+        totalVarCosts += getPerBookingTotal(b, p);
       }
     });
 
@@ -1945,7 +1953,7 @@ function renderInvestmentRecovery() {
       monthRevMap[key] = (monthRevMap[key] || 0) + b.revenue;
       // 実費入力済みの月は変動費を加算しない
       if (!hasActualCosts(p.id, y, mo)) {
-        monthVarMap[key] = (monthVarMap[key] || 0) + p.perBookingCosts.reduce((s, c) => s + c.amount, 0);
+        monthVarMap[key] = (monthVarMap[key] || 0) + getPerBookingTotal(b, p);
       }
     });
     // 営業開始〜現在の全月を列挙
@@ -2570,13 +2578,29 @@ function setListingMapByIndex(idx, propId) {
 
 function getBookingPropId(b) { return listingMap[b.listing] || null; }
 
+// 予約ごとの変動費合計（清掃スタッフに料金設定がある場合はその金額を使う）
+function getPerBookingTotal(booking, prop) {
+  if (!prop) return 0;
+  const chk = (booking && booking.code) ? (bookingChecks[booking.code] || {}) : {};
+  const staff = chk.cleaningStaffName
+    ? (prop.cleaningStaff || []).find(s => s.name === chk.cleaningStaffName)
+    : null;
+  const staffFee = (staff && staff.fee !== undefined && staff.fee !== '' && staff.fee !== null)
+    ? (parseInt(staff.fee) || 0)
+    : null;
+  return prop.perBookingCosts.reduce((sum, c) => {
+    if (c.name === '清掃費' && staffFee !== null) return sum + staffFee;
+    return sum + c.amount;
+  }, 0);
+}
+
 function calcAirbnbProfit(b) {
   const propId = getBookingPropId(b);
   const prop = properties.find(p => p.id === propId);
   if (!prop) return null;
   const monthlyTotal = prop.monthlyFixedCosts.reduce((s, c) => s + c.amount, 0);
   const fixed = Math.round(monthlyTotal / 18 * b.nights);
-  const perBooking = prop.perBookingCosts.reduce((s, c) => s + c.amount, 0);
+  const perBooking = getPerBookingTotal(b, prop);
   return b.revenue - fixed - perBooking;
 }
 
@@ -2862,7 +2886,7 @@ function renderAnnual() {
       const prop = properties.find(p => p.id === pid);
       // 実費入力済みの物件は変動費を加算しない（実費に含まれているため）
       if (prop && !hasActualCosts(pid, mYear, m)) {
-        varCosts += prop.perBookingCosts.reduce((s, c) => s + c.amount, 0);
+        varCosts += getPerBookingTotal(b, prop);
       }
       nights += b.nights;
     });
@@ -2954,7 +2978,7 @@ function renderAnnual() {
           const prop = properties.find(p => p.id === pid);
           const bColor = getPropColor(pid);
           const coStr = getCheckout(b);
-          const bVarCost = (b.revenue > 0 && prop && !hasActualCosts(pid, sY, sM)) ? prop.perBookingCosts.reduce((s,c)=>s+c.amount,0) : 0;
+          const bVarCost = (b.revenue > 0 && prop && !hasActualCosts(pid, sY, sM)) ? getPerBookingTotal(b, prop) : 0;
           const bProfit = b.revenue - bVarCost;
           const bIsP = bProfit >= 0;
           return `<div class="booking-row" style="--prop-color:${bColor}">
@@ -3234,7 +3258,7 @@ function renderAnnual() {
               const fmtD = s => { if (!s) return '?'; const p = s.split('/'); return `${parseInt(p[1])}/${parseInt(p[2])}`; };
               // 利益 = 受取 - 固定費按分(泊数÷月総泊数) - 変動費
               const allocatedFixed = ms.nights > 0 ? Math.round(ms.monthFixedCosts / ms.nights * b.nights) : 0;
-              const bVarCost = (prop && !hasActualCosts(pid, ms.year, ms.month)) ? prop.perBookingCosts.reduce((s,c)=>s+c.amount,0) : 0;
+              const bVarCost = (prop && !hasActualCosts(pid, ms.year, ms.month)) ? getPerBookingTotal(b, prop) : 0;
               const bProfit = b.revenue - allocatedFixed - bVarCost;
               const bIsP = bProfit >= 0;
               return `<div class="booking-row" style="--prop-color:${bColor}">
