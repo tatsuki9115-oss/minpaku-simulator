@@ -3304,8 +3304,12 @@ function generateBookingLineMsg(code) {
     .filter(({ d }) => d && d >= coDate)
     .sort((a, z) => a.d - z.d)[0];
 
+  const hour = new Date().getHours();
+  const greeting = hour >= 5 && hour < 12 ? 'おはようございます。'
+                 : hour >= 12 && hour < 18 ? 'こんにちは。'
+                 : 'こんばんは。';
   const lines = [];
-  lines.push('お世話になります！');
+  lines.push(greeting);
   lines.push('清掃スケジュールのご確認お願いします。');
   lines.push('');
   lines.push(`🏠 ${propName}`);
