@@ -3684,7 +3684,7 @@ function generatePaymentStatement(code) {
     <tr>
       <td>実費精算</td><td>立替費用</td>
       <td class="num">${expenseTotal.toLocaleString('ja-JP')}円</td>
-      <td>${expenseNotes}</td><td>—</td>
+      <td>${expenseNotes}</td>
     </tr>` : '';
 
   const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">
@@ -3712,14 +3712,14 @@ function generatePaymentStatement(code) {
       <tr><td>施設/案件</td><td>${escHtml(propName)}（${fmtDateJa(b.checkin)} チェックイン → ${fmtDateJa(coStr)} チェックアウト）</td></tr>
     </table>
     <table class="items">
-      <thead><tr><th>区分</th><th>項目</th><th>金額（税込）</th><th>備考</th><th>レシート</th></tr></thead>
+      <thead><tr><th>区分</th><th>項目</th><th>金額（税込）</th><th>備考</th></tr></thead>
       <tbody>
-        <tr><td>役務提供</td><td>清掃代金</td><td class="num">${cleaningFee.toLocaleString('ja-JP')}円</td><td>税込固定</td><td>—</td></tr>
+        <tr><td>役務提供</td><td>清掃代金</td><td class="num">${cleaningFee.toLocaleString('ja-JP')}円</td><td>税込固定</td></tr>
         ${expenseRow}
         <tr class="total-row">
           <td colspan="2" style="text-align:right">合計支払額（税込）</td>
           <td class="num">${total.toLocaleString('ja-JP')}円</td>
-          <td colspan="2"></td>
+          <td></td>
         </tr>
       </tbody>
     </table>
