@@ -1299,31 +1299,33 @@ function renderCalendarTab() {
         const diffLabel = daysToCI < 0 ? `${-daysToCI}日超過` : daysToCI === 0 ? '今日' : `あと${daysToCI}日`;
         const diffColor = daysToCI < 0 ? '#D32F2F' : daysToCI <= 3 ? '#E65100' : daysToCI <= 7 ? '#F59E0B' : '#B0ADA8';
 
-        return `<div style="background:white;border-radius:14px;padding:12px 14px;margin-bottom:8px;${borderStyle}">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        return `<div style="background:white;border-radius:14px;padding:10px 12px;margin-bottom:6px;${borderStyle}">
+          <!-- ヘッダー：物件名・ゲスト名 左／日付 右 -->
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px">
             <div style="flex:1;min-width:0">
-              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
                 <span style="font-size:12px;font-weight:700;color:${prop ? getPropColor(getBookingPropId(b)) : '#aaa'}">${prop ? prop.name : '⚠️ 未設定'}</span>
                 <span style="font-size:11px;font-weight:800;color:${diffColor}">${diffLabel}</span>
-                ${hasAlert ? '<span style="font-size:10px;font-weight:800;color:#D32F2F;background:#FFEBEE;padding:1px 6px;border-radius:6px">要対応</span>' : ''}
+                ${hasAlert ? '<span style="font-size:10px;font-weight:800;color:#D32F2F;background:#FFEBEE;padding:1px 5px;border-radius:5px">要対応</span>' : ''}
               </div>
-              <div style="font-size:14px;font-weight:700;color:#1a1a2e;margin:3px 0 1px">${escHtml(b.guestName||'ゲスト')}</div>
-              <div style="font-size:10px;color:#aaa">${fmtD(b.checkin)} → ${fmtD(coStr)}（${b.nights}泊）</div>
+              <div style="font-size:14px;font-weight:700;color:#1a1a2e;margin-top:2px">${escHtml(b.guestName||'ゲスト')}</div>
+            </div>
+            <div style="font-size:10px;color:#aaa;text-align:right;flex-shrink:0;margin-left:8px;line-height:1.5">
+              ${fmtD(b.checkin)} → ${fmtD(coStr)}<br><span style="font-weight:600;color:#888">${b.nights}泊</span>
             </div>
           </div>
-          ${b.code ? `<div style="display:flex;gap:6px;margin-bottom:6px">
-            <button onclick="toggleCheckFromList('${b.code}','formDone')" style="flex:1;font-size:13px;font-weight:800;padding:10px 6px;border-radius:10px;border:2px solid ${formBorder};cursor:pointer;background:${formBg};color:${formColor}">📋 ${chk.formDone?'名簿 ✓ 済':'名簿 未提出'}</button>
-            <div style="flex:1;display:flex;flex-direction:column;gap:4px">
-              ${staffList.length > 0
-                ? `<select style="font-size:11px;border:1.5px solid ${noStaffSelected?'#f97316':chk.cleaningDone?'#0284c7':'#e8e8e8'};border-radius:8px;padding:4px 6px;background:${noStaffSelected?'#FFF3E0':'white'};color:${noStaffSelected?'#E65100':'#555'};width:100%;font-weight:${noStaffSelected?'700':'400'}" onchange="toggleCheckStaffFromList('${b.code}',this.value)">
-                    <option value="">${noStaffSelected?'⚠️ スタッフを選択':'👤 スタッフ選択'}</option>
-                    ${staffList.map(s => `<option value="${escHtml(s.name)}" ${chk.cleaningStaffName===s.name?'selected':''}>${escHtml(s.name)}</option>`).join('')}
-                  </select>`
-                : ''}
-              <button onclick="toggleCheckFromList('${b.code}','cleaningDone')" style="font-size:13px;font-weight:800;padding:${staffList.length>0?'5':'10'}px 6px;border-radius:10px;border:2px solid ${noStaffSelected?'#ddd':cleanBorder};cursor:${noStaffSelected?'not-allowed':'pointer'};background:${noStaffSelected?'#f5f5f5':cleanBg};color:${noStaffSelected?'#bbb':cleanColor};width:100%;opacity:${noStaffSelected?'0.5':'1'}">🧹 ${chk.cleaningDone?'清掃 ✓ 済':noStaffSelected?'先にスタッフを選択':'清掃 未手配'}</button>
-            </div>
+          ${b.code ? `<!-- アクション行：名簿 / スタッフ / 清掃 を横並び -->
+          <div style="display:grid;grid-template-columns:1fr ${staffList.length>0?'auto ':''}1fr;gap:4px;margin-bottom:4px;align-items:center">
+            <button onclick="toggleCheckFromList('${b.code}','formDone')" style="font-size:11px;font-weight:800;padding:7px 4px;border-radius:9px;border:2px solid ${formBorder};cursor:pointer;background:${formBg};color:${formColor}">📋 ${chk.formDone?'名簿 ✓ 済':'名簿 未提出'}</button>
+            ${staffList.length > 0
+              ? `<select style="font-size:11px;border:1.5px solid ${noStaffSelected?'#f97316':chk.cleaningDone?'#0284c7':'#e8e8e8'};border-radius:8px;padding:5px 4px;background:${noStaffSelected?'#FFF3E0':'white'};color:${noStaffSelected?'#E65100':'#555'};max-width:100px;font-weight:${noStaffSelected?'700':'400'}" onchange="toggleCheckStaffFromList('${b.code}',this.value)">
+                  <option value="">${noStaffSelected?'⚠️ 選択':'👤 スタッフ'}</option>
+                  ${staffList.map(s => `<option value="${escHtml(s.name)}" ${chk.cleaningStaffName===s.name?'selected':''}>${escHtml(s.name)}</option>`).join('')}
+                </select>`
+              : ''}
+            <button onclick="toggleCheckFromList('${b.code}','cleaningDone')" style="font-size:11px;font-weight:800;padding:7px 4px;border-radius:9px;border:2px solid ${noStaffSelected?'#ddd':cleanBorder};cursor:${noStaffSelected?'not-allowed':'pointer'};background:${noStaffSelected?'#f5f5f5':cleanBg};color:${noStaffSelected?'#bbb':cleanColor};opacity:${noStaffSelected?'0.5':'1'}">🧹 ${chk.cleaningDone?'清掃 ✓ 済':noStaffSelected?'先に選択':'清掃 未手配'}</button>
           </div>
-          <button onclick="generateBookingLineMsg('${b.code}')" style="width:100%;padding:9px 6px;font-size:13px;font-weight:800;border-radius:10px;border:2px solid #00B900;background:white;color:#00B900;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;box-sizing:border-box"><span>📱</span><span>清掃依頼LINE生成</span></button>
+          <button onclick="generateBookingLineMsg('${b.code}')" style="width:100%;padding:7px 6px;font-size:12px;font-weight:800;border-radius:9px;border:2px solid #00B900;background:white;color:#00B900;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;box-sizing:border-box"><span>📱</span><span>清掃依頼LINE生成</span></button>
           <div style="margin-top:8px;border-top:1px solid #f0f0f0;padding-top:6px">
             <button onclick="(function(btn){var body=btn.nextElementSibling;var isOpen=body.style.display!=='none';body.style.display=isOpen?'none':'block';btn.querySelector('.acc-arrow').textContent=isOpen?'▶':'▼';})(this)" style="width:100%;display:flex;align-items:center;gap:5px;background:none;border:none;padding:2px 0;cursor:pointer;text-align:left">
               <span class="acc-arrow" style="font-size:9px;color:#B0ADA8">▶</span>
