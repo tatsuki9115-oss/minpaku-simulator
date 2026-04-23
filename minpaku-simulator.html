@@ -1325,7 +1325,10 @@ function renderCalendarTab() {
               : ''}
             <button onclick="toggleCheckFromList('${b.code}','cleaningDone')" style="font-size:11px;font-weight:800;padding:7px 4px;border-radius:9px;border:2px solid ${noStaffSelected?'#ddd':cleanBorder};cursor:${noStaffSelected?'not-allowed':'pointer'};background:${noStaffSelected?'#f5f5f5':cleanBg};color:${noStaffSelected?'#bbb':cleanColor};opacity:${noStaffSelected?'0.5':'1'}">🧹 ${chk.cleaningDone?'清掃 ✓ 済':noStaffSelected?'先に選択':'清掃 未手配'}</button>
           </div>
-          <button onclick="generateBookingLineMsg('${b.code}')" style="width:100%;padding:7px 6px;font-size:12px;font-weight:800;border-radius:9px;border:2px solid #00B900;background:white;color:#00B900;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;box-sizing:border-box"><span>📱</span><span>清掃依頼LINE生成</span></button>
+          <div style="display:grid;grid-template-columns:1fr auto;gap:4px">
+            <button onclick="generateBookingLineMsg('${b.code}')" style="padding:7px 6px;font-size:12px;font-weight:800;border-radius:9px;border:2px solid #00B900;background:white;color:#00B900;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;box-sizing:border-box"><span>📱</span><span>清掃依頼LINE生成</span></button>
+            <button onclick="showPaymentStatementModal('${b.code}')" ${!chk.cleaningStaffName?'disabled':''} style="padding:7px 10px;font-size:12px;font-weight:800;border-radius:9px;border:1.5px solid ${chk.cleaningStaffName?'#4a7fc1':'#ddd'};background:${chk.cleaningStaffName?'white':'#f5f5f5'};color:${chk.cleaningStaffName?'#4a7fc1':'#bbb'};cursor:${chk.cleaningStaffName?'pointer':'not-allowed'};white-space:nowrap">📄 支払明細書</button>
+          </div>
           <div style="margin-top:8px;border-top:1px solid #f0f0f0;padding-top:6px">
             <button onclick="(function(btn){var body=btn.nextElementSibling;var isOpen=body.style.display!=='none';body.style.display=isOpen?'none':'block';btn.querySelector('.acc-arrow').textContent=isOpen?'▶':'▼';})(this)" style="width:100%;display:flex;align-items:center;gap:5px;background:none;border:none;padding:2px 0;cursor:pointer;text-align:left">
               <span class="acc-arrow" style="font-size:9px;color:#B0ADA8">▶</span>
@@ -3581,6 +3584,154 @@ function _refreshCalendarDots() {
   if (document.getElementById('page-calendar').classList.contains('active')) {
     renderCalendarTab();
   }
+}
+
+// ==================== 支払明細書 ====================
+const PAYEE_HISTORY_KEY = 'payeeHistory';
+
+function getPayeeHistory() {
+  try { return JSON.parse(localStorage.getItem(PAYEE_HISTORY_KEY) || '[]'); } catch { return []; }
+}
+
+function savePayeeHistory(name) {
+  if (!name) return;
+  let hist = getPayeeHistory().filter(h => h !== name);
+  hist.unshift(name);
+  if (hist.length > 10) hist = hist.slice(0, 10);
+  localStorage.setItem(PAYEE_HISTORY_KEY, JSON.stringify(hist));
+}
+
+function showPaymentStatementModal(code) {
+  const b = airbnbBookings.find(x => x.code === code);
+  if (!b) return;
+  const chk = bookingChecks[code] || {};
+  if (!chk.cleaningStaffName) { showToast('担当スタッフが設定されていません', 'error'); return; }
+
+  const hist = getPayeeHistory();
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+
+  const overlay = document.createElement('div');
+  overlay.setAttribute('data-paysmt-modal', '1');
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML = `
+    <div style="background:white;border-radius:16px;padding:20px;width:100%;max-width:340px;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+      <div style="font-size:15px;font-weight:700;color:#333;margin-bottom:4px">📄 支払明細書を作成</div>
+      <div style="font-size:11px;color:#aaa;margin-bottom:16px">${chk.cleaningStaffName} 担当分</div>
+
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:4px">支払先</label>
+        <input id="paysmt-payee" list="paysmt-payee-list" type="text" placeholder="例: 小西聡子" autocomplete="off"
+          style="width:100%;padding:9px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;box-sizing:border-box;color:#333">
+        <datalist id="paysmt-payee-list">
+          ${hist.map(h => `<option value="${escHtml(h)}">`).join('')}
+        </datalist>
+        ${hist.length > 0 ? `<div style="font-size:10px;color:#aaa;margin-top:4px">▲ 過去の入力から選べます</div>` : ''}
+      </div>
+
+      <div style="margin-bottom:20px">
+        <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:4px">支払日</label>
+        <input id="paysmt-date" type="date" value="${todayStr}"
+          style="width:100%;padding:9px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;box-sizing:border-box;color:#333">
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button onclick="document.body.removeChild(document.querySelector('[data-paysmt-modal]'))"
+          style="padding:9px 16px;border:1.5px solid #eee;border-radius:8px;font-weight:700;background:white;color:#888;font-size:13px;cursor:pointer">キャンセル</button>
+        <button onclick="generatePaymentStatement('${code}')"
+          style="padding:9px 20px;border:none;border-radius:8px;font-weight:700;background:#4a7fc1;color:white;font-size:13px;cursor:pointer">作成</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('paysmt-payee').focus();
+}
+
+function generatePaymentStatement(code) {
+  const payee = (document.getElementById('paysmt-payee')?.value || '').trim();
+  const payDate = document.getElementById('paysmt-date')?.value || '';
+  if (!payee) { showToast('支払先を入力してください', 'error'); return; }
+
+  savePayeeHistory(payee);
+  document.body.removeChild(document.querySelector('[data-paysmt-modal]'));
+
+  const b = airbnbBookings.find(x => x.code === code);
+  if (!b) return;
+  const chk = bookingChecks[code] || {};
+  const prop = properties.find(p => p.id === getBookingPropId(b));
+  const propName = prop ? prop.name : '未設定';
+  const staff = prop ? (prop.cleaningStaff || []).find(s => s.name === chk.cleaningStaffName) : null;
+
+  // 金額
+  const cleaningFee = (staff && staff.fee != null && staff.fee !== '') ? (parseInt(staff.fee) || 0) : (prop?.perBookingCosts.find(c => c.name === '清掃費')?.amount || 0);
+  const laundryFee  = chk.laundryFee  != null ? (parseInt(chk.laundryFee)  || 0) : 1400;
+  const suppliesFee = chk.suppliesFee != null ? (parseInt(chk.suppliesFee) || 0) : 0;
+  const expenseTotal = laundryFee + suppliesFee;
+  const total = cleaningFee + expenseTotal;
+
+  // 日付フォーマット
+  const dayNames = ['日','月','火','水','木','金','土'];
+  function fmtDateJa(dateStr) {
+    if (!dateStr) return '?';
+    const p = dateStr.split('/').map(Number);
+    const d = new Date(p[0], p[1]-1, p[2]);
+    return `${p[1]}月${p[2]}日（${dayNames[d.getDay()]}）`;
+  }
+  const coStr = getCheckout(b);
+
+  // 備考
+  const expenseNotes = [laundryFee > 0 ? `コインランドリー ${laundryFee.toLocaleString('ja-JP')}円` : '', suppliesFee > 0 ? `消耗品 ${suppliesFee.toLocaleString('ja-JP')}円` : ''].filter(Boolean).join('<br>');
+  const expenseRow = expenseTotal > 0 ? `
+    <tr>
+      <td>実費精算</td><td>立替費用</td>
+      <td class="num">${expenseTotal.toLocaleString('ja-JP')}円</td>
+      <td>${expenseNotes}</td><td>—</td>
+    </tr>` : '';
+
+  const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">
+    <title>支払明細書_${payee}_${payDate}</title>
+    <style>
+      body{font-family:'Hiragino Sans','Yu Gothic',sans-serif;padding:48px 56px;color:#222;max-width:720px;margin:0 auto;font-size:14px}
+      h2{font-size:20px;font-weight:900;border-bottom:3px solid #222;padding-bottom:10px;margin-bottom:24px}
+      .meta{border-collapse:collapse;margin-bottom:24px;width:100%}
+      .meta td{padding:5px 16px 5px 0;vertical-align:top}
+      .meta td:first-child{font-weight:700;width:90px;color:#555}
+      table.items{border-collapse:collapse;width:100%;margin-bottom:24px}
+      table.items th{background:#1a365d;color:white;padding:9px 12px;font-size:13px;text-align:center;border:1px solid #1a365d}
+      table.items td{border:1px solid #ccc;padding:9px 12px;font-size:13px;vertical-align:top}
+      table.items td.num{text-align:right;white-space:nowrap}
+      .total-row td{font-weight:900;font-size:15px;background:#f0f4f8}
+      .memo-box{border:1px solid #ddd;border-radius:6px;padding:10px 14px;font-size:12px;color:#555;margin-bottom:28px}
+      .memo-box strong{color:#333}
+      .print-btn{display:block;margin:0 auto;padding:12px 40px;font-size:15px;font-weight:700;background:#1a365d;color:white;border:none;border-radius:10px;cursor:pointer}
+      @media print{.no-print{display:none}body{padding:20px 28px}}
+    </style></head><body>
+    <h2>支払明細書（清掃費用・税込表記）</h2>
+    <table class="meta">
+      <tr><td>支払日</td><td>${payDate}</td></tr>
+      <tr><td>支払先</td><td><strong>${escHtml(payee)}</strong>　様</td></tr>
+      <tr><td>施設/案件</td><td>${escHtml(propName)}（${fmtDateJa(b.checkin)} チェックイン → ${fmtDateJa(coStr)} チェックアウト）</td></tr>
+    </table>
+    <table class="items">
+      <thead><tr><th>区分</th><th>項目</th><th>金額（税込）</th><th>備考</th><th>レシート</th></tr></thead>
+      <tbody>
+        <tr><td>役務提供</td><td>清掃代金</td><td class="num">${cleaningFee.toLocaleString('ja-JP')}円</td><td>税込固定</td><td>—</td></tr>
+        ${expenseRow}
+        <tr class="total-row">
+          <td colspan="2" style="text-align:right">合計支払額（税込）</td>
+          <td class="num">${total.toLocaleString('ja-JP')}円</td>
+          <td colspan="2"></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="memo-box"><strong>メモ</strong>　表示はすべて税込。立替費用は実費精算（レシート推奨）。</div>
+    <div class="no-print" style="text-align:center">
+      <button class="print-btn" onclick="window.print()">🖨️ 印刷 / PDF保存</button>
+    </div>
+  </body></html>`;
+
+  const win = window.open('', '_blank');
+  if (win) { win.document.write(html); win.document.close(); }
+  else showToast('ポップアップがブロックされました。ブラウザの設定を確認してください。', 'error');
 }
 </script>
 </body>
