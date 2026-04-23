@@ -3629,10 +3629,16 @@ function showPaymentStatementModal(code) {
         ${hist.length > 0 ? `<div style="font-size:10px;color:#aaa;margin-top:4px">▲ 過去の入力から選べます</div>` : ''}
       </div>
 
-      <div style="margin-bottom:20px">
+      <div style="margin-bottom:12px">
         <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:4px">支払日</label>
         <input id="paysmt-date" type="date" value="${todayStr}"
           style="width:100%;padding:9px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;box-sizing:border-box;color:#333">
+      </div>
+
+      <div style="margin-bottom:20px">
+        <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:4px">メモ</label>
+        <textarea id="paysmt-memo" rows="3"
+          style="width:100%;padding:9px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:12px;box-sizing:border-box;color:#333;resize:vertical;line-height:1.6">表示はすべて税込。立替費用は実費精算（レシート推奨）。</textarea>
       </div>
 
       <div style="display:flex;gap:8px;justify-content:flex-end">
@@ -3649,6 +3655,7 @@ function showPaymentStatementModal(code) {
 function generatePaymentStatement(code) {
   const payee = (document.getElementById('paysmt-payee')?.value || '').trim();
   const payDate = document.getElementById('paysmt-date')?.value || '';
+  const memo = (document.getElementById('paysmt-memo')?.value || '').trim();
   if (!payee) { showToast('支払先を入力してください', 'error'); return; }
 
   savePayeeHistory(payee);
@@ -3723,7 +3730,7 @@ function generatePaymentStatement(code) {
         </tr>
       </tbody>
     </table>
-    <div class="memo-box"><strong>メモ</strong>　表示はすべて税込。立替費用は実費精算（レシート推奨）。</div>
+    ${memo ? `<div class="memo-box"><strong>メモ</strong>　${escHtml(memo).replace(/\n/g,'<br>')}</div>` : ''}
     <div class="no-print" style="text-align:center">
       <button class="print-btn" onclick="window.print()">🖨️ 印刷 / PDF保存</button>
     </div>
