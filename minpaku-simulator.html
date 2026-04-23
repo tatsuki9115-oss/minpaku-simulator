@@ -1324,18 +1324,23 @@ function renderCalendarTab() {
             </div>
           </div>
           <button onclick="generateBookingLineMsg('${b.code}')" style="width:100%;padding:9px 6px;font-size:13px;font-weight:800;border-radius:10px;border:2px solid #00B900;background:white;color:#00B900;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;box-sizing:border-box"><span>📱</span><span>清掃依頼LINE生成</span></button>
-          <div style="margin-top:8px;border-top:1px solid #f0f0f0;padding-top:8px">
-            <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:6px;letter-spacing:.05em">💴 実費入力</div>
-            <div style="display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:5px 6px">
-              <span style="font-size:11px;color:#555">🧹 清掃費</span>
-              <input type="text" inputmode="numeric" pattern="[0-9]*" value="${dispCleaning}" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','cleaningFee',this.value)" onblur="saveBookingChecks()">
-              <span style="font-size:11px;color:#999">円</span>
-              <span style="font-size:11px;color:#555">🌀 ランドリー代</span>
-              <input type="text" inputmode="numeric" pattern="[0-9]*" value="${dispLaundry}" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','laundryFee',this.value)" onblur="saveBookingChecks()">
-              <span style="font-size:11px;color:#999">円</span>
-              <span style="font-size:11px;color:#555">🛒 消耗品</span>
-              <input type="text" inputmode="numeric" pattern="[0-9]*" value="${dispSupplies}" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','suppliesFee',this.value)" onblur="saveBookingChecks()">
-              <span style="font-size:11px;color:#999">円</span>
+          <div style="margin-top:8px;border-top:1px solid #f0f0f0;padding-top:6px">
+            <button onclick="(function(btn){var body=btn.nextElementSibling;var isOpen=body.style.display!=='none';body.style.display=isOpen?'none':'block';btn.querySelector('.acc-arrow').textContent=isOpen?'▶':'▼';})(this)" style="width:100%;display:flex;align-items:center;gap:5px;background:none;border:none;padding:2px 0;cursor:pointer;text-align:left">
+              <span class="acc-arrow" style="font-size:9px;color:#B0ADA8">▶</span>
+              <span style="font-size:10px;font-weight:700;color:#B0ADA8;letter-spacing:.05em">💴 実費入力</span>
+            </button>
+            <div style="display:none;margin-top:6px">
+              <div style="display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:5px 6px">
+                <span style="font-size:11px;color:#555">🧹 清掃費</span>
+                <input type="text" inputmode="numeric" pattern="[0-9]*" value="${dispCleaning}" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','cleaningFee',this.value)" onblur="saveBookingChecks()">
+                <span style="font-size:11px;color:#999">円</span>
+                <span style="font-size:11px;color:#555">🌀 ランドリー代</span>
+                <input type="text" inputmode="numeric" pattern="[0-9]*" value="${dispLaundry}" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','laundryFee',this.value)" onblur="saveBookingChecks()">
+                <span style="font-size:11px;color:#999">円</span>
+                <span style="font-size:11px;color:#555">🛒 消耗品</span>
+                <input type="text" inputmode="numeric" pattern="[0-9]*" value="${dispSupplies}" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','suppliesFee',this.value)" onblur="saveBookingChecks()">
+                <span style="font-size:11px;color:#999">円</span>
+              </div>
             </div>
           </div>` : ''}
         </div>`;
