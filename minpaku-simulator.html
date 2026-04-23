@@ -1517,13 +1517,13 @@ function renderSettings() {
         ${(p.cleaningStaff||[]).map((s,si) => `
           <div style="margin-bottom:10px;padding:8px 10px;background:#f7f7f7;border-radius:10px;border:1px solid #ebebeb">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-              <input class="cost-name" type="text" value="${escHtml(s.name)}" placeholder="スタッフ名（例: 田中さん）" style="flex:1" oninput="updateCleaningStaff(${pi},${si},'name',this.value)">
+              <input class="cost-name" type="text" value="${escHtml(s.name)}" placeholder="スタッフ名（例: 田中さん）" style="flex:1" oninput="updateCleaningStaff(${pi},${si},'name',this.value)" onblur="saveData()">
               <button class="btn-remove-row" onclick="removeCleaningStaff(${pi},${si})">×</button>
             </div>
             <div style="display:flex;align-items:center;gap:6px">
-              <input type="tel" value="${escHtml(s.phone||'')}" placeholder="090-xxxx-xxxx" style="flex:1;padding:6px 8px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:12px;color:#333;box-sizing:border-box" oninput="updateCleaningStaff(${pi},${si},'phone',this.value)">
+              <input type="tel" value="${escHtml(s.phone||'')}" placeholder="090-xxxx-xxxx" style="flex:1;padding:6px 8px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:12px;color:#333;box-sizing:border-box" oninput="updateCleaningStaff(${pi},${si},'phone',this.value)" onblur="saveData()">
               <div style="display:flex;align-items:center;gap:3px;flex-shrink:0">
-                <input type="text" inputmode="numeric" pattern="[0-9]*" value="${s.fee!=null&&s.fee!==''?s.fee:''}" placeholder="清掃料金" style="width:88px;padding:6px 8px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateCleaningStaff(${pi},${si},'fee',this.value.replace(/[^0-9]/g,''))">
+                <input type="text" inputmode="numeric" pattern="[0-9]*" value="${s.fee!=null&&s.fee!==''?s.fee:''}" placeholder="清掃料金" style="width:88px;padding:6px 8px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateCleaningStaff(${pi},${si},'fee',this.value.replace(/[^0-9]/g,''))" onblur="saveData()">
                 <span style="font-size:11px;color:#999;white-space:nowrap">円</span>
               </div>
             </div>
@@ -1594,7 +1594,7 @@ function removeCostRow(pi, type, ci) {
 function updateCleaningStaff(pi, si, field, val) {
   if (!properties[pi].cleaningStaff) properties[pi].cleaningStaff = [];
   properties[pi].cleaningStaff[si][field] = val;
-  saveData();
+  // saveData()はonblurで呼ぶ（oninputで毎回呼ぶとFirebaseリスナーが再描画してアコーディオンが閉じる）
 }
 function addCleaningStaff(pi) {
   if (!properties[pi].cleaningStaff) properties[pi].cleaningStaff = [];
