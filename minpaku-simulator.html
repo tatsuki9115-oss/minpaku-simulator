@@ -1273,6 +1273,14 @@ function renderCalendarTab() {
         const cinParts = b.checkin ? b.checkin.split('/').map(Number) : null;
         const cinDate = cinParts ? new Date(cinParts[0], cinParts[1]-1, cinParts[2]) : null;
         const daysToCI = cinDate ? Math.round((cinDate - nowForCal) / 86400000) : 999;
+        // 実費入力のデフォルト値計算
+        const _selStaff = staffList.find(s => s.name === chk.cleaningStaffName);
+        const _defCleaning = (_selStaff && _selStaff.fee != null && _selStaff.fee !== '')
+          ? (parseInt(_selStaff.fee) || 0)
+          : (prop ? (prop.perBookingCosts.find(c => c.name === '清掃費')?.amount || 0) : 0);
+        const dispCleaning = chk.cleaningFee != null ? chk.cleaningFee : _defCleaning;
+        const dispLaundry  = chk.laundryFee  != null ? chk.laundryFee  : 1400;
+        const dispSupplies = chk.suppliesFee != null ? chk.suppliesFee : 0;
 
         // アラート状態判定
         const formAlert = b.code && !chk.formDone && daysToCI <= 7 && daysToCI >= -3;
@@ -1315,7 +1323,21 @@ function renderCalendarTab() {
               <button onclick="toggleCheckFromList('${b.code}','cleaningDone')" style="font-size:13px;font-weight:800;padding:${staffList.length>0?'5':'10'}px 6px;border-radius:10px;border:2px solid ${noStaffSelected?'#ddd':cleanBorder};cursor:${noStaffSelected?'not-allowed':'pointer'};background:${noStaffSelected?'#f5f5f5':cleanBg};color:${noStaffSelected?'#bbb':cleanColor};width:100%;opacity:${noStaffSelected?'0.5':'1'}">🧹 ${chk.cleaningDone?'清掃 ✓ 済':noStaffSelected?'先にスタッフを選択':'清掃 未手配'}</button>
             </div>
           </div>
-          <button onclick="generateBookingLineMsg('${b.code}')" style="width:100%;padding:9px 6px;font-size:13px;font-weight:800;border-radius:10px;border:2px solid #00B900;background:white;color:#00B900;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;box-sizing:border-box"><span>📱</span><span>清掃依頼LINE生成</span></button>` : ''}
+          <button onclick="generateBookingLineMsg('${b.code}')" style="width:100%;padding:9px 6px;font-size:13px;font-weight:800;border-radius:10px;border:2px solid #00B900;background:white;color:#00B900;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;box-sizing:border-box"><span>📱</span><span>清掃依頼LINE生成</span></button>
+          <div style="margin-top:8px;border-top:1px solid #f0f0f0;padding-top:8px">
+            <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:6px;letter-spacing:.05em">💴 実費入力</div>
+            <div style="display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:5px 6px">
+              <span style="font-size:11px;color:#555">🧹 清掃費</span>
+              <input type="text" inputmode="numeric" pattern="[0-9]*" value="${dispCleaning}" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','cleaningFee',this.value)" onblur="saveBookingChecks()">
+              <span style="font-size:11px;color:#999">円</span>
+              <span style="font-size:11px;color:#555">🌀 ランドリー代</span>
+              <input type="text" inputmode="numeric" pattern="[0-9]*" value="${dispLaundry}" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','laundryFee',this.value)" onblur="saveBookingChecks()">
+              <span style="font-size:11px;color:#999">円</span>
+              <span style="font-size:11px;color:#555">🛒 消耗品</span>
+              <input type="text" inputmode="numeric" pattern="[0-9]*" value="${dispSupplies}" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','suppliesFee',this.value)" onblur="saveBookingChecks()">
+              <span style="font-size:11px;color:#999">円</span>
+            </div>
+          </div>` : ''}
         </div>`;
       }).join('')}
     </div>`;
@@ -2582,16 +2604,25 @@ function getBookingPropId(b) { return listingMap[b.listing] || null; }
 function getPerBookingTotal(booking, prop) {
   if (!prop) return 0;
   const chk = (booking && booking.code) ? (bookingChecks[booking.code] || {}) : {};
+
+  // 清掃費: 明示入力値 → スタッフ料金 → perBookingCosts['清掃費'] の順で参照
   const staff = chk.cleaningStaffName
     ? (prop.cleaningStaff || []).find(s => s.name === chk.cleaningStaffName)
     : null;
   const staffFee = (staff && staff.fee !== undefined && staff.fee !== '' && staff.fee !== null)
-    ? (parseInt(staff.fee) || 0)
-    : null;
-  return prop.perBookingCosts.reduce((sum, c) => {
-    if (c.name === '清掃費' && staffFee !== null) return sum + staffFee;
-    return sum + c.amount;
-  }, 0);
+    ? (parseInt(staff.fee) || 0) : null;
+  const defaultCleaningFee = staffFee !== null
+    ? staffFee
+    : (prop.perBookingCosts.find(c => c.name === '清掃費')?.amount || 0);
+  const cleaningFee = chk.cleaningFee != null ? (parseInt(chk.cleaningFee) || 0) : defaultCleaningFee;
+
+  // ランドリー代: 明示入力値 → デフォルト1400
+  const laundryFee = chk.laundryFee != null ? (parseInt(chk.laundryFee) || 0) : 1400;
+
+  // 消耗品: 明示入力値 → デフォルト0
+  const suppliesFee = chk.suppliesFee != null ? (parseInt(chk.suppliesFee) || 0) : 0;
+
+  return cleaningFee + laundryFee + suppliesFee;
 }
 
 function calcAirbnbProfit(b) {
@@ -3527,6 +3558,15 @@ function toggleCheckStaffFromList(code, staffName) {
   bookingChecks[code].cleaningStaffName = staffName;
   saveBookingChecks();
   renderCalendarTab();
+}
+
+// 予約ごとの実費入力（清掃費・ランドリー代・消耗品）
+// oninputで値をメモリに保持 → onblurでsaveBookingChecks()を呼んで保存
+function updateBookingCost(code, field, val) {
+  if (!bookingChecks[code]) bookingChecks[code] = {};
+  const cleaned = String(val).replace(/[^0-9]/g, '');
+  // 空欄はnull（デフォルト値に戻す）、数字があれば整数で保存
+  bookingChecks[code][field] = cleaned === '' ? null : (parseInt(cleaned) || 0);
 }
 
 function _refreshCalendarDots() {
