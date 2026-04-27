@@ -222,7 +222,8 @@
   .btn-add-property { width: 100%; padding: 16px; border: 1.5px dashed #E8E6E1; border-radius: 12px; background: white; color: #C8C5C0; font-size: 14px; font-weight: 700; cursor: pointer; }
   .btn-add-property:active { border-color: #F07C3F; color: #F07C3F; }
   .save-bar { position: fixed; bottom: 0; left: 0; right: 0; background: white; border-top: 1px solid #E8E6E1; padding: 12px 16px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
-  .btn-save { width: 100%; max-width: 640px; margin: 0 auto; display: block; background: #F07C3F; color: white; border: none; border-radius: 12px; padding: 15px; font-size: 15px; font-weight: 700; cursor: pointer; transition: all .1s; box-shadow: 0 3px 0 #C85A1F; }
+  .save-bar-inner { display: flex; gap: 8px; max-width: 640px; margin: 0 auto; }
+  .btn-save { flex: 1; background: #F07C3F; color: white; border: none; border-radius: 12px; padding: 15px; font-size: 15px; font-weight: 700; cursor: pointer; transition: all .1s; box-shadow: 0 3px 0 #C85A1F; }
   .btn-save:active { transform: translateY(2px); box-shadow: 0 1px 0 #C85A1F; }
   .btn-save.saved { background: #1C9A52; box-shadow: 0 3px 0 #157A3E; }
   .empty-state { text-align: center; color: #C8C5C0; padding: 40px 20px; font-size: 14px; }
@@ -433,7 +434,10 @@
   <div class="property-list" id="property-list"></div>
   <button class="btn-add-property" onclick="addProperty()">＋ 物件を追加</button>
   <div class="save-bar">
-    <button class="btn-save" id="save-btn" onclick="saveSettings()">設定を保存</button>
+    <div class="save-bar-inner">
+      <button onclick="downloadBackup()" style="padding:12px 18px;font-size:13px;font-weight:700;border-radius:12px;border:1.5px solid #4a7fc1;background:white;color:#4a7fc1;cursor:pointer;flex-shrink:0">💾 バックアップ</button>
+      <button class="btn-save" id="save-btn" onclick="saveSettings()">設定を保存</button>
+    </div>
   </div>
 </div>
 
@@ -585,7 +589,7 @@ function setLicenseType(pi, type) {
   else if (type === 'tokku') properties[pi].maxAnnualNights = 365;
   else properties[pi].maxAnnualNights = null;
   saveData();
-  renderSettings();
+  renderSettingsKeepOpen();
 }
 function setMaxAnnualNights(pi, val) {
   const n = parseInt(val);
@@ -661,7 +665,7 @@ function initFirebaseSync() {
     try { localStorage.setItem(KEYS.properties, JSON.stringify(val)); } catch(e) {}
     properties = val;
     renderSimPropertySelect && renderSimPropertySelect();
-    renderSettings && renderSettings();
+    renderSettingsKeepOpen ? renderSettingsKeepOpen() : (renderSettings && renderSettings());
   });
 
   fbdb.ref(KEYS.airbnb).on('value', snap => {
@@ -777,7 +781,7 @@ function showTab(tab) {
   if (tab === 'bookings') { renderDashboard(); }
   if (tab === 'calendar') { initCalendarTab(); }
   if (tab === 'annual') { initAnnualTab(); }
-  if (tab === 'settings') renderSettings();
+  if (tab === 'settings') renderSettingsKeepOpen();
 }
 
 // ==================== シミュレーション ====================
@@ -1684,6 +1688,32 @@ function saveSettings() {
   btn.classList.add('saved');
   setTimeout(() => { btn.textContent = '設定を保存'; btn.classList.remove('saved'); }, 2000);
   renderSimPropertySelect();
+}
+
+function downloadBackup() {
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+  const backup = {
+    exportedAt: now.toISOString(),
+    airbnbBookings,
+    properties,
+    bookingChecks,
+    listingMap,
+    actualCosts,
+    pricelabsForecast,
+    history,
+    monthlyData,
+    dataUpdatedAt
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `minpaku_backup_${dateStr}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 function escHtml(str) {
   return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
