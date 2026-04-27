@@ -3049,6 +3049,18 @@ function renderAnnual() {
           const bVarCost = (b.revenue > 0 && prop && !hasActualCosts(pid, sY, sM)) ? getPerBookingTotal(b, prop) : 0;
           const bProfit = b.revenue - bVarCost;
           const bIsP = bProfit >= 0;
+          // 変動費内訳（カレンダーの実費入力 or スタッフ料金 or デフォルト）
+          const _bChk = b.code ? (bookingChecks[b.code] || {}) : {};
+          const _bStaffList = prop ? (prop.cleaningStaff || []) : [];
+          const _bSelStaff = _bChk.cleaningStaffName ? _bStaffList.find(s => s.name === _bChk.cleaningStaffName) : null;
+          const _bStaffFee = (_bSelStaff && _bSelStaff.fee != null && _bSelStaff.fee !== '') ? (parseInt(_bSelStaff.fee) || 0) : null;
+          const _bDefClean = _bStaffFee !== null ? _bStaffFee : (prop ? (prop.perBookingCosts.find(c => c.name === '清掃費')?.amount || 0) : 0);
+          const _bCleanFee = _bChk.cleaningFee != null ? (parseInt(_bChk.cleaningFee) || 0) : _bDefClean;
+          const _bLaundry  = _bChk.laundryFee  != null ? (parseInt(_bChk.laundryFee)  || 0) : 1400;
+          const _bSupplies = _bChk.suppliesFee  != null ? (parseInt(_bChk.suppliesFee) || 0) : 0;
+          const varBreakdown = bVarCost > 0
+            ? [_bCleanFee>0?`🧹¥${fmt(_bCleanFee)}`:'', _bLaundry>0?`🌀¥${fmt(_bLaundry)}`:'', _bSupplies>0?`🛒¥${fmt(_bSupplies)}`:''].filter(Boolean).join(' + ')
+            : '';
           return `<div class="booking-row" style="--prop-color:${bColor}">
             <div class="booking-info">
               <div class="booking-prop">${prop?prop.name:'⚠️ 未設定'}${b.source==='pricelabs'?'<span style="font-size:11px;font-weight:700;background:#fff0eb;color:#e05a2b;padding:1px 5px;border-radius:3px;margin-left:5px">PL</span>':''}</div>
@@ -3059,6 +3071,7 @@ function renderAnnual() {
               <div style="font-size:10px;color:#C8C5C0">ゲスト <span style="font-weight:700;color:#aaa">¥${fmt(getGuestPayment(b.revenue))}</span></div>
               <div style="font-size:13px;font-weight:800;color:#1C1C1E;margin-top:1px">¥${fmt(b.revenue)}</div>
               <div style="font-size:11px;font-weight:700;color:${bIsP?'#1C9A52':'#E53935'};margin-top:2px">${bIsP?'':'▲'}¥${fmt(Math.abs(bProfit))}<span style="font-size:9px;font-weight:400;color:#C8C5C0;margin-left:2px">変動費後</span></div>
+              ${varBreakdown ? `<div style="font-size:9px;color:#C8C5C0;margin-top:1px">${varBreakdown}</div>` : ''}
             </div>
           </div>`;
         }).join('')}
