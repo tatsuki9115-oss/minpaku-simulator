@@ -675,6 +675,8 @@ function initFirebaseSync() {
   fbdb.ref(KEYS.forecast).on('value', snap => {
     const val = snap.val();
     if (!val || typeof val !== 'object') return;
+    // 空オブジェクトで有効データを上書きしない
+    if (Object.keys(val).length === 0 && Object.keys(pricelabsForecast).length > 0) return;
     if (JSON.stringify(val) === JSON.stringify(pricelabsForecast)) return;
     try { localStorage.setItem(KEYS.forecast, JSON.stringify(val)); } catch(e) {}
     pricelabsForecast = val;
@@ -684,7 +686,7 @@ function initFirebaseSync() {
   fbdb.ref(KEYS.listingMap).on('value', snap => {
     const val = snap.val();
     if (!val || typeof val !== 'object') return;
-    // 空オブジェクトでローカルの有効マッピングを上書きしない
+    // 空オブジェクトで有効データを上書きしない
     if (Object.keys(val).length === 0 && Object.keys(listingMap).length > 0) return;
     if (JSON.stringify(val) === JSON.stringify(listingMap)) return;
     try { localStorage.setItem(KEYS.listingMap, JSON.stringify(val)); } catch(e) {}
@@ -696,6 +698,7 @@ function initFirebaseSync() {
   fbdb.ref(KEYS.history).on('value', snap => {
     const val = snap.val();
     if (!Array.isArray(val)) return;
+    if (val.length === 0 && history.length > 0) return;
     if (JSON.stringify(val) === JSON.stringify(history)) return;
     try { localStorage.setItem(KEYS.history, JSON.stringify(val)); } catch(e) {}
     history = val;
@@ -705,6 +708,8 @@ function initFirebaseSync() {
   fbdb.ref(KEYS.monthly).on('value', snap => {
     const val = snap.val();
     if (!val || typeof val !== 'object') return;
+    // 空オブジェクトで有効データを上書きしない
+    if (Object.keys(val).length === 0 && Object.keys(monthlyData).length > 0) return;
     if (JSON.stringify(val) === JSON.stringify(monthlyData)) return;
     try { localStorage.setItem(KEYS.monthly, JSON.stringify(val)); } catch(e) {}
     monthlyData = val;
@@ -713,14 +718,19 @@ function initFirebaseSync() {
   fbdb.ref(KEYS.bookingChecks).on('value', snap => {
     const val = snap.val();
     if (!val || typeof val !== 'object') return;
+    // 空オブジェクトで有効データを上書きしない
+    if (Object.keys(val).length === 0 && Object.keys(bookingChecks).length > 0) return;
     if (JSON.stringify(val) === JSON.stringify(bookingChecks)) return;
     try { localStorage.setItem(KEYS.bookingChecks, JSON.stringify(val)); } catch(e) {}
     bookingChecks = val;
+    renderDashboard && renderDashboard();
   });
 
   fbdb.ref(KEYS.actualCosts).on('value', snap => {
     const val = snap.val();
     if (!val || typeof val !== 'object') return;
+    // 空オブジェクトで有効データを上書きしない
+    if (Object.keys(val).length === 0 && Object.keys(actualCosts).length > 0) return;
     if (JSON.stringify(val) === JSON.stringify(actualCosts)) return;
     try { localStorage.setItem(KEYS.actualCosts, JSON.stringify(val)); } catch(e) {}
     actualCosts = val;
