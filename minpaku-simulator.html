@@ -3268,6 +3268,7 @@ function renderAnnual() {
   {
     const nightsByProp = {};
     yearBooks.forEach(b => {
+      if (isLongStayListing(b)) return; // 定期借家（28泊以上）は180日カウントから除外
       const pid = getBookingPropId(b);
       nightsByProp[pid] = (nightsByProp[pid] || 0) + b.nights;
     });
