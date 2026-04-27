@@ -651,7 +651,12 @@ function initFirebaseSync() {
       if (!p.operationStart && def) p.operationStart = def.operationStart || '';
       if (!p.licenseType) p.licenseType = def ? (def.licenseType || 'minpaku') : 'minpaku';
       if (p.maxAnnualNights === undefined) p.maxAnnualNights = def ? (def.maxAnnualNights !== undefined ? def.maxAnnualNights : 180) : 180;
-      if (!p.cleaningStaff) p.cleaningStaff = [];
+      // 清掃スタッフ: Firebaseの空配列でローカルの登録済みデータを上書きしない
+      const localProp = properties.find(lp => lp.id === p.id);
+      const localStaff = localProp ? (localProp.cleaningStaff || []) : [];
+      if (!p.cleaningStaff || (p.cleaningStaff.length === 0 && localStaff.length > 0)) {
+        p.cleaningStaff = localStaff;
+      }
     });
     try { localStorage.setItem(KEYS.properties, JSON.stringify(val)); } catch(e) {}
     properties = val;
