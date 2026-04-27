@@ -2672,6 +2672,8 @@ function setListingMapByIndex(idx, propId) {
 }
 
 function getBookingPropId(b) { return listingMap[b.listing] || null; }
+// 【28泊以上】リスティング = 定期借家契約 → 稼働日数から除外（収益は実績に含める）
+function isLongStayListing(b) { return b.listing && b.listing.startsWith('【28泊以上】'); }
 
 // 予約ごとの変動費合計（清掃スタッフに料金設定がある場合はその金額を使う）
 function getPerBookingTotal(booking, prop) {
@@ -2989,7 +2991,8 @@ function renderAnnual() {
       if (prop && !hasActualCosts(pid, mYear, m)) {
         varCosts += getPerBookingTotal(b, prop);
       }
-      nights += b.nights;
+      // 【28泊以上】リスティング（定期借家契約）は稼働日数にカウントしない
+      if (!isLongStayListing(b)) nights += b.nights;
     });
 
     const profit = rev - monthFixedCosts - varCosts;
