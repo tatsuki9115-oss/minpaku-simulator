@@ -684,9 +684,13 @@ function initFirebaseSync() {
   fbdb.ref(KEYS.listingMap).on('value', snap => {
     const val = snap.val();
     if (!val || typeof val !== 'object') return;
+    // 空オブジェクトでローカルの有効マッピングを上書きしない
+    if (Object.keys(val).length === 0 && Object.keys(listingMap).length > 0) return;
     if (JSON.stringify(val) === JSON.stringify(listingMap)) return;
     try { localStorage.setItem(KEYS.listingMap, JSON.stringify(val)); } catch(e) {}
     listingMap = val;
+    renderDashboard && renderDashboard();
+    renderAnnual && renderAnnual();
   });
 
   fbdb.ref(KEYS.history).on('value', snap => {
