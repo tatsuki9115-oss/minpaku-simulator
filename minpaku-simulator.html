@@ -751,6 +751,8 @@ function initFirebaseSync() {
       fbdb.ref(KEYS.listingMap).set(listingMap);
       fbdb.ref(KEYS.history).set(history);
       fbdb.ref(KEYS.monthly).set(monthlyData);
+      fbdb.ref(KEYS.bookingChecks).set(bookingChecks);
+      fbdb.ref(KEYS.actualCosts).set(actualCosts);
     }
   });
 }
@@ -1655,7 +1657,7 @@ function updateCleaningStaff(pi, si, field, val) {
 }
 function addCleaningStaff(pi) {
   if (!properties[pi].cleaningStaff) properties[pi].cleaningStaff = [];
-  properties[pi].cleaningStaff.push({ name: '', phone: '' });
+  properties[pi].cleaningStaff.push({ name: '', phone: '', fee: null });
   saveData();
   renderSettingsKeepOpen();
 }
