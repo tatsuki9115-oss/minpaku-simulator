@@ -2004,21 +2004,33 @@ function renderInvestmentRecovery() {
     const initialTotal = (p.initialCosts || []).reduce((s, c) => s + c.amount, 0);
     const monthlyFixedTotal = p.monthlyFixedCosts.reduce((s, c) => s + c.amount, 0);
 
-    // 現在月までの予約のみ（未来の予約は固定費も未発生なので除外）
-    const books = airbnbBookings.filter(b => {
-      if (getBookingPropId(b) !== p.id) return false;
+    // 確定済み予約はすべて実績に含める（先日付も含む）
+    const books = airbnbBookings.filter(b => getBookingPropId(b) === p.id);
+
+    // 先日付で確定している月を把握（固定費・予測調整用）
+    const futureBookedMonths = new Set();
+    books.forEach(b => {
       const [by, bm] = b.checkin.split('/').map(Number);
-      return by < nowY || (by === nowY && bm <= nowM);
+      if (by > nowY || (by === nowY && bm > nowM)) {
+        futureBookedMonths.add(`${by}-${bm}`);
+      }
+    });
+    // 最後の確定予約月まで固定費を計算するための上限
+    let maxBookYear = nowY, maxBookMonth = nowM;
+    books.forEach(b => {
+      const [by, bm] = b.checkin.split('/').map(Number);
+      if (by > maxBookYear || (by === maxBookYear && bm > maxBookMonth)) {
+        maxBookYear = by; maxBookMonth = bm;
+      }
     });
 
-    // 営業開始から現在月までの全固定費（予約がない月も含む、実費入力済み月は実費を使用）
+    // 営業開始から（確定予約の最終月 or 現在月）までの全固定費
     const months = totalMonthsOperating(p);
     let totalFixedCosts = 0;
     if (p.operationStart) {
       const [_sy, _sm] = p.operationStart.split('-').map(Number);
-      const _now = new Date();
       let _cy = _sy, _cm = _sm;
-      while (_cy < _now.getFullYear() || (_cy === _now.getFullYear() && _cm <= _now.getMonth() + 1)) {
+      while (_cy < maxBookYear || (_cy === maxBookYear && _cm <= maxBookMonth)) {
         totalFixedCosts += getPropMonthFixedCosts(p, _cy, _cm);
         _cm++; if (_cm > 12) { _cm = 1; _cy++; }
       }
@@ -2051,13 +2063,12 @@ function renderInvestmentRecovery() {
         monthVarMap[key] = (monthVarMap[key] || 0) + getPerBookingTotal(b, p);
       }
     });
-    // 営業開始〜現在の全月を列挙
+    // 営業開始〜（確定予約の最終月 or 現在月）の全月を列挙
     const allMonthProfits = [];
     if (p.operationStart) {
       const [sy, sm] = p.operationStart.split('-').map(Number);
-      const now = new Date();
       let cy = sy, cm = sm;
-      while (cy < now.getFullYear() || (cy === now.getFullYear() && cm <= now.getMonth() + 1)) {
+      while (cy < maxBookYear || (cy === maxBookYear && cm <= maxBookMonth)) {
         const key = `${cy}-${String(cm).padStart(2,'0')}`;
         // 実費入力済み月は実費固定費を、それ以外は概算を使用
         const mFixedCost = getPropMonthFixedCosts(p, cy, cm);
@@ -2073,7 +2084,7 @@ function renderInvestmentRecovery() {
     const pct = initialTotal > 0 ? Math.min(Math.round(cumulativeProfit / initialTotal * 100), 100) : 0;
     const monthsNeeded = avgMonthlyProfit > 0 && remaining > 0 ? Math.ceil(remaining / avgMonthlyProfit) : null;
 
-    return { prop: p, initialTotal, cumulativeProfit, totalFixedCosts, totalRevenue, months, remaining, pct, avgMonthlyProfit, monthsNeeded };
+    return { prop: p, initialTotal, cumulativeProfit, totalFixedCosts, totalRevenue, months, remaining, pct, avgMonthlyProfit, monthsNeeded, futureBookedMonths };
   });
 
   const totalInitial = propStats.reduce((s, x) => s + x.initialTotal, 0);
@@ -2119,7 +2130,7 @@ function renderInvestmentRecovery() {
       const maxDaysPre = x.prop.maxAnnualNights;
       const cappedDaysPre = maxDaysPre && estDaysPre > maxDaysPre ? maxDaysPre : estDaysPre;
       const cappedRevPre = maxDaysPre && estDaysPre > maxDaysPre ? Math.round(shortRevPre * maxDaysPre / estDaysPre) : shortRevPre;
-      remainingMonthsForSummary = nowM >= 4 ? (15 - nowM) : (3 - nowM + 1);
+      remainingMonthsForSummary = Math.max((nowM >= 4 ? (15 - nowM) : (3 - nowM + 1)) - x.futureBookedMonths.size, 0);
       const monthFractionPre = Math.min(remainingMonthsForSummary, 12) / 12;
       const cappedRevAdjPre = Math.round(cappedRevPre * monthFractionPre);
       const annualFixedAdjPre = Math.round(annualFixedPre * monthFractionPre);
@@ -2161,7 +2172,7 @@ function renderInvestmentRecovery() {
       const overLimit = maxDays && estimatedDays > maxDays;
       const cappedDays = overLimit ? maxDays : estimatedDays;
       const cappedRev = overLimit ? Math.round(shortRev * maxDays / estimatedDays) : shortRev;
-      const remainingMonths = nowM >= 4 ? (15 - nowM) : (3 - nowM + 1);
+      const remainingMonths = Math.max((nowM >= 4 ? (15 - nowM) : (3 - nowM + 1)) - x.futureBookedMonths.size, 0);
       const monthFraction = Math.min(remainingMonths, 12) / 12;
       const cappedRevAdj = Math.round(cappedRev * monthFraction);
       const annualFixedAdj = Math.round(annualFixed * monthFraction);
@@ -2287,7 +2298,7 @@ function renderInvestmentRecovery() {
       const maxDays = x.prop.maxAnnualNights;
       const cappedDays = maxDays && estDays > maxDays ? maxDays : estDays;
       const cappedRev = maxDays && estDays > maxDays ? Math.round(shortRev * maxDays / estDays) : shortRev;
-      const remainingMonths2 = nowM >= 4 ? (15 - nowM) : (3 - nowM + 1);
+      const remainingMonths2 = Math.max((nowM >= 4 ? (15 - nowM) : (3 - nowM + 1)) - x.futureBookedMonths.size, 0);
       const monthFraction2 = Math.min(remainingMonths2, 12) / 12;
       const cappedRevAdj = Math.round(cappedRev * monthFraction2);
       const annualFixedAdj = Math.round(annualFixed * monthFraction2);
