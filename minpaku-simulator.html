@@ -662,9 +662,14 @@ function initFirebaseSync() {
   fbdb.ref(KEYS.airbnb).on('value', snap => {
     const val = snap.val();
     if (!Array.isArray(val)) return;
+    // 空配列でローカルの有効データを上書きしない
+    if (val.length === 0 && airbnbBookings.length > 0) return;
     if (JSON.stringify(val) === JSON.stringify(airbnbBookings)) return;
     try { localStorage.setItem(KEYS.airbnb, JSON.stringify(val)); } catch(e) {}
     airbnbBookings = val;
+    // データ到着後に画面を更新
+    renderDashboard && renderDashboard();
+    renderAnnual && renderAnnual();
   });
 
   fbdb.ref(KEYS.forecast).on('value', snap => {
@@ -673,6 +678,7 @@ function initFirebaseSync() {
     if (JSON.stringify(val) === JSON.stringify(pricelabsForecast)) return;
     try { localStorage.setItem(KEYS.forecast, JSON.stringify(val)); } catch(e) {}
     pricelabsForecast = val;
+    renderAnnual && renderAnnual();
   });
 
   fbdb.ref(KEYS.listingMap).on('value', snap => {
