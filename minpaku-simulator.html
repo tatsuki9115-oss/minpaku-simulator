@@ -508,6 +508,18 @@ const DEFAULT_PROPERTIES = [
 const AIRBNB_FEE_RATE = 0.15; // Airbnbホストサービス料（約15%）
 function getGuestPayment(hostPayout) { return Math.round(hostPayout / (1 - AIRBNB_FEE_RATE)); }
 
+// ★ KEYS は load関数より先に定義する（後で定義するとTDZエラーでlocalStorageが読めなくなる）
+const KEYS = {
+  properties: 'minpaku_properties_v3',
+  history: 'minpaku_history_v1',
+  monthly: 'minpaku_monthly_v1',
+  airbnb: 'minpaku_airbnb_v1',
+  forecast: 'minpaku_forecast_v1',
+  listingMap: 'minpaku_listing_map_v1',
+  bookingChecks: 'minpaku_booking_checks_v1',
+  actualCosts: 'minpaku_actual_costs_v1',
+};
+
 let properties = loadData();
 let history = loadHistory();
 let monthlyData = loadMonthly();
@@ -545,17 +557,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const fbdb = firebase.database();
 
-// Firebase + localStorage 二重書き込み
-const KEYS = {
-  properties: 'minpaku_properties_v3',
-  history: 'minpaku_history_v1',
-  monthly: 'minpaku_monthly_v1',
-  airbnb: 'minpaku_airbnb_v1',
-  forecast: 'minpaku_forecast_v1',
-  listingMap: 'minpaku_listing_map_v1',
-  bookingChecks: 'minpaku_booking_checks_v1',
-  actualCosts: 'minpaku_actual_costs_v1',
-};
+// Firebase + localStorage 二重書き込み（KEYSはload関数より前で定義済み）
 
 function fbSave(key, data) {
   try { localStorage.setItem(key, JSON.stringify(data)); } catch(e) {}
@@ -683,9 +685,13 @@ function initFirebaseSync() {
 
   fbdb.ref(KEYS.forecast).on('value', snap => {
     const val = snap.val();
-    if (!val || typeof val !== 'object') return;
-    // 空オブジェクトで有効データを上書きしない
-    if (Object.keys(val).length === 0 && Object.keys(pricelabsForecast).length > 0) return;
+    // Firebaseが空 → localStorageのデータで補完してFirebaseに書き戻す
+    if (!val || typeof val !== 'object' || Object.keys(val).length === 0) {
+      if (Object.keys(pricelabsForecast).length > 0) {
+        fbdb.ref(KEYS.forecast).set(pricelabsForecast); // localの値をFirebaseに書き戻す
+      }
+      return;
+    }
     if (JSON.stringify(val) === JSON.stringify(pricelabsForecast)) return;
     try { localStorage.setItem(KEYS.forecast, JSON.stringify(val)); } catch(e) {}
     pricelabsForecast = val;
