@@ -24,24 +24,23 @@
   .header-icon { width: 30px; height: 30px; background: #F07C3F; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .header h1 { font-size: 15px; font-weight: 700; letter-spacing: -.3px; }
 
-  .tabs {
-    background: white;
-    border-bottom: 1px solid #E8E6E1;
-    padding: 0 4px;
-    display: flex; gap: 0;
-    position: sticky; top: 56px; z-index: 99;
-    overflow-x: auto; -webkit-overflow-scrolling: touch;
+  .bottom-nav {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: white; border-top: 1px solid #E8E6E1;
+    display: flex; z-index: 200;
+    padding-bottom: env(safe-area-inset-bottom);
   }
-  .tabs::-webkit-scrollbar { display: none; }
-  .tab {
-    flex: 1; min-width: 52px; padding: 12px 4px 10px; text-align: center; font-size: 12px; font-weight: 600;
-    cursor: pointer; color: #B0ADA8; white-space: nowrap;
-    border: none; border-bottom: 2.5px solid transparent; background: none;
-    transition: color .15s, border-color .15s;
+  .bottom-nav-item {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; padding: 8px 4px 6px;
+    border: none; background: none; cursor: pointer; color: #B0ADA8;
+    font-size: 10px; font-weight: 700; gap: 3px; -webkit-tap-highlight-color: transparent;
+    transition: color .15s;
   }
-  .tab.active { color: #F07C3F; border-bottom-color: #F07C3F; font-weight: 700; }
+  .bottom-nav-item.active { color: #F07C3F; }
+  .bottom-nav-item svg { width: 22px; height: 22px; }
 
-  .page { display: none; padding: 16px; max-width: 640px; margin: 0 auto; padding-bottom: 24px; }
+  .page { display: none; padding: 16px; max-width: 640px; margin: 0 auto; padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
   .page.active { display: block; }
   .page#page-settings { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 
@@ -221,7 +220,7 @@
   .divider { height: 1px; background: #F2F1EE; margin: 12px 0; }
   .btn-add-property { width: 100%; padding: 16px; border: 1.5px dashed #E8E6E1; border-radius: 12px; background: white; color: #C8C5C0; font-size: 14px; font-weight: 700; cursor: pointer; }
   .btn-add-property:active { border-color: #F07C3F; color: #F07C3F; }
-  .save-bar { position: fixed; bottom: 0; left: 0; right: 0; background: white; border-top: 1px solid #E8E6E1; padding: 12px 16px; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .save-bar { position: fixed; bottom: calc(56px + env(safe-area-inset-bottom)); left: 0; right: 0; background: white; border-top: 1px solid #E8E6E1; padding: 12px 16px; }
   .save-bar-inner { display: flex; gap: 8px; max-width: 640px; margin: 0 auto; }
   .btn-save { flex: 1; background: #F07C3F; color: white; border: none; border-radius: 12px; padding: 15px; font-size: 15px; font-weight: 700; cursor: pointer; transition: all .1s; box-shadow: 0 3px 0 #C85A1F; }
   .btn-save:active { transform: translateY(2px); box-shadow: 0 1px 0 #C85A1F; }
@@ -285,7 +284,7 @@
   .recovery-prop-name { font-size: 12px; font-weight: 700; color: #F07C3F; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
   .recovery-pct { font-family: 'Inter', sans-serif; font-size: 20px; font-weight: 900; color: #1C1C1E; }
   .recovery-bar-wrap { background: #F2F1EE; border-radius: 6px; height: 8px; margin-bottom: 10px; overflow: hidden; }
-  .recovery-bar-fill { height: 8px; border-radius: 6px; background: linear-gradient(90deg, #ef5350, #ffa726, #66bb6a); background-size: 300% 100%; transition: width .5s; }
+  .recovery-bar-fill { height: 8px; border-radius: 6px; background: #F07C3F; transition: width .5s; }
   .recovery-stats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
   .recovery-stat { background: #FAFAF9; border-radius: 8px; padding: 7px 8px; text-align: center; border: 1px solid #F2F1EE; }
   .recovery-stat-label { font-size: 11px; font-weight: 700; color: #B0ADA8; letter-spacing: .04em; margin-bottom: 2px; }
@@ -342,19 +341,37 @@
 
 <div class="header">
   <div class="header-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg></div>
-  <h1>民泊利益シミュレーター</h1>
+  <div style="flex:1;min-width:0">
+    <h1>民泊利益シミュレーター</h1>
+  </div>
+  <div id="header-updated" style="font-size:10px;color:#B0ADA8;text-align:right;flex-shrink:0;line-height:1.4"></div>
 </div>
 
-<div class="tabs">
-  <button class="tab active" onclick="showTab('sim')">試算</button>
-  <button class="tab" onclick="showTab('bookings')">予約</button>
-  <button class="tab" onclick="showTab('calendar')">カレンダー</button>
-  <button class="tab" onclick="showTab('annual')">実績</button>
-  <button class="tab" onclick="showTab('settings')">設定</button>
-</div>
+<nav class="bottom-nav">
+  <button class="bottom-nav-item" onclick="showTab('bookings')" id="nav-bookings">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    予約
+  </button>
+  <button class="bottom-nav-item" onclick="showTab('calendar')" id="nav-calendar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
+    カレンダー
+  </button>
+  <button class="bottom-nav-item" onclick="showTab('annual')" id="nav-annual">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+    実績
+  </button>
+  <button class="bottom-nav-item" onclick="showTab('sim')" id="nav-sim">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+    試算
+  </button>
+  <button class="bottom-nav-item" onclick="showTab('settings')" id="nav-settings">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>
+    設定
+  </button>
+</nav>
 
 <!-- シミュレーション -->
-<div class="page active" id="page-sim">
+<div class="page" id="page-sim">
   <div class="card">
     <div class="card-title">物件</div>
     <select class="prop-select" id="sim-property" onchange="onSimPropertyChange()">
@@ -420,7 +437,7 @@
 </div>
 
 <!-- 予約一覧 -->
-<div class="page" id="page-bookings">
+<div class="page active" id="page-bookings">
   <div id="bookings-content"></div>
 </div>
 
@@ -532,7 +549,20 @@ let pendingListings = [];
 let annualPropFilter = 'all';
 let annualSelectedMonth = null; // null=全期間, {year,month}=月別ビュー
 let dataUpdatedAt = JSON.parse(localStorage.getItem('dataUpdatedAt') || '{}');
-function saveDataUpdatedAt() { localStorage.setItem('dataUpdatedAt', JSON.stringify(dataUpdatedAt)); }
+function saveDataUpdatedAt() {
+  localStorage.setItem('dataUpdatedAt', JSON.stringify(dataUpdatedAt));
+  updateHeaderTimestamp();
+}
+function updateHeaderTimestamp() {
+  const el = document.getElementById('header-updated');
+  if (!el) return;
+  const times = ['airbnb','pricelabs','forecast']
+    .filter(k => dataUpdatedAt[k])
+    .map(k => new Date(dataUpdatedAt[k]));
+  if (times.length === 0) { el.textContent = ''; return; }
+  const latest = new Date(Math.max(...times));
+  el.innerHTML = `更新<br>${latest.getMonth()+1}/${latest.getDate()} ${String(latest.getHours()).padStart(2,'0')}:${String(latest.getMinutes()).padStart(2,'0')}`;
+}
 function fmtUpdatedAt(key) {
   if (!dataUpdatedAt[key]) return '未更新';
   const d = new Date(dataUpdatedAt[key]);
@@ -777,8 +807,10 @@ function getPropColor(propId) {
 // ==================== タブ ====================
 function showTab(tab) {
   const tabs = ['sim','bookings','calendar','annual','settings'];
-  document.querySelectorAll('.tab').forEach((t, i) => {
-    t.classList.toggle('active', tabs[i] === tab);
+  // ボトムナビのアクティブ状態
+  tabs.forEach(id => {
+    const navBtn = document.getElementById('nav-' + id);
+    if (navBtn) navBtn.classList.toggle('active', id === tab);
   });
   tabs.forEach(id => {
     document.getElementById('page-' + id).classList.toggle('active', id === tab);
@@ -1534,7 +1566,11 @@ function renderCalendar(year, month, propFilter) {
 function renderSettings() {
   const list = document.getElementById('property-list');
   if (properties.length === 0) { list.innerHTML = '<div class="empty-state">物件が登録されていません</div>'; return; }
-  let settingsHTML = properties.map((p, pi) => `
+  let settingsHTML = `<div style="background:linear-gradient(135deg,#F07C3F,#E05A1F);border-radius:12px;padding:12px 16px;margin-bottom:12px;color:white">
+    <div style="font-size:13px;font-weight:800">⚙️ 物件設定</div>
+    <div style="font-size:11px;opacity:.8;margin-top:2px">物件ごとの費用・スタッフ・リスティングを管理</div>
+  </div>`;
+  settingsHTML += properties.map((p, pi) => `
     <div class="property-item" id="prop-item-${p.id}">
       <div class="property-header" style="cursor:pointer" onclick="togglePropertyAccordion(${p.id})">
         <input class="property-name-input" type="text" value="${escHtml(p.name)}" placeholder="物件名" oninput="updateName(${pi},this.value)" onclick="event.stopPropagation()">
@@ -1561,7 +1597,7 @@ function renderSettings() {
           <span style="font-size:11px;color:#bbb">日/年（手動変更可）</span>
         </div>` : `
         <div style="font-size:11px;color:#aaa;margin-bottom:12px;padding:6px 0">旅館業は年間稼働日数の法的上限なし（無制限）</div>`}
-        <div class="cost-section-title">月額固定費（宿泊数で按分）</div>
+        <div style="font-size:10px;font-weight:800;color:#1C1C1E;letter-spacing:.05em;text-transform:uppercase;padding:10px 0 6px;border-bottom:2px solid #F07C3F;margin-bottom:12px">💰 月額固定費（宿泊数で按分）</div>
         ${p.monthlyFixedCosts.map((c,ci) => `
           <div class="cost-row">
             <input class="cost-name" type="text" value="${escHtml(c.name)}" placeholder="項目名" oninput="updateCost(${pi},'monthly',${ci},'name',this.value)">
@@ -1571,7 +1607,7 @@ function renderSettings() {
           </div>`).join('')}
         <button class="btn-add-row" onclick="addCostRow(${pi},'monthly')">＋ 項目を追加</button>
         <div class="divider"></div>
-        <div class="cost-section-title">1予約あたりのコスト</div>
+        <div style="font-size:10px;font-weight:800;color:#1C1C1E;letter-spacing:.05em;text-transform:uppercase;padding:10px 0 6px;border-bottom:2px solid #F07C3F;margin-bottom:12px">🔑 1予約あたりのコスト</div>
         ${p.perBookingCosts.map((c,ci) => `
           <div class="cost-row">
             <input class="cost-name" type="text" value="${escHtml(c.name)}" placeholder="項目名" oninput="updateCost(${pi},'booking',${ci},'name',this.value)">
@@ -2108,7 +2144,7 @@ function renderInvestmentRecovery() {
 
   // 物件別
   propStats.forEach((x, xi) => {
-    const barColor = x.pct >= 100 ? '#4caf50' : x.pct >= 50 ? '#ff9800' : '#ef5350';
+    const barColor = getPropColor(x.prop.id);
 
     // PriceLabs予測の事前計算（ドーナツ用）
     let forecastPctForDonut = 0;
@@ -2227,7 +2263,7 @@ function renderInvestmentRecovery() {
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
         ${donutSvg}
         <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:700;color:#F07C3F">${x.prop.name}</div>
+          <div style="font-size:13px;font-weight:700;color:${getPropColor(x.prop.id)}">${x.prop.name}</div>
           <div style="font-size:11px;color:#888;margin-top:2px">実績 <strong style="color:#66bb6a">${x.pct}%</strong>${hasForecastForSummary ? ' + 予測 <strong style="color:#42a5f5">'+forecastPctForDonut+'%</strong>' : ''}</div>
           ${x.monthsNeeded !== null ? '<div style="font-size:10px;color:#888;margin-top:2px">実績ベース: あと約<strong style="color:#e65100">'+x.monthsNeeded+'ヶ月</strong>で回収見込み</div>' : ''}
         </div>
@@ -2736,7 +2772,17 @@ function renderDashboard() {
   const getCO = b => { const co = getCheckout(b); if (!co) return null; const p = co.split('/').map(Number); return new Date(p[0],p[1]-1,p[2]); };
 
   if (airbnbBookings.length === 0) {
-    content.innerHTML = `<div class="empty-state">予約データがありません<br><span style="font-size:12px">「実績」タブからCSVを読み込んでください</span></div>`;
+    content.innerHTML = `
+      <div style="text-align:center;padding:60px 20px 40px">
+        <div style="font-size:56px;margin-bottom:16px">📭</div>
+        <div style="font-size:16px;font-weight:800;color:#1C1C1E;margin-bottom:8px">予約データがありません</div>
+        <div style="font-size:13px;color:#B0ADA8;line-height:1.6;margin-bottom:24px">
+          AirbnbのCSVをエクスポートして<br>「実績」タブから読み込みましょう
+        </div>
+        <button onclick="showTab('annual')" style="background:#F07C3F;color:white;border:none;border-radius:12px;padding:14px 28px;font-size:14px;font-weight:700;cursor:pointer">
+          📊 実績タブへ移動
+        </button>
+      </div>`;
     return;
   }
 
@@ -2774,6 +2820,28 @@ function renderDashboard() {
 
   let html = '';
 
+  // 今月・前月の売上計算
+  const thisMonth = now.getMonth() + 1;
+  const thisYear = now.getFullYear();
+  const prevMonth = thisMonth === 1 ? 12 : thisMonth - 1;
+  const prevYear = thisMonth === 1 ? thisYear - 1 : thisYear;
+  const thisMonthBooks = airbnbBookings.filter(b => {
+    if (!b.checkin) return false;
+    const p = b.checkin.split('/').map(Number);
+    return p[0] === thisYear && p[1] === thisMonth;
+  });
+  const prevMonthBooks = airbnbBookings.filter(b => {
+    if (!b.checkin) return false;
+    const p = b.checkin.split('/').map(Number);
+    return p[0] === prevYear && p[1] === prevMonth;
+  });
+  const thisMonthRev = thisMonthBooks.reduce((s, b) => s + b.revenue, 0);
+  const prevMonthRev = prevMonthBooks.reduce((s, b) => s + b.revenue, 0);
+  const revDiff = thisMonthRev - prevMonthRev;
+  const thisMonthNights = thisMonthBooks.reduce((s, b) => s + b.nights, 0);
+  const prevMonthNights = prevMonthBooks.reduce((s, b) => s + b.nights, 0);
+  const nightsDiff = thisMonthNights - prevMonthNights;
+
   // ヘッダーカード（物件ごとの次の予約）
   const nextPerProp = properties.map(p => {
     const nb = [...airbnbBookings]
@@ -2796,6 +2864,19 @@ function renderDashboard() {
       </div>
       <div style="display:flex;gap:8px">${nextBadges}</div>
     </div>
+    ${thisMonthBooks.length > 0 || prevMonthBooks.length > 0 ? `
+    <div style="margin-top:12px;padding-top:10px;border-top:1px solid #F2F1EE;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="kpi-card" style="background:#F9F8F6;box-shadow:none">
+        <div class="kpi-label">今月の売上</div>
+        <div class="kpi-value">${fmtShort(thisMonthRev)}円</div>
+        ${prevMonthRev > 0 ? `<div class="kpi-sub" style="color:${revDiff>=0?'#1C9A52':'#E53935'}">${revDiff>=0?'↑':'↓'} ${fmtShort(Math.abs(revDiff))}円 前月比</div>` : ''}
+      </div>
+      <div class="kpi-card" style="background:#F9F8F6;box-shadow:none">
+        <div class="kpi-label">今月の稼働日数</div>
+        <div class="kpi-value">${thisMonthNights}泊</div>
+        ${prevMonthNights > 0 ? `<div class="kpi-sub" style="color:${nightsDiff>=0?'#1C9A52':'#E53935'}">${nightsDiff>=0?'↑':'↓'} ${Math.abs(nightsDiff)}泊 前月比</div>` : ''}
+      </div>
+    </div>` : ''}
   </div>`;
 
   // ========== アラートカード ==========
@@ -2878,7 +2959,11 @@ function renderDashboard() {
         const color = getPropColor(pid);
         const chk = b.code ? (bookingChecks[b.code] || {}) : {};
         const icon = type === 'in' ? '🔑' : '🚪';
-        const actionLabel = type === 'in' ? 'チェックイン' : 'チェックアウト';
+        const isLongStay = isLongStayListing(b);
+        const actionLabel = isLongStay ? '定期借家' : (type === 'in' ? 'チェックイン' : 'チェックアウト');
+        const cardBorderColor = isLongStay ? '#8B5CF6' : (type === 'in' ? '#F07C3F' : '#3B82F6');
+        const cardBg = isLongStay ? '#F5F0FF' : (type === 'in' ? '#FFF8F4' : '#F0F6FF');
+        const actionLabelColor = isLongStay ? '#8B5CF6' : (type === 'in' ? '#F07C3F' : '#3B82F6');
 
         // チェックインには名簿・清掃両方、チェックアウトには清掃のみ
         const formDone = chk.formDone;
@@ -2893,11 +2978,12 @@ function renderDashboard() {
               <button onclick="toggleCheckForDash('${b.code}','cleaningDone')" style="font-size:12px;font-weight:800;padding:7px 10px;border-radius:10px;border:2px solid ${cleanDone?'#0284c7':'#a855f7'};cursor:pointer;background:${cleanDone?'#e0f2fe':'#faf5ff'};color:${cleanDone?'#0369a1':'#7e22ce'};white-space:nowrap;min-width:76px;text-align:center">${cleanDone?'🧹 済':'🧹 清掃'}</button>
             </div>` : '';
 
-        rows += `<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #F2F1EE">
-          <div style="width:38px;height:38px;border-radius:10px;background:${type==='in'?'#FFF8F4':'#FFF0F0'};display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">${icon}</div>
+        rows += `<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #F2F1EE;border-left:4px solid ${cardBorderColor};background:${cardBg};margin:0 -14px;padding-left:14px;padding-right:14px">
+          <div style="width:38px;height:38px;border-radius:10px;background:rgba(255,255,255,.7);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">${icon}</div>
           <div style="flex:1;min-width:0">
+            <div style="font-size:11px;font-weight:800;color:${actionLabelColor};margin-bottom:2px">${isLongStay ? '🟣 定期借家' : (type==='in' ? '🟠 チェックイン' : '🔵 チェックアウト')}</div>
             <div style="font-size:14px;font-weight:700;color:#1C1C1E;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(b.guestName||'ゲスト')}</div>
-            <div style="font-size:12px;font-weight:700;color:${color};margin-top:1px">${prop?.name||''} · ${actionLabel} · ${b.nights}泊</div>
+            <div style="font-size:12px;font-weight:700;color:${color};margin-top:1px">${prop?.name||''} · ${b.nights}泊</div>
           </div>
           ${checkBtns}
         </div>`;
@@ -3360,6 +3446,9 @@ function renderAnnual() {
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
             <div class="month-label">${m}月</div>
+            ${!isFutureMonth ? (ms.isActual
+              ? `<span style="font-size:10px;font-weight:700;color:#1C9A52;background:#F0FBF5;border-radius:6px;padding:2px 7px">✅ 実費</span>`
+              : `<span style="font-size:10px;font-weight:600;color:#B0ADA8;background:#F2F1EE;border-radius:6px;padding:2px 7px">〜 概算</span>`) : ''}
             <div style="font-size:11px;color:#aaa">${ms.bookings}件・${ms.nights}泊</div>
             ${!isFutureMonth ? `<div style="display:flex;gap:4px;flex-wrap:wrap">${actBtns}</div>` : ''}
           </div>
@@ -3437,6 +3526,10 @@ function renderAnnual() {
 
 renderSimPropertySelect();
 renderHistory();
+updateHeaderTimestamp();
+renderDashboard();
+// ボトムナビの初期アクティブ状態
+document.getElementById('nav-bookings').classList.add('active');
 initFirebaseSync();
 
 // ==================== 清掃依頼LINE文生成 ====================
