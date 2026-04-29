@@ -2817,14 +2817,14 @@ function renderDashboard() {
     const diff = Math.round((getCI(b) - now) / 86400000);
     return diff >= -3 && diff <= 14; // チェックイン2週間前〜3日後まで表示
   }).sort((a,b2) => getCI(a) - getCI(b2));
-  // ゴミ回収アラート（フィオーレ新子安のみ・チェックアウト日の前日〜3日後）
+  // ゴミ回収依頼アラート（フィオーレ新子安のみ・チェックアウト3日前〜当日）
   const alertGarbage = airbnbBookings.filter(b => {
     if (!b.code || bookingChecks[b.code]?.garbageDone) return false;
     if (getBookingPropId(b) !== 2) return false;
     const co = getCO(b);
     if (!co) return false;
     const diffCO = Math.round((co - now) / 86400000);
-    return diffCO >= -1 && diffCO <= 3;
+    return diffCO >= 0 && diffCO <= 3;
   }).sort((a,b2) => (getCO(a)||now) - (getCO(b2)||now));
 
   let html = '';
@@ -2904,8 +2904,8 @@ function renderDashboard() {
       const urgentColor = isOver ? '#D32F2F' : isUrgent ? '#E65100' : '#F59E0B';
       const checkField = type === 'form' ? 'formDone' : type === 'garbage' ? 'garbageDone' : 'cleaningDone';
       const icon = type === 'form' ? '📋' : type === 'garbage' ? '🗑️' : '🧹';
-      const label = type === 'form' ? '宿泊者名簿' : type === 'garbage' ? 'ゴミ回収' : '清掃手配';
-      const btnLabel = type === 'form' ? '✅ 提出済みにする' : type === 'garbage' ? '✅ 回収済みにする' : '✅ 手配済みにする';
+      const label = type === 'form' ? '宿泊者名簿' : type === 'garbage' ? 'ゴミ回収依頼' : '清掃手配';
+      const btnLabel = type === 'form' ? '✅ 提出済みにする' : type === 'garbage' ? '✅ 依頼済みにする' : '✅ 手配済みにする';
       return `<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid rgba(0,0,0,.06)">
         <div style="flex-shrink:0;width:36px;height:36px;border-radius:10px;background:${isOver?'#FFEBEE':isUrgent?'#FFF3E0':'#FFFDE7'};display:flex;align-items:center;justify-content:center;font-size:18px">${icon}</div>
         <div style="flex:1;min-width:0">
@@ -2935,7 +2935,7 @@ function renderDashboard() {
     // ゴミ回収アラート（フィオーレ新子安のみ）
     if (alertGarbage.length > 0) {
       if (alertForm.length > 0 || alertClean.length > 0) alertRows += `<div style="height:8px"></div>`;
-      alertRows += `<div style="font-size:10px;font-weight:800;color:#6D4C41;letter-spacing:.5px;margin:4px 0 2px">🗑️ ゴミ回収（フィオーレ新子安・チェックアウト時）</div>`;
+      alertRows += `<div style="font-size:10px;font-weight:800;color:#6D4C41;letter-spacing:.5px;margin:4px 0 2px">🗑️ ゴミ回収依頼（フィオーレ新子安・チェックアウト3日前までに）</div>`;
       alertRows += alertGarbage.map(b => renderAlertRow(b, 'garbage')).join('');
     }
 
@@ -2993,7 +2993,7 @@ function renderDashboard() {
         // ゴミ回収ボタン：フィオーレ新子安(pid===2)のチェックアウトカードのみ
         const showGarbage = pid === 2 && type === 'out' && b.code;
         const garbageBtn = showGarbage
-          ? `<button onclick="toggleCheckForDash('${b.code}','garbageDone')" style="font-size:12px;font-weight:800;padding:7px 10px;border-radius:10px;border:2px solid ${garbageDone?'#92400e':'#d97706'};cursor:pointer;background:${garbageDone?'#fef3c7':'#fffbeb'};color:${garbageDone?'#78350f':'#b45309'};white-space:nowrap;min-width:76px;text-align:center">${garbageDone?'🗑️ 済':'🗑️ ゴミ'}</button>`
+          ? `<button onclick="toggleCheckForDash('${b.code}','garbageDone')" style="font-size:12px;font-weight:800;padding:7px 10px;border-radius:10px;border:2px solid ${garbageDone?'#92400e':'#d97706'};cursor:pointer;background:${garbageDone?'#fef3c7':'#fffbeb'};color:${garbageDone?'#78350f':'#b45309'};white-space:nowrap;min-width:76px;text-align:center">${garbageDone?'🗑️ 依頼済':'🗑️ ゴミ依頼'}</button>`
           : '';
 
         const checkBtns = b.code ? `<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
