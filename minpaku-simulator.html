@@ -1354,7 +1354,12 @@ function renderCalendarTab() {
         // アラート状態判定
         const formAlert = b.code && !chk.formDone && daysToCI <= 7 && daysToCI >= -3;
         const cleanAlert = b.code && !chk.cleaningDone && daysToCI <= 14 && daysToCI >= -3;
-        const hasAlert = formAlert || cleanAlert;
+        // ゴミ回収依頼アラート：フィオーレ新子安(propId=2)のみ・チェックアウト3日前〜当日
+        const coParts = coStr ? coStr.split('/').map(Number) : null;
+        const coDate = coParts ? new Date(coParts[0], coParts[1]-1, coParts[2]) : null;
+        const daysToCO = coDate ? Math.round((coDate - nowForCal) / 86400000) : 999;
+        const garbageAlert = b.code && !chk.garbageDone && getBookingPropId(b) === 2 && daysToCO >= 0 && daysToCO <= 3;
+        const hasAlert = formAlert || cleanAlert || garbageAlert;
         const borderStyle = hasAlert ? 'border:2px solid #E53935' : 'border:1px solid #f0f0f0';
 
         const formBg = chk.formDone ? '#dcfce7' : formAlert ? '#FFEBEE' : '#f5f5f5';
@@ -1394,6 +1399,7 @@ function renderCalendarTab() {
               : ''}
             <button onclick="toggleCheckFromList('${b.code}','cleaningDone')" style="font-size:11px;font-weight:800;padding:7px 4px;border-radius:9px;border:2px solid ${noStaffSelected?'#ddd':cleanBorder};cursor:${noStaffSelected?'not-allowed':'pointer'};background:${noStaffSelected?'#f5f5f5':cleanBg};color:${noStaffSelected?'#bbb':cleanColor};opacity:${noStaffSelected?'0.5':'1'}">🧹 ${chk.cleaningDone?'清掃 ✓ 済':noStaffSelected?'先に選択':'清掃 未手配'}</button>
           </div>
+          ${garbageAlert || (getBookingPropId(b) === 2 && daysToCO <= 3 && daysToCO >= 0) ? `<div style="margin-bottom:4px"><button onclick="toggleCheckFromList('${b.code}','garbageDone')" style="font-size:11px;font-weight:800;padding:7px 4px;border-radius:9px;border:2px solid ${chk.garbageDone?'#92400e':'#d97706'};cursor:pointer;background:${chk.garbageDone?'#fef3c7':'#fffbeb'};color:${chk.garbageDone?'#78350f':'#b45309'};width:100%">🗑️ ${chk.garbageDone?'ゴミ回収依頼 ✓ 済':'ゴミ回収依頼 未完了'}</button></div>` : ''}
           <div style="display:grid;grid-template-columns:1fr auto;gap:4px">
             <button onclick="generateBookingLineMsg('${b.code}')" style="padding:7px 6px;font-size:12px;font-weight:800;border-radius:9px;border:2px solid #00B900;background:white;color:#00B900;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;box-sizing:border-box"><span>📱</span><span>清掃依頼LINE生成</span></button>
             <button onclick="showPaymentStatementModal('${b.code}')" ${!chk.cleaningStaffName?'disabled':''} style="padding:7px 10px;font-size:12px;font-weight:800;border-radius:9px;border:1.5px solid ${chk.cleaningStaffName?'#4a7fc1':'#ddd'};background:${chk.cleaningStaffName?'white':'#f5f5f5'};color:${chk.cleaningStaffName?'#4a7fc1':'#bbb'};cursor:${chk.cleaningStaffName?'pointer':'not-allowed'};white-space:nowrap">📄 支払明細書</button>
@@ -1543,7 +1549,10 @@ function renderCalendar(year, month, propFilter) {
         const chk = b.code ? (bookingChecks[b.code] || {}) : {};
         const formDot = `<span style="width:10px;height:10px;border-radius:50%;${chk.formDone?'background:#4ade80':'background:transparent;border:1.5px solid rgba(255,255,255,0.65)'};flex-shrink:0;display:inline-flex;align-items:center;justify-content:center" title="名簿${chk.formDone?'済':'未'}">${chk.formDone?'<span style="font-size:7px;color:#166534;font-weight:900;line-height:1">✓</span>':''}</span>`;
         const cleanDot = `<span style="width:10px;height:10px;border-radius:50%;${chk.cleaningDone?'background:#38bdf8':'background:transparent;border:1.5px solid rgba(255,255,255,0.65)'};flex-shrink:0;display:inline-flex;align-items:center;justify-content:center" title="清掃${chk.cleaningDone?'済':'未'}">${chk.cleaningDone?'<span style="font-size:7px;color:#0c4a6e;font-weight:900;line-height:1">✓</span>':''}</span>`;
-        const statusDots = isStart && b.code ? `<span style="display:flex;gap:3px;flex-shrink:0;align-items:center">${formDot}${cleanDot}</span>` : '';
+        // ゴミ回収依頼ドット：フィオーレ新子安(propId=2)のみ・終了バーに表示
+        const isFlore = getBookingPropId(b) === 2;
+        const garbageDot = isFlore ? `<span style="width:10px;height:10px;border-radius:50%;${chk.garbageDone?'background:#fbbf24':'background:transparent;border:1.5px solid rgba(255,255,255,0.65)'};flex-shrink:0;display:inline-flex;align-items:center;justify-content:center" title="ゴミ回収依頼${chk.garbageDone?'済':'未'}">${chk.garbageDone?'<span style="font-size:7px;color:#78350f;font-weight:900;line-height:1">✓</span>':''}</span>` : '';
+        const statusDots = isStart && b.code ? `<span style="display:flex;gap:3px;flex-shrink:0;align-items:center">${formDot}${cleanDot}${garbageDot}</span>` : '';
 
         html += '<div style="margin-left:'+leftPct+'%;width:'+widthPct+'%;box-sizing:border-box;background:'+bgColor+';border-radius:'+br+';height:26px;display:flex;align-items:center;gap:5px;padding:0 '+(isStart?'8px':'4px')+' 0 '+(isStart?'6px':'4px')+';cursor:pointer;overflow:hidden;white-space:nowrap" onclick="showDayDetail('+year+','+month+','+clipStart+')">'
           + (isStart ? '<div style="width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,.25);color:white;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+initial+'</div>'
@@ -3677,6 +3686,7 @@ function showDayDetail(year, month, day) {
       ? `<a href="tel:${selectedStaff.phone.replace(/[^\d+]/g,'')}" class="phone-link">📞 ${escHtml(selectedStaff.phone)}</a>`
       : '';
 
+    const propId = getBookingPropId(b);
     const checkSection = b.code ? `
       <div class="check-section">
         <div class="check-section-title">チェック管理</div>
@@ -3699,6 +3709,12 @@ function showDayDetail(year, month, day) {
           </div>
           ${chk.cleaningStaffName ? `<div style="font-size:11px;color:#888;margin-top:4px">担当: <strong>${escHtml(chk.cleaningStaffName)}</strong></div>` : ''}
         </div>
+        ${propId === 2 ? `<div class="check-row">
+          <span class="check-label">🗑️ ゴミ回収依頼（CO3日前までに）</span>
+          <button class="check-btn ${chk.garbageDone?'done':'pending'}" onclick="toggleBookingCheck('${b.code}','garbageDone',${year},${month},${day})">
+            ${chk.garbageDone ? '✅ 依頼済' : '○ 未依頼'}
+          </button>
+        </div>` : ''}
       </div>` : '';
 
     return `<div class="day-modal-booking">
