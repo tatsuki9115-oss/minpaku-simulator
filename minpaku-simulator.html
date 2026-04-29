@@ -3952,8 +3952,9 @@ function generatePaymentStatement(code) {
       </tbody>
     </table>
     ${memo ? `<div class="memo-box"><strong>メモ</strong>　${escHtml(memo).replace(/\n/g,'<br>')}</div>` : ''}
-    <div class="no-print" style="text-align:center">
+    <div class="no-print" style="text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center">
       <button class="print-btn" onclick="window.print()">🖨️ 印刷 / PDF保存</button>
+      <button onclick="window.close()" style="padding:10px 32px;font-size:13px;font-weight:700;background:white;color:#555;border:1.5px solid #ccc;border-radius:10px;cursor:pointer">← 閉じてカレンダーへ戻る</button>
     </div>
   </body></html>`;
 
