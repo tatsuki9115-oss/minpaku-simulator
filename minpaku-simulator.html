@@ -1388,23 +1388,26 @@ function renderCalendarTab() {
               ${fmtD(b.checkin)} → ${fmtD(coStr)}<br><span style="font-weight:600;color:#888">${b.nights}泊</span>
             </div>
           </div>
-          ${b.code ? `<!-- 行1：名簿 / 清掃 / ゴミ依頼(フィオーレのみ) -->
-          <div style="display:grid;grid-template-columns:1fr 1fr${getBookingPropId(b)===2?' 1fr':''};gap:4px;margin-bottom:4px">
+          ${b.code ? `<!-- 行1：名簿 / 清掃 -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px">
             <button onclick="toggleCheckFromList('${b.code}','formDone')" style="font-size:11px;font-weight:800;padding:7px 4px;border-radius:9px;border:2px solid ${formBorder};cursor:pointer;background:${formBg};color:${formColor}">📋 ${chk.formDone?'名簿 ✓ 済':'名簿 未提出'}</button>
             <button onclick="toggleCheckFromList('${b.code}','cleaningDone')" style="font-size:11px;font-weight:800;padding:7px 4px;border-radius:9px;border:2px solid ${noStaffSelected?'#ddd':cleanBorder};cursor:${noStaffSelected?'not-allowed':'pointer'};background:${noStaffSelected?'#f5f5f5':cleanBg};color:${noStaffSelected?'#bbb':cleanColor};opacity:${noStaffSelected?'0.5':'1'}">🧹 ${chk.cleaningDone?'清掃 ✓ 済':noStaffSelected?'先に選択':'清掃 未手配'}</button>
-            ${getBookingPropId(b) === 2 ? `<button onclick="toggleCheckFromList('${b.code}','garbageDone')" style="font-size:11px;font-weight:800;padding:7px 4px;border-radius:9px;border:2px solid ${chk.garbageDone?'#92400e':garbageAlert?'#E53935':'#d97706'};cursor:pointer;background:${chk.garbageDone?'#fef3c7':garbageAlert?'#FFEBEE':'#fffbeb'};color:${chk.garbageDone?'#78350f':garbageAlert?'#D32F2F':'#b45309'}">🗑️ ${chk.garbageDone?'ゴミ ✓ 済':'ゴミ依頼'}</button>` : ''}
           </div>
-          <!-- 行2：スタッフ選択（全幅）-->
+          <!-- 行2：ゴミ依頼（フィオーレのみ・全幅）-->
+          ${getBookingPropId(b) === 2 ? `<div style="margin-bottom:4px">
+            <button onclick="toggleCheckFromList('${b.code}','garbageDone')" style="width:100%;font-size:11px;font-weight:800;padding:7px 4px;border-radius:9px;border:2px solid ${chk.garbageDone?'#92400e':garbageAlert?'#E53935':'#d97706'};cursor:pointer;background:${chk.garbageDone?'#fef3c7':garbageAlert?'#FFEBEE':'#fffbeb'};color:${chk.garbageDone?'#78350f':garbageAlert?'#D32F2F':'#b45309'}">🗑️ ${chk.garbageDone?'ゴミ回収 ✓ 依頼済':'ゴミ回収依頼'}</button>
+          </div>` : ''}
+          <!-- 行3：スタッフ選択（全幅）-->
           ${staffList.length > 0 ? `<div style="margin-bottom:4px">
             <select style="width:100%;font-size:11px;border:1.5px solid ${noStaffSelected?'#f97316':chk.cleaningDone?'#0284c7':'#e8e8e8'};border-radius:8px;padding:6px 8px;background:${noStaffSelected?'#FFF3E0':'white'};color:${noStaffSelected?'#E65100':'#555'};font-weight:${noStaffSelected?'700':'400'}" onchange="toggleCheckStaffFromList('${b.code}',this.value)">
               <option value="">${noStaffSelected?'⚠️ スタッフを選択してください':'👤 担当スタッフ'}</option>
               ${staffList.map(s => `<option value="${escHtml(s.name)}" ${chk.cleaningStaffName===s.name?'selected':''}>${escHtml(s.name)}</option>`).join('')}
             </select>
           </div>` : ''}
-          <!-- 行3：LINE生成 / 支払明細書 -->
-          <div style="display:grid;grid-template-columns:1fr auto;gap:4px">
+          <!-- 行4：LINE生成 / 支払明細書（等幅）-->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
             <button onclick="generateBookingLineMsg('${b.code}')" style="padding:7px 6px;font-size:12px;font-weight:800;border-radius:9px;border:2px solid #00B900;background:white;color:#00B900;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;box-sizing:border-box"><span>📱</span><span>清掃依頼LINE生成</span></button>
-            <button onclick="showPaymentStatementModal('${b.code}')" ${!chk.cleaningStaffName?'disabled':''} style="padding:7px 10px;font-size:12px;font-weight:800;border-radius:9px;border:1.5px solid ${chk.cleaningStaffName?'#4a7fc1':'#ddd'};background:${chk.cleaningStaffName?'white':'#f5f5f5'};color:${chk.cleaningStaffName?'#4a7fc1':'#bbb'};cursor:${chk.cleaningStaffName?'pointer':'not-allowed'};white-space:nowrap">📄 支払明細書</button>
+            <button onclick="showPaymentStatementModal('${b.code}')" ${!chk.cleaningStaffName?'disabled':''} style="padding:7px 6px;font-size:12px;font-weight:800;border-radius:9px;border:1.5px solid ${chk.cleaningStaffName?'#4a7fc1':'#ddd'};background:${chk.cleaningStaffName?'white':'#f5f5f5'};color:${chk.cleaningStaffName?'#4a7fc1':'#bbb'};cursor:${chk.cleaningStaffName?'pointer':'not-allowed'};display:flex;align-items:center;justify-content:center;gap:4px;box-sizing:border-box"><span>📄</span><span>支払明細書</span></button>
           </div>
           <div style="margin-top:8px;border-top:1px solid #f0f0f0;padding-top:6px">
             <button onclick="(function(btn){var body=btn.nextElementSibling;var isOpen=body.style.display!=='none';body.style.display=isOpen?'none':'block';btn.querySelector('.acc-arrow').textContent=isOpen?'▶':'▼';})(this)" style="width:100%;display:flex;align-items:center;gap:5px;background:none;border:none;padding:2px 0;cursor:pointer;text-align:left">
