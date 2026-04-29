@@ -2817,6 +2817,15 @@ function renderDashboard() {
     const diff = Math.round((getCI(b) - now) / 86400000);
     return diff >= -3 && diff <= 14; // チェックイン2週間前〜3日後まで表示
   }).sort((a,b2) => getCI(a) - getCI(b2));
+  // ゴミ回収アラート（フィオーレ新子安のみ・チェックアウト日の前日〜3日後）
+  const alertGarbage = airbnbBookings.filter(b => {
+    if (!b.code || bookingChecks[b.code]?.garbageDone) return false;
+    if (getBookingPropId(b) !== 2) return false;
+    const co = getCO(b);
+    if (!co) return false;
+    const diffCO = Math.round((co - now) / 86400000);
+    return diffCO >= -1 && diffCO <= 3;
+  }).sort((a,b2) => (getCO(a)||now) - (getCO(b2)||now));
 
   let html = '';
 
@@ -2880,21 +2889,23 @@ function renderDashboard() {
   </div>`;
 
   // ========== アラートカード ==========
-  const hasAlerts = alertForm.length > 0 || alertClean.length > 0;
+  const hasAlerts = alertForm.length > 0 || alertClean.length > 0 || alertGarbage.length > 0;
   if (hasAlerts) {
     const renderAlertRow = (b, type) => {
       const pid = getBookingPropId(b);
       const prop = properties.find(p => p.id === pid);
       const color = getPropColor(pid);
-      const diff = Math.round((getCI(b) - now) / 86400000);
+      // ゴミ回収はチェックアウト日基準、それ以外はチェックイン日基準
+      const baseDate = type === 'garbage' ? (getCO(b) || getCI(b)) : getCI(b);
+      const diff = Math.round((baseDate - now) / 86400000);
       const diffLabel = diff < 0 ? `${-diff}日超過` : diff === 0 ? '今日' : `あと${diff}日`;
       const isOver = diff < 0;
-      const isUrgent = diff <= 2;
+      const isUrgent = diff <= 1;
       const urgentColor = isOver ? '#D32F2F' : isUrgent ? '#E65100' : '#F59E0B';
-      const checkField = type === 'form' ? 'formDone' : 'cleaningDone';
-      const icon = type === 'form' ? '📋' : '🧹';
-      const label = type === 'form' ? '宿泊者名簿' : '清掃手配';
-      const btnLabel = type === 'form' ? '✅ 提出済みにする' : '✅ 手配済みにする';
+      const checkField = type === 'form' ? 'formDone' : type === 'garbage' ? 'garbageDone' : 'cleaningDone';
+      const icon = type === 'form' ? '📋' : type === 'garbage' ? '🗑️' : '🧹';
+      const label = type === 'form' ? '宿泊者名簿' : type === 'garbage' ? 'ゴミ回収' : '清掃手配';
+      const btnLabel = type === 'form' ? '✅ 提出済みにする' : type === 'garbage' ? '✅ 回収済みにする' : '✅ 手配済みにする';
       return `<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid rgba(0,0,0,.06)">
         <div style="flex-shrink:0;width:36px;height:36px;border-radius:10px;background:${isOver?'#FFEBEE':isUrgent?'#FFF3E0':'#FFFDE7'};display:flex;align-items:center;justify-content:center;font-size:18px">${icon}</div>
         <div style="flex:1;min-width:0">
@@ -2921,11 +2932,17 @@ function renderDashboard() {
       alertRows += `<div style="font-size:10px;font-weight:800;color:#00796B;letter-spacing:.5px;margin:4px 0 2px">🧹 清掃手配（チェックイン2週間前までに）</div>`;
       alertRows += alertClean.map(b => renderAlertRow(b, 'clean')).join('');
     }
+    // ゴミ回収アラート（フィオーレ新子安のみ）
+    if (alertGarbage.length > 0) {
+      if (alertForm.length > 0 || alertClean.length > 0) alertRows += `<div style="height:8px"></div>`;
+      alertRows += `<div style="font-size:10px;font-weight:800;color:#6D4C41;letter-spacing:.5px;margin:4px 0 2px">🗑️ ゴミ回収（フィオーレ新子安・チェックアウト時）</div>`;
+      alertRows += alertGarbage.map(b => renderAlertRow(b, 'garbage')).join('');
+    }
 
     html += `<div class="card" style="margin-bottom:12px;border:2px solid #E53935;border-radius:14px;padding:12px 14px">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
         <span style="font-size:16px">🚨</span>
-        <span style="font-size:13px;font-weight:800;color:#D32F2F">要対応 ${alertForm.length + alertClean.length}件</span>
+        <span style="font-size:13px;font-weight:800;color:#D32F2F">要対応 ${alertForm.length + alertClean.length + alertGarbage.length}件</span>
       </div>
       ${alertRows}
     </div>`;
@@ -2965,17 +2982,24 @@ function renderDashboard() {
         const cardBg = isLongStay ? '#F5F0FF' : (type === 'in' ? '#FFF8F4' : '#F0F6FF');
         const actionLabelColor = isLongStay ? '#8B5CF6' : (type === 'in' ? '#F07C3F' : '#3B82F6');
 
-        // チェックインには名簿・清掃両方、チェックアウトには清掃のみ
+        // チェックインには名簿・清掃両方、チェックアウトには清掃＋フィオーレのみゴミ回収
         const formDone = chk.formDone;
         const cleanDone = chk.cleaningDone;
+        const garbageDone = chk.garbageDone;
         const formBg = formDone ? '#E8F5E9' : '#FFF3E0';
         const formColor = formDone ? '#1C9A52' : '#E65100';
         const cleanBg = cleanDone ? '#E0F7FA' : '#F3E5F5';
         const cleanColor = cleanDone ? '#00796B' : '#7B1FA2';
+        // ゴミ回収ボタン：フィオーレ新子安(pid===2)のチェックアウトカードのみ
+        const showGarbage = pid === 2 && type === 'out' && b.code;
+        const garbageBtn = showGarbage
+          ? `<button onclick="toggleCheckForDash('${b.code}','garbageDone')" style="font-size:12px;font-weight:800;padding:7px 10px;border-radius:10px;border:2px solid ${garbageDone?'#92400e':'#d97706'};cursor:pointer;background:${garbageDone?'#fef3c7':'#fffbeb'};color:${garbageDone?'#78350f':'#b45309'};white-space:nowrap;min-width:76px;text-align:center">${garbageDone?'🗑️ 済':'🗑️ ゴミ'}</button>`
+          : '';
 
         const checkBtns = b.code ? `<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
               <button onclick="toggleCheckForDash('${b.code}','formDone')" style="font-size:12px;font-weight:800;padding:7px 10px;border-radius:10px;border:2px solid ${formDone?'#16a34a':'#f97316'};cursor:pointer;background:${formDone?'#dcfce7':'#fff7ed'};color:${formDone?'#15803d':'#c2410c'};white-space:nowrap;min-width:76px;text-align:center">${formDone?'📋 済':'📋 名簿'}</button>
               <button onclick="toggleCheckForDash('${b.code}','cleaningDone')" style="font-size:12px;font-weight:800;padding:7px 10px;border-radius:10px;border:2px solid ${cleanDone?'#0284c7':'#a855f7'};cursor:pointer;background:${cleanDone?'#e0f2fe':'#faf5ff'};color:${cleanDone?'#0369a1':'#7e22ce'};white-space:nowrap;min-width:76px;text-align:center">${cleanDone?'🧹 済':'🧹 清掃'}</button>
+              ${garbageBtn}
             </div>` : '';
 
         rows += `<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #F2F1EE;border-left:4px solid ${cardBorderColor};background:${cardBg};margin:0 -14px;padding-left:14px;padding-right:14px">
