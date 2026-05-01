@@ -1419,6 +1419,11 @@ function renderCalendarTab() {
                 <span style="font-size:11px;color:#555">🛒 消耗品</span>
                 <input type="text" inputmode="numeric" pattern="[0-9]*" value="${dispSupplies}" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','suppliesFee',this.value)" onblur="saveBookingChecks()">
                 <span style="font-size:11px;color:#999">円</span>
+                <span style="font-size:11px;color:#555">💡 その他費用</span>
+                <input type="text" inputmode="numeric" pattern="[0-9]*" value="${chk.otherFee != null ? chk.otherFee : 0}" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','otherFee',this.value)" onblur="saveBookingChecks()">
+                <span style="font-size:11px;color:#999">円</span>
+                <span style="font-size:11px;color:#555;grid-column:1/4;margin-top:2px">📝 メモ（その他費用の内容）</span>
+                <input type="text" value="${escHtml(chk.otherMemo||'')}" placeholder="例：鍵交換代、消臭スプレー等" style="grid-column:1/4;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;color:#333;box-sizing:border-box;width:100%" oninput="updateBookingCost('${b.code}','otherMemo',this.value)" onblur="saveBookingChecks()">
               </div>
             </div>
           </div>` : ''}
@@ -2752,7 +2757,10 @@ function getPerBookingTotal(booking, prop) {
   // 消耗品: 明示入力値 → デフォルト0
   const suppliesFee = chk.suppliesFee != null ? (parseInt(chk.suppliesFee) || 0) : 0;
 
-  return cleaningFee + laundryFee + suppliesFee;
+  // その他費用: 明示入力値 → デフォルト0
+  const otherFee = chk.otherFee != null ? (parseInt(chk.otherFee) || 0) : 0;
+
+  return cleaningFee + laundryFee + suppliesFee + otherFee;
 }
 
 function calcAirbnbProfit(b) {
@@ -3892,7 +3900,9 @@ function generatePaymentStatement(code) {
   const cleaningFee = (staff && staff.fee != null && staff.fee !== '') ? (parseInt(staff.fee) || 0) : (prop?.perBookingCosts.find(c => c.name === '清掃費')?.amount || 0);
   const laundryFee  = chk.laundryFee  != null ? (parseInt(chk.laundryFee)  || 0) : 1400;
   const suppliesFee = chk.suppliesFee != null ? (parseInt(chk.suppliesFee) || 0) : 0;
-  const expenseTotal = laundryFee + suppliesFee;
+  const otherFee    = chk.otherFee    != null ? (parseInt(chk.otherFee)    || 0) : 0;
+  const otherMemo   = chk.otherMemo   || '';
+  const expenseTotal = laundryFee + suppliesFee + otherFee;
   const total = cleaningFee + expenseTotal;
 
   // 日付フォーマット
@@ -3906,7 +3916,7 @@ function generatePaymentStatement(code) {
   const coStr = getCheckout(b);
 
   // 備考
-  const expenseNotes = [laundryFee > 0 ? `コインランドリー ${laundryFee.toLocaleString('ja-JP')}円` : '', suppliesFee > 0 ? `消耗品 ${suppliesFee.toLocaleString('ja-JP')}円` : ''].filter(Boolean).join('<br>');
+  const expenseNotes = [laundryFee > 0 ? `コインランドリー ${laundryFee.toLocaleString('ja-JP')}円` : '', suppliesFee > 0 ? `消耗品 ${suppliesFee.toLocaleString('ja-JP')}円` : '', otherFee > 0 ? `その他 ${otherFee.toLocaleString('ja-JP')}円${otherMemo ? '（'+otherMemo+'）' : ''}` : ''].filter(Boolean).join('<br>');
   const expenseRow = expenseTotal > 0 ? `
     <tr>
       <td>実費精算</td><td>立替費用</td>
