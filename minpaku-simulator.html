@@ -368,6 +368,10 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>
     設定
   </button>
+  <button class="bottom-nav-item" onclick="showTab('message')" id="nav-message">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+    メッセージ
+  </button>
 </nav>
 
 <!-- シミュレーション -->
@@ -444,6 +448,11 @@
 <!-- 年間管理 -->
 <div class="page" id="page-annual">
   <div id="annual-content"></div>
+</div>
+
+<!-- メッセージ -->
+<div class="page" id="page-message">
+  <div id="message-content"></div>
 </div>
 
 <!-- 物件設定 -->
@@ -806,7 +815,7 @@ function getPropColor(propId) {
 
 // ==================== タブ ====================
 function showTab(tab) {
-  const tabs = ['sim','bookings','calendar','annual','settings'];
+  const tabs = ['sim','bookings','calendar','annual','settings','message'];
   // ボトムナビのアクティブ状態
   tabs.forEach(id => {
     const navBtn = document.getElementById('nav-' + id);
@@ -820,6 +829,7 @@ function showTab(tab) {
   if (tab === 'calendar') { initCalendarTab(); }
   if (tab === 'annual') { initAnnualTab(); }
   if (tab === 'settings') renderSettingsKeepOpen();
+  if (tab === 'message') renderMessageTab();
 }
 
 // ==================== シミュレーション ====================
@@ -2508,7 +2518,10 @@ function parseCSV(text) {
       checkin: row['開始日'] || '',
       checkout: row['終了日'] || '',
       listing: row['リスティング'] || '',
-      revenue
+      revenue,
+      adults:   (row['大人']   !== undefined && row['大人']   !== '') ? (parseInt(row['大人'])   || null) : null,
+      children: (row['子ども'] !== undefined && row['子ども'] !== '') ? (parseInt(row['子ども']) || null) : null,
+      infants:  (row['乳幼児'] !== undefined && row['乳幼児'] !== '') ? (parseInt(row['乳幼児']) || null) : null,
     });
   }
   return bookings;
@@ -3970,6 +3983,386 @@ function generatePaymentStatement(code) {
   const win = window.open('', '_blank');
   if (win) { win.document.write(html); win.document.close(); }
   else showToast('ポップアップがブロックされました。ブラウザの設定を確認してください。', 'error');
+}
+
+// ==================== メッセージタブ ====================
+let _msgImgDataUrl = null;
+let _msgPasteListenerAdded = false;
+
+function renderMessageTab() {
+  const el = document.getElementById('message-content');
+
+  // 予約リストを日付降順でソート
+  const sorted = [...airbnbBookings]
+    .filter(b => b.checkin)
+    .sort((a, b) => {
+      const da = parseDateStr(a.checkin);
+      const db = parseDateStr(b.checkin);
+      return db - da;
+    });
+
+  const bookingOptions = sorted.map(b => {
+    const prop = properties.find(p => p.id === getBookingPropId(b));
+    const propLabel = prop ? prop.name : '?';
+    return `<option value="${escHtml(b.code)}">${escHtml(b.guestName || '?')} / ${b.checkin} / ${propLabel}</option>`;
+  }).join('');
+
+  const msgTypes = [
+    ['pre_booking',      '📩 予約前メッセージ'],
+    ['welcome',          '🎉 ウェルカムメッセージ'],
+    ['pre_checkin',      '🔑 チェックイン前案内'],
+    ['during1',          '😊 滞在中メッセージ①'],
+    ['during2',          '🌙 滞在中メッセージ②'],
+    ['checkout_thanks',  '🙏 チェックアウトお礼'],
+    ['review_request',   '⭐ レビュー促進'],
+    ['public_review',    '📝 ホストからの公開レビュー'],
+  ];
+
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-title">予約選択</div>
+      <select class="prop-select" id="msg-booking-select" onchange="onMsgBookingSelect()">
+        <option value="">-- 予約を選んでください --</option>
+        ${bookingOptions}
+      </select>
+    </div>
+
+    <div class="card">
+      <div class="card-title">予約情報（編集可）</div>
+      <div style="margin-bottom:10px">
+        <label style="font-size:11px;font-weight:700;color:#B0ADA8;display:block;margin-bottom:4px">ゲスト名</label>
+        <input type="text" id="msg-guest-name" placeholder="例：Tanaka Itsuki" style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:10px 12px;font-size:14px;font-weight:600;background:#FAFAF9;box-sizing:border-box">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#B0ADA8;display:block;margin-bottom:4px">チェックイン</label>
+          <input type="text" id="msg-checkin" placeholder="2026/6/1" style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:10px 12px;font-size:14px;background:#FAFAF9;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#B0ADA8;display:block;margin-bottom:4px">チェックアウト</label>
+          <input type="text" id="msg-checkout" placeholder="2026/6/3" style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:10px 12px;font-size:14px;background:#FAFAF9;box-sizing:border-box">
+        </div>
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="font-size:11px;font-weight:700;color:#B0ADA8;display:block;margin-bottom:4px">物件名</label>
+        <input type="text" id="msg-prop-name" placeholder="例：ATTビル" style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:10px 12px;font-size:14px;font-weight:600;background:#FAFAF9;box-sizing:border-box">
+      </div>
+      <div style="margin-bottom:10px">
+        <label style="font-size:11px;font-weight:700;color:#B0ADA8;display:block;margin-bottom:4px">リスティングタイトル（自動）</label>
+        <input type="text" id="msg-listing" placeholder="（予約選択で自動入力）" style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:10px 12px;font-size:12px;color:#666;background:#F5F5F4;box-sizing:border-box">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#B0ADA8;display:block;margin-bottom:4px">大人</label>
+          <input type="number" id="msg-adults" min="0" max="20" inputmode="numeric" placeholder="0" style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:10px 8px;font-size:15px;font-weight:700;text-align:center;background:#FAFAF9;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#B0ADA8;display:block;margin-bottom:4px">子ども</label>
+          <input type="number" id="msg-children" min="0" max="20" inputmode="numeric" placeholder="0" style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:10px 8px;font-size:15px;font-weight:700;text-align:center;background:#FAFAF9;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:#B0ADA8;display:block;margin-bottom:4px">乳幼児</label>
+          <input type="number" id="msg-infants" min="0" max="20" inputmode="numeric" placeholder="0" style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:10px 8px;font-size:15px;font-weight:700;text-align:center;background:#FAFAF9;box-sizing:border-box">
+        </div>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:#B0ADA8;display:block;margin-bottom:4px">国籍 / 言語</label>
+        <input type="text" id="msg-language" placeholder="例：日本人、英語圏（アメリカ）、中国語（簡体字）" style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:10px 12px;font-size:14px;background:#FAFAF9;box-sizing:border-box">
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">ゲストのメッセージ</div>
+      <textarea id="msg-guest-text" placeholder="ゲストからのメッセージをここに貼り付け（テキストのコピペ）" style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:12px;font-size:14px;line-height:1.7;resize:vertical;min-height:100px;background:#FAFAF9;font-family:inherit;box-sizing:border-box;margin-bottom:8px"></textarea>
+      <div id="msg-img-drop-zone"
+        style="border:2px dashed #D0CEC9;border-radius:10px;padding:20px 16px;text-align:center;color:#B0ADA8;font-size:13px;cursor:pointer;transition:border-color .15s;background:#FAFAF9"
+        onclick="document.getElementById('msg-img-input').click()"
+        ondragover="event.preventDefault();this.style.borderColor='#F07C3F';this.style.background='#FFF5F0'"
+        ondragleave="this.style.borderColor='#D0CEC9';this.style.background='#FAFAF9'"
+        ondrop="handleMsgImgDrop(event)">
+        <div style="font-size:28px;margin-bottom:6px">📷</div>
+        <div style="font-weight:700;margin-bottom:2px">スクリーンショットを貼り付け</div>
+        <div style="font-size:12px">クリックしてファイル選択 ／ ここにドロップ ／ Ctrl+V</div>
+        <input type="file" id="msg-img-input" accept="image/*" style="display:none" onchange="handleMsgImgFile(this)">
+      </div>
+      <div id="msg-img-preview" style="display:none;margin-top:10px">
+        <div style="font-size:12px;font-weight:700;color:#B0ADA8;margin-bottom:6px">📎 添付画像プレビュー</div>
+        <div style="position:relative;display:inline-block">
+          <img id="msg-img-thumb" style="max-width:100%;max-height:220px;border-radius:10px;border:1px solid #E8E6E1;display:block" src="">
+          <button onclick="clearMsgImg()" style="position:absolute;top:-8px;right:-8px;width:24px;height:24px;border-radius:50%;background:#444;color:white;border:none;cursor:pointer;font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center;font-weight:700">×</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">特記事項</div>
+      <textarea id="msg-notes" placeholder="例：深夜到着、アレルギー有り、リピーター、ペット連れ、特別なリクエスト など" style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:12px;font-size:14px;line-height:1.7;resize:vertical;min-height:80px;background:#FAFAF9;font-family:inherit;box-sizing:border-box"></textarea>
+    </div>
+
+    <div class="card">
+      <div class="card-title">生成するメッセージを選択</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+        ${msgTypes.map(([val, label]) => `
+          <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid #E8E6E1;border-radius:10px;cursor:pointer;font-size:12px;font-weight:700;background:#FAFAF9;transition:border-color .15s,background .15s">
+            <input type="checkbox" name="msg-type" value="${val}" onchange="this.parentElement.style.borderColor=this.checked?'#F07C3F':'#E8E6E1';this.parentElement.style.background=this.checked?'#FFF5F0':'#FAFAF9'" style="accent-color:#F07C3F;width:16px;height:16px;flex-shrink:0">
+            ${label}
+          </label>
+        `).join('')}
+      </div>
+      <button onclick="generateMsgPrompt()" style="width:100%;padding:16px;background:#F07C3F;border:none;border-radius:12px;color:white;font-size:16px;font-weight:800;cursor:pointer;letter-spacing:.3px">
+        ✨ プロンプトを生成
+      </button>
+    </div>
+
+    <div class="card" id="msg-output-card" style="display:none">
+      <div class="card-title">生成されたプロンプト</div>
+      <textarea id="msg-prompt-area" readonly style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:12px;font-size:13px;line-height:1.7;min-height:300px;background:#F5F5F4;font-family:'Noto Sans JP',sans-serif;box-sizing:border-box;color:#333;resize:none"></textarea>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+        <button onclick="copyMsgPrompt()" style="padding:14px;background:#1C1C1E;border:none;border-radius:12px;color:white;font-size:14px;font-weight:800;cursor:pointer">
+          📋 コピー
+        </button>
+        <a href="https://claude.ai/new" target="_blank" style="padding:14px;background:#7c3aed;border:none;border-radius:12px;color:white;font-size:14px;font-weight:800;cursor:pointer;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:4px">
+          🤖 Claude.aiを開く
+        </a>
+      </div>
+      <div id="msg-img-attach-note" style="display:none;margin-top:10px;padding:12px 14px;background:#FFF3E0;border-radius:10px;font-size:12px;color:#BF5B10;font-weight:700;line-height:1.6">
+        📎 画像もClaude.aiに添付してください<br>
+        <span style="font-weight:400">Claude.aiのメッセージ入力欄の「↑」アイコンまたはクリップアイコンから画像をアップロードできます</span>
+      </div>
+    </div>
+  `;
+
+  // Ctrl+V ペーストで画像をキャッチ（1回だけ登録）
+  if (!_msgPasteListenerAdded) {
+    document.addEventListener('paste', handleMsgPaste);
+    _msgPasteListenerAdded = true;
+  }
+}
+
+function onMsgBookingSelect() {
+  const code = document.getElementById('msg-booking-select').value;
+  if (!code) return;
+  const b = airbnbBookings.find(x => x.code === code);
+  if (!b) return;
+  const prop = properties.find(p => p.id === getBookingPropId(b));
+
+  document.getElementById('msg-guest-name').value  = b.guestName || '';
+  document.getElementById('msg-checkin').value     = b.checkin   || '';
+  document.getElementById('msg-checkout').value    = getCheckout(b) || '';
+  document.getElementById('msg-prop-name').value   = prop ? prop.name : '';
+  document.getElementById('msg-listing').value     = b.listing   || '';
+  document.getElementById('msg-adults').value      = b.adults   != null ? b.adults   : '';
+  document.getElementById('msg-children').value    = b.children != null ? b.children : '';
+  document.getElementById('msg-infants').value     = b.infants  != null ? b.infants  : '';
+}
+
+function getMsgSeasonComment(checkinStr) {
+  if (!checkinStr) return '';
+  const parts = checkinStr.split('/').map(Number);
+  if (parts.length < 2) return '';
+  const month = parts[1];
+  const day   = parts[2] || 15;
+  if (month === 6 || (month === 7 && day <= 20)) return '梅雨の時期（雨が多く蒸し暑い季節）';
+  if ((month === 7 && day > 20) || month === 8)  return '真夏（暑い季節・冷房の効いた室内でお過ごしください）';
+  if (month >= 9 && month <= 11)                 return '秋（過ごしやすい観光シーズン）';
+  if (month === 12 || month <= 2)                return '冬（寒い季節・暖房をご活用ください）';
+  if (month >= 3 && month <= 5)                  return '春（桜や新緑が美しい季節）';
+  return '';
+}
+
+function generateMsgPrompt() {
+  const guestName = document.getElementById('msg-guest-name').value.trim() || 'ゲスト';
+  const checkin   = document.getElementById('msg-checkin').value.trim();
+  const checkout  = document.getElementById('msg-checkout').value.trim();
+  const propName  = document.getElementById('msg-prop-name').value.trim() || '物件';
+  const listing   = document.getElementById('msg-listing').value.trim();
+  const adults    = document.getElementById('msg-adults').value;
+  const children  = document.getElementById('msg-children').value;
+  const infants   = document.getElementById('msg-infants').value;
+  const language  = document.getElementById('msg-language').value.trim();
+  const guestText = document.getElementById('msg-guest-text').value.trim();
+  const notes     = document.getElementById('msg-notes').value.trim();
+
+  const selectedTypes = [...document.querySelectorAll('input[name="msg-type"]:checked')].map(el => el.value);
+  if (selectedTypes.length === 0) {
+    showToast('生成するメッセージを1つ以上選択してください', 'error');
+    return;
+  }
+
+  const typeLabels = {
+    pre_booking:     '予約前メッセージ（予約確定前のゲストへの挨拶と確認事項）',
+    welcome:         'ウェルカムメッセージ（予約確定直後のお礼と物件の基本情報）',
+    pre_checkin:     'チェックイン前案内（チェックイン前日〜当日の詳細アクセス・入室方法案内）',
+    during1:         '滞在中メッセージ①（チェックイン直後・到着確認と困りごとがないかの確認）',
+    during2:         '滞在中メッセージ②（滞在中盤・快適に過ごせているかの確認）',
+    checkout_thanks: 'チェックアウトお礼メッセージ（チェックアウト後のお礼）',
+    review_request:  'レビュー促進メッセージ（レビュー投稿のお願い）',
+    public_review:   'ホストからゲストへの公開レビュー文',
+  };
+
+  const guestsText = [
+    adults   ? `大人${adults}名`   : '',
+    children ? `子ども${children}名` : '',
+    infants  ? `乳幼児${infants}名`  : '',
+  ].filter(Boolean).join('・') || '不明';
+
+  const season = getMsgSeasonComment(checkin);
+  const isJapanese = language ? language.includes('日本') : false;
+  const langInstruction = language
+    ? (isJapanese
+        ? '日本語のみで作成してください。'
+        : `**日本語と${language}の両方**で作成してください（日本語→${language}の順）。翻訳は自然でネイティブらしい表現を使ってください。`)
+    : '**日本語と英語の両方**で作成してください（日本語→英語の順）。';
+
+  let prompt = `# Airbnbゲストへのメッセージ作成依頼
+
+## あなたの役割
+あなたは経験豊富なAirbnbホストです。以下の情報を踏まえ、指定されたメッセージを作成してください。
+
+---
+
+## 物件情報
+- 物件名（内部管理名）：${propName}
+`;
+  if (listing) prompt += `- Airbnbリスティングタイトル：${listing}\n`;
+  prompt += `
+## 予約情報
+- ゲスト名：${guestName}
+- チェックイン：${checkin || '不明'}（15:00〜）
+- チェックアウト：${checkout || '不明'}（10:00まで）
+- 宿泊人数：${guestsText}
+`;
+  if (language) prompt += `- ゲストの国籍・言語：${language}\n`;
+
+  prompt += `
+## 言語指定
+${langInstruction}
+`;
+
+  if (season) {
+    prompt += `
+## 季節・時期
+チェックイン時期は**${season}**です。メッセージにさりげなく季節感を盛り込んでください。
+`;
+  }
+
+  if (guestText || _msgImgDataUrl) {
+    prompt += `
+## ゲストから受け取ったメッセージ（原文）
+`;
+    if (guestText) {
+      prompt += `\`\`\`\n${guestText}\n\`\`\`\n`;
+    }
+    if (_msgImgDataUrl) {
+      prompt += `※ 画像メッセージを別途添付しています。画像に写っているテキスト・内容も読み取って返信メッセージを作成してください。\n`;
+    }
+  }
+
+  if (notes) {
+    prompt += `
+## 特記事項
+${notes}
+`;
+  }
+
+  prompt += `
+---
+
+## 作成するメッセージ
+以下を作成してください：
+${selectedTypes.map(t => `- ${typeLabels[t]}`).join('\n')}
+
+## メッセージ作成のルール
+- 丁寧かつ温かみのある口調で（フォーマルすぎず、フレンドリーすぎず）
+- ゲスト名はファーストネームで呼びかける
+- 絵文字は適度に使用（1メッセージあたり2〜4個程度）
+- Airbnbのメッセージとして自然な文体・長さにする
+- 公開レビュー文の場合：具体的な印象や滞在の様子を含め、次のゲストが安心できる内容にする
+- 不要な長さは避け、シンプルにまとめる
+
+それではメッセージを作成してください。`;
+
+  const ta = document.getElementById('msg-prompt-area');
+  ta.value = prompt;
+  ta.style.height = 'auto';
+  ta.style.height = Math.min(ta.scrollHeight, 600) + 'px';
+
+  document.getElementById('msg-output-card').style.display = 'block';
+  document.getElementById('msg-img-attach-note').style.display = _msgImgDataUrl ? 'block' : 'none';
+  document.getElementById('msg-output-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  showToast('プロンプトを生成しました！', 'success');
+}
+
+function handleMsgPaste(event) {
+  if (!document.getElementById('page-message').classList.contains('active')) return;
+  const items = event.clipboardData && event.clipboardData.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      const blob = item.getAsFile();
+      const reader = new FileReader();
+      reader.onload = e => setMsgImg(e.target.result);
+      reader.readAsDataURL(blob);
+      event.preventDefault();
+      return;
+    }
+  }
+}
+
+function handleMsgImgFile(input) {
+  const file = input.files[0];
+  if (!file || !file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = e => setMsgImg(e.target.result);
+  reader.readAsDataURL(file);
+}
+
+function handleMsgImgDrop(event) {
+  event.preventDefault();
+  const zone = document.getElementById('msg-img-drop-zone');
+  if (zone) { zone.style.borderColor = '#D0CEC9'; zone.style.background = '#FAFAF9'; }
+  const file = event.dataTransfer.files[0];
+  if (!file || !file.type.startsWith('image/')) { showToast('画像ファイルを選択してください', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = e => setMsgImg(e.target.result);
+  reader.readAsDataURL(file);
+}
+
+function setMsgImg(dataUrl) {
+  _msgImgDataUrl = dataUrl;
+  const thumb = document.getElementById('msg-img-thumb');
+  const preview = document.getElementById('msg-img-preview');
+  const zone = document.getElementById('msg-img-drop-zone');
+  if (thumb) thumb.src = dataUrl;
+  if (preview) preview.style.display = 'block';
+  if (zone) zone.style.display = 'none';
+  showToast('画像を読み込みました', 'success');
+}
+
+function clearMsgImg() {
+  _msgImgDataUrl = null;
+  const thumb = document.getElementById('msg-img-thumb');
+  const preview = document.getElementById('msg-img-preview');
+  const zone = document.getElementById('msg-img-drop-zone');
+  const fileInput = document.getElementById('msg-img-input');
+  if (thumb) thumb.src = '';
+  if (preview) preview.style.display = 'none';
+  if (zone) zone.style.display = 'block';
+  if (fileInput) fileInput.value = '';
+}
+
+function copyMsgPrompt() {
+  const ta = document.getElementById('msg-prompt-area');
+  if (!ta || !ta.value) return;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(ta.value)
+      .then(() => showToast('コピーしました！Claude.aiに貼り付けてください', 'success'))
+      .catch(() => { ta.select(); document.execCommand('copy'); showToast('コピーしました！', 'success'); });
+  } else {
+    ta.select();
+    document.execCommand('copy');
+    showToast('コピーしました！', 'success');
+  }
 }
 </script>
 </body>
