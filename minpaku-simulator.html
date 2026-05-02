@@ -1423,7 +1423,7 @@ function renderCalendarTab() {
                 <input type="text" inputmode="numeric" pattern="[0-9]*" value="${chk.otherFee != null ? chk.otherFee : 0}" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','otherFee',this.value)" onblur="saveBookingChecks()">
                 <span style="font-size:11px;color:#999">円</span>
                 <span style="font-size:11px;color:#555;grid-column:1/4;margin-top:2px">📝 メモ（その他費用の内容）</span>
-                <input type="text" value="${escHtml(chk.otherMemo||'')}" placeholder="例：鍵交換代、消臭スプレー等" style="grid-column:1/4;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;color:#333;box-sizing:border-box;width:100%" oninput="updateBookingCost('${b.code}','otherMemo',this.value)" onblur="saveBookingChecks()">
+                <input type="text" value="${escHtml(String(chk.otherMemo||''))}" placeholder="例：鍵交換代、消臭スプレー等" style="grid-column:1/4;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;color:#333;box-sizing:border-box;width:100%" oninput="updateBookingCost('${b.code}','otherMemo',this.value)" onblur="saveBookingChecks()">
               </div>
             </div>
           </div>` : ''}
