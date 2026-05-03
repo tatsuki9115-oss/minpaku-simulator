@@ -4326,6 +4326,24 @@ async function fetchWelcomeWeather() {
       }
       return areas[0] || null;
     };
+    // data[0]（今日・明日の詳細予報）から気温を取得して補完用マップを作成
+    const daily = data[0];
+    const dailyTempMap = {};
+    if (daily?.timeSeries) {
+      const dailyTempSeries = daily.timeSeries.find(ts => ts.areas?.some(a => a.tempsMax || a.tempsMin));
+      if (dailyTempSeries) {
+        const dArea = findArea(dailyTempSeries.areas);
+        if (dArea) {
+          const dMax = dArea.tempsMax || [];
+          const dMin = dArea.tempsMin || [];
+          dailyTempSeries.timeDefines.forEach((t, i) => {
+            const key = new Date(t).toDateString();
+            if (dMax[i] !== '' && dMax[i] != null) dailyTempMap[key] = { ...(dailyTempMap[key] || {}), max: String(dMax[i]) };
+            if (dMin[i] !== '' && dMin[i] != null) dailyTempMap[key] = { ...(dailyTempMap[key] || {}), min: String(dMin[i]) };
+          });
+        }
+      }
+    }
     const weatherSeries = weekly.timeSeries.find(ts => ts.areas?.some(a => a.weathers || a.weatherCodes));
     const tempSeries    = weekly.timeSeries.find(ts => ts.areas?.some(a => a.tempsMax));
     if (!weatherSeries) throw new Error('天気データなし');
@@ -4339,12 +4357,16 @@ async function fetchWelcomeWeather() {
       tempsMax = tArea?.tempsMax || [];
       tempsMin = tArea?.tempsMin || [];
     }
-    const days = dates.map((d, i) => ({
-      date: d,
-      weather: (weathers[i] || '').replace(/[　\s]+/g, '').trim(),
-      tempMax: tempsMax[i] !== '' && tempsMax[i] != null ? String(tempsMax[i]) : null,
-      tempMin: tempsMin[i] !== '' && tempsMin[i] != null ? String(tempsMin[i]) : null
-    })).filter(d => d.weather);
+    const days = dates.map((d, i) => {
+      const key = d.toDateString();
+      const sup = dailyTempMap[key] || {};
+      return {
+        date: d,
+        weather: (weathers[i] || '').replace(/[　\s]+/g, '').trim(),
+        tempMax: (tempsMax[i] !== '' && tempsMax[i] != null) ? String(tempsMax[i]) : (sup.max || null),
+        tempMin: (tempsMin[i] !== '' && tempsMin[i] != null) ? String(tempsMin[i]) : (sup.min || null),
+      };
+    }).filter(d => d.weather);
     welcomeWeatherData = { area, days, fetchedAt: new Date() };
     // プレビュー表示
     const dow = ['日','月','火','水','木','金','土'];
