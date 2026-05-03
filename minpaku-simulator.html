@@ -4297,9 +4297,9 @@ function getWelcomeArea(b) {
   const prop = properties.find(p => p.id === getBookingPropId(b));
   const pName = prop ? prop.name.toLowerCase() : '';
   if (/新子安|横浜|kanagawa|yokohama/.test(listing + pName)) {
-    return { label: '横浜（神奈川）', areaCode: '140000', areaName: '神奈川', jmaUrl: 'https://www.data.jma.go.jp/multi/yoho/yoho_detail.html?code=140010&lang=jp' };
+    return { label: '新子安（横浜）', areaCode: '140000', areaName: '横浜', areaNameHint: '横浜', jmaUrl: 'https://www.data.jma.go.jp/multi/yoho/yoho_detail.html?code=140010&lang=jp' };
   }
-  return { label: '東京', areaCode: '130000', areaName: '東京', jmaUrl: 'https://www.data.jma.go.jp/multi/yoho/yoho_detail.html?code=130010&lang=jp' };
+  return { label: '高幡不動（多摩）', areaCode: '130000', areaName: '多摩地方', areaNameHint: '多摩', jmaUrl: 'https://www.data.jma.go.jp/multi/yoho/yoho_detail.html?code=130020&lang=jp' };
 }
 
 async function fetchWelcomeWeather() {
@@ -4316,16 +4316,26 @@ async function fetchWelcomeWeather() {
     // data[1] = 週間予報
     const weekly = data[1];
     if (!weekly?.timeSeries) throw new Error('データ形式エラー');
+    const hint = area.areaNameHint || '';
+    // エリア名ヒントで絞り込む（例：多摩、横浜）。なければ最初のエリアを使用
+    const findArea = (areas) => {
+      if (!areas) return null;
+      if (hint) {
+        const matched = areas.find(a => (a.area?.name || '').includes(hint));
+        if (matched) return matched;
+      }
+      return areas[0] || null;
+    };
     const weatherSeries = weekly.timeSeries.find(ts => ts.areas?.some(a => a.weathers || a.weatherCodes));
     const tempSeries    = weekly.timeSeries.find(ts => ts.areas?.some(a => a.tempsMax));
     if (!weatherSeries) throw new Error('天気データなし');
     const dates = weatherSeries.timeDefines.map(t => new Date(t));
-    const wArea = weatherSeries.areas[0];
+    const wArea = findArea(weatherSeries.areas);
     const weathers = wArea?.weathers
       || (wArea?.weatherCodes || []).map(c => jmaCodeToText(c));
     let tempsMax = [], tempsMin = [];
     if (tempSeries) {
-      const tArea = tempSeries.areas[0];
+      const tArea = findArea(tempSeries.areas);
       tempsMax = tArea?.tempsMax || [];
       tempsMin = tArea?.tempsMin || [];
     }
