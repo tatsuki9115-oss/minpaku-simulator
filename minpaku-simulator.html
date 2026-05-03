@@ -3929,7 +3929,7 @@ function generatePaymentStatement(code) {
   const coStr = getCheckout(b);
 
   // 備考
-  const expenseNotes = [laundryFee > 0 ? `コインランドリー ${laundryFee.toLocaleString('ja-JP')}円` : '', suppliesFee > 0 ? `消耗品 ${suppliesFee.toLocaleString('ja-JP')}円` : '', otherFee > 0 ? `その他 ${otherFee.toLocaleString('ja-JP')}円${otherMemo ? '（'+otherMemo+'）' : ''}` : ''].filter(Boolean).join('<br>');
+  const expenseNotes = [laundryFee > 0 ? `コインランドリー ${laundryFee.toLocaleString('ja-JP')}円` : '', suppliesFee > 0 ? `消耗品 ${suppliesFee.toLocaleString('ja-JP')}円` : '', otherFee > 0 ? `その他 ${otherFee.toLocaleString('ja-JP')}円` : ''].filter(Boolean).join('<br>');
   const expenseRow = expenseTotal > 0 ? `
     <tr>
       <td>実費精算</td><td>立替費用</td>
