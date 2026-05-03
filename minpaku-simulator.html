@@ -348,6 +348,14 @@
 </div>
 
 <nav class="bottom-nav">
+  <button class="bottom-nav-item" onclick="showTab('message')" id="nav-message">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+    メッセージ
+  </button>
+  <button class="bottom-nav-item" onclick="showTab('sim')" id="nav-sim">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+    試算
+  </button>
   <button class="bottom-nav-item" onclick="showTab('bookings')" id="nav-bookings">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
     予約
@@ -356,21 +364,9 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
     カレンダー
   </button>
-  <button class="bottom-nav-item" onclick="showTab('annual')" id="nav-annual">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-    実績
-  </button>
-  <button class="bottom-nav-item" onclick="showTab('sim')" id="nav-sim">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
-    試算
-  </button>
   <button class="bottom-nav-item" onclick="showTab('settings')" id="nav-settings">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>
     設定
-  </button>
-  <button class="bottom-nav-item" onclick="showTab('message')" id="nav-message">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-    メッセージ
   </button>
 </nav>
 
@@ -3992,6 +3988,7 @@ const MSG_USAGE_KEY = 'minpaku_msg_usage_v1';
 let msgUsageLog = (function() {
   try { return JSON.parse(localStorage.getItem(MSG_USAGE_KEY) || '{}'); } catch(e) { return {}; }
 })();
+let msgMode = 'message'; // 'message' | 'review'
 
 function saveMsgUsageLog() {
   localStorage.setItem(MSG_USAGE_KEY, JSON.stringify(msgUsageLog));
@@ -4075,6 +4072,19 @@ function renderMessageTab() {
   }).join('');
 
   el.innerHTML = `
+    <div class="card" style="padding:10px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <button id="mode-btn-message" onclick="setMsgMode('message')"
+          style="padding:14px 8px;border-radius:12px;border:2px solid ${msgMode==='message'?'#F07C3F':'#E8E6E1'};background:${msgMode==='message'?'#FFF3ED':'#FAFAF9'};color:${msgMode==='message'?'#F07C3F':'#888'};font-size:14px;font-weight:800;cursor:pointer;transition:all .15s">
+          💬 メッセージ送信
+        </button>
+        <button id="mode-btn-review" onclick="setMsgMode('review')"
+          style="padding:14px 8px;border-radius:12px;border:2px solid ${msgMode==='review'?'#F07C3F':'#E8E6E1'};background:${msgMode==='review'?'#FFF3ED':'#FAFAF9'};color:${msgMode==='review'?'#F07C3F':'#888'};font-size:14px;font-weight:800;cursor:pointer;transition:all .15s">
+          ⭐ レビュー作成
+        </button>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-title">予約選択</div>
       <select class="prop-select" id="msg-booking-select" onchange="onMsgBookingSelect()">
@@ -4134,8 +4144,8 @@ function renderMessageTab() {
     </div>
 
     <div class="card">
-      <div class="card-title">今回ゲストから届いたメッセージ</div>
-      <textarea id="msg-guest-text" placeholder="ゲストからのメッセージをここにコピペ（画像・スクリーンショットは民泊botに直接アップロード）" style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:12px;font-size:14px;line-height:1.7;resize:vertical;min-height:110px;background:#FAFAF9;font-family:inherit;box-sizing:border-box"></textarea>
+      <div class="card-title" id="msg-guest-text-title">${msgMode === 'review' ? '今回の滞在メモ（印象・気になった点など）' : '今回ゲストから届いたメッセージ'}</div>
+      <textarea id="msg-guest-text" placeholder="${msgMode === 'review' ? '例：清潔に使ってくれた、深夜に騒音あり、コミュニケーションは良好、など' : 'ゲストからのメッセージをここにコピペ（画像・スクリーンショットは民泊botに直接アップロード）'}" style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:12px;font-size:14px;line-height:1.7;resize:vertical;min-height:110px;background:#FAFAF9;font-family:inherit;box-sizing:border-box"></textarea>
     </div>
 
     <div class="card">
@@ -4145,7 +4155,7 @@ function renderMessageTab() {
 
     <div class="card" style="background:#1C1C1E">
       <button onclick="generateMsgPrompt()" style="width:100%;padding:18px;background:#F07C3F;border:none;border-radius:12px;color:white;font-size:17px;font-weight:800;cursor:pointer;letter-spacing:.3px">
-        ✨ プロンプトを生成
+        ${msgMode === 'review' ? '⭐ レビュープロンプトを生成' : '✨ メッセージプロンプトを生成'}
       </button>
     </div>
 
@@ -4218,6 +4228,30 @@ function renderMsgHistory(code) {
   `;
 }
 
+function setMsgMode(mode) {
+  msgMode = mode;
+  // ボタンスタイル更新
+  ['message','review'].forEach(m => {
+    const btn = document.getElementById('mode-btn-' + m);
+    if (!btn) return;
+    const active = m === mode;
+    btn.style.border    = `2px solid ${active ? '#F07C3F' : '#E8E6E1'}`;
+    btn.style.background = active ? '#FFF3ED' : '#FAFAF9';
+    btn.style.color      = active ? '#F07C3F' : '#888';
+  });
+  // ゲストテキストエリアのラベル・placeholder更新
+  const titleEl = document.getElementById('msg-guest-text-title');
+  const ta      = document.getElementById('msg-guest-text');
+  if (titleEl) titleEl.textContent = mode === 'review' ? '今回の滞在メモ（印象・気になった点など）' : '今回ゲストから届いたメッセージ';
+  if (ta)      ta.placeholder      = mode === 'review' ? '例：清潔に使ってくれた、深夜に騒音あり、コミュニケーションは良好、など' : 'ゲストからのメッセージをここにコピペ（画像・スクリーンショットは民泊botに直接アップロード）';
+  // 生成ボタンラベル更新
+  const genBtn = document.querySelector('#message-content button[onclick="generateMsgPrompt()"]');
+  if (genBtn) genBtn.textContent = mode === 'review' ? '⭐ レビュープロンプトを生成' : '✨ メッセージプロンプトを生成';
+  // 出力カードを非表示にリセット
+  const out = document.getElementById('msg-output-card');
+  if (out) out.style.display = 'none';
+}
+
 function getMsgSeasonComment(checkinStr) {
   if (!checkinStr) return '';
   const parts = checkinStr.split('/').map(Number);
@@ -4255,7 +4289,58 @@ function generateMsgPrompt() {
     ? (isJP ? '日本語のみで作成してください。' : `**日本語と${language}の両方**で作成してください（日本語→${language}の順）。`)
     : '**日本語と英語の両方**で作成してください（日本語→英語の順）。';
 
-  let prompt = `# Airbnbゲストへのメッセージ作成依頼
+  let prompt;
+
+  if (msgMode === 'review') {
+    // ===== レビュー作成モード =====
+    const b = airbnbBookings.find(x => x.code === code);
+    const nights = b ? b.nights : '';
+    prompt = `# Airbnbゲストへのホストレビュー作成依頼
+
+## あなたの役割
+あなたは経験豊富なAirbnbホストです。以下の情報とこのプロジェクトの会話履歴をもとに、**このゲストへのホストレビュー**を作成してください。
+
+---
+
+## 予約情報
+- 物件名：${propName}
+- ゲスト名：${guestName}
+- チェックイン：${checkin || '不明'}
+- チェックアウト：${checkout || '不明'}
+- 宿泊日数：${nights ? nights + '泊' : '不明'}
+- 宿泊人数：${guestsText}
+`;
+    if (language) prompt += `- 国籍・言語：${language}\n`;
+    if (guestText) prompt += `\n## 今回の滞在メモ\n${guestText}\n`;
+    if (notes)     prompt += `\n## 特記事項\n${notes}\n`;
+    prompt += `
+---
+
+## 以下の手順でレビューを作成してください
+
+### Step 1: 滞在を振り返る
+このプロジェクトの会話履歴を確認し、以下を箇条書きで整理すること：
+- ゲストとのやり取りの印象（対応の速さ・丁寧さなど）
+- 特記すべきポイント（良かった点・気になった点）
+
+### Step 2: レビュー本文を作成する
+- **事実ベース**で書く（過度な褒め言葉は避ける）
+- **ネガティブな点**がある場合は婉曲的かつ正直に
+- Airbnbのホストレビューとして自然な長さ（3〜5文程度）
+- 日本語と英語の両方で作成（日本語→英語の順）
+
+### Step 3: 星評価の推奨を添える
+以下の項目ごとに星（1〜5）を推奨し、理由を一言添えること：
+- コミュニケーション
+- 清潔さ（退去時の状態）
+- ルール遵守
+- 再宿泊・推薦意向
+
+Step 1の整理 → Step 2のレビュー本文 → Step 3の星評価推奨、の順で回答してください。`;
+
+  } else {
+    // ===== メッセージ送信モード =====
+    prompt = `# Airbnbゲストへのメッセージ作成依頼
 
 ## あなたの役割
 あなたは経験豊富なAirbnbホストです。以下の状況を把握した上で、**今このタイミングで送るべき最適なメッセージを自分で判断して作成**してください。状況から判断できない場合は補足質問をしてください。
@@ -4269,26 +4354,26 @@ function generateMsgPrompt() {
 ## 物件情報
 - 物件名：${propName}
 `;
-  if (listing) prompt += `- リスティング：${listing}\n`;
-  prompt += `
+    if (listing) prompt += `- リスティング：${listing}\n`;
+    prompt += `
 ## 予約情報
 - ゲスト名：${guestName}
 - チェックイン：${checkin || '不明'}（15:00〜）
 - チェックアウト：${checkout || '不明'}（10:00まで）
 - 宿泊人数：${guestsText}
 `;
-  if (language) prompt += `- 国籍・言語：${language}\n`;
-  if (season)   prompt += `- チェックイン時期：${season}\n`;
-  prompt += `
+    if (language) prompt += `- 国籍・言語：${language}\n`;
+    if (season)   prompt += `- チェックイン時期：${season}\n`;
+    prompt += `
 ## 言語指定
 ${langRule}
 `;
-  if (guestText) {
-    prompt += `\n## 今回ゲストから届いたメッセージ（原文）\n\`\`\`\n${guestText}\n\`\`\`\n`;
-  }
-  if (notes) prompt += `\n## 特記事項\n${notes}\n`;
+    if (guestText) {
+      prompt += `\n## 今回ゲストから届いたメッセージ（原文）\n\`\`\`\n${guestText}\n\`\`\`\n`;
+    }
+    if (notes) prompt += `\n## 特記事項\n${notes}\n`;
 
-  prompt += `
+    prompt += `
 ---
 
 ## 以下の3ステップで判断・回答してください
@@ -4326,6 +4411,7 @@ ${langRule}
 - 言語指定に従うこと
 
 Step 1の整理 → Step 2の判断 → （必要なら）Step 3の作成、の順で回答してください。`;
+  }
 
   // 使用ログを保存・履歴更新
   saveMsgEntry(code, checkout, guestText, notes, stage);
