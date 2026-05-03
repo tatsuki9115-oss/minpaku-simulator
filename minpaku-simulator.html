@@ -3815,8 +3815,13 @@ function toggleCheckStaffFromList(code, staffName) {
 // oninputで値をメモリに保持 → onblurでsaveBookingChecks()を呼んで保存
 function updateBookingCost(code, field, val) {
   if (!bookingChecks[code]) bookingChecks[code] = {};
+  // メモ欄はテキストのまま保存
+  if (field === 'otherMemo' || field === 'otherMemoOff') {
+    bookingChecks[code][field] = String(val);
+    return;
+  }
+  // 金額欄：数字のみ、空欄はnull（デフォルト値に戻す）
   const cleaned = String(val).replace(/[^0-9]/g, '');
-  // 空欄はnull（デフォルト値に戻す）、数字があれば整数で保存
   bookingChecks[code][field] = cleaned === '' ? null : (parseInt(cleaned) || 0);
 }
 
