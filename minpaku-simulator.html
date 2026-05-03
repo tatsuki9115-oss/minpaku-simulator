@@ -1425,11 +1425,14 @@ function renderCalendarTab() {
                 <span style="font-size:11px;color:#555">🛒 消耗品</span>
                 <input type="text" inputmode="numeric" pattern="[0-9]*" value="${dispSupplies}" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','suppliesFee',this.value)" onblur="saveBookingChecks()">
                 <span style="font-size:11px;color:#999">円</span>
-                <span style="font-size:11px;color:#555">💡 その他費用</span>
+                <span style="font-size:11px;color:#555">💡 その他（明細あり）</span>
                 <input type="text" inputmode="numeric" pattern="[0-9]*" value="${chk.otherFee != null ? chk.otherFee : 0}" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','otherFee',this.value)" onblur="saveBookingChecks()">
                 <span style="font-size:11px;color:#999">円</span>
-                <span style="font-size:11px;color:#555;grid-column:1/4;margin-top:2px">📝 メモ（その他費用の内容）</span>
-                <input type="text" value="${escHtml(String(chk.otherMemo||''))}" placeholder="例：鍵交換代、消臭スプレー等" style="grid-column:1/4;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;color:#333;box-sizing:border-box;width:100%" oninput="updateBookingCost('${b.code}','otherMemo',this.value)" onblur="saveBookingChecks()">
+                <input type="text" value="${escHtml(String(chk.otherMemo||''))}" placeholder="内容メモ（支払明細に記載）" style="grid-column:1/4;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;color:#333;box-sizing:border-box;width:100%;margin-top:1px" oninput="updateBookingCost('${b.code}','otherMemo',this.value)" onblur="saveBookingChecks()">
+                <span style="font-size:11px;color:#888">🔒 その他（明細なし）</span>
+                <input type="text" inputmode="numeric" pattern="[0-9]*" value="${chk.otherFeeOff != null ? chk.otherFeeOff : 0}" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','otherFeeOff',this.value)" onblur="saveBookingChecks()">
+                <span style="font-size:11px;color:#999">円</span>
+                <input type="text" value="${escHtml(String(chk.otherMemoOff||''))}" placeholder="内容メモ（支払明細には載せない）" style="grid-column:1/4;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;color:#333;box-sizing:border-box;width:100%;margin-top:1px" oninput="updateBookingCost('${b.code}','otherMemoOff',this.value)" onblur="saveBookingChecks()">
               </div>
             </div>
           </div>` : ''}
@@ -2766,10 +2769,11 @@ function getPerBookingTotal(booking, prop) {
   // 消耗品: 明示入力値 → デフォルト0
   const suppliesFee = chk.suppliesFee != null ? (parseInt(chk.suppliesFee) || 0) : 0;
 
-  // その他費用: 明示入力値 → デフォルト0
-  const otherFee = chk.otherFee != null ? (parseInt(chk.otherFee) || 0) : 0;
+  // その他費用: 明示入力値 → デフォルト0（明細あり・なし両方を収支に反映）
+  const otherFee    = chk.otherFee    != null ? (parseInt(chk.otherFee)    || 0) : 0;
+  const otherFeeOff = chk.otherFeeOff != null ? (parseInt(chk.otherFeeOff) || 0) : 0;
 
-  return cleaningFee + laundryFee + suppliesFee + otherFee;
+  return cleaningFee + laundryFee + suppliesFee + otherFee + otherFeeOff;
 }
 
 function calcAirbnbProfit(b) {
