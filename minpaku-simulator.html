@@ -4415,6 +4415,8 @@ async function fetchTamaEvents() {
     const dates = [];
     for (let d = new Date(cin); d < cout; d.setDate(d.getDate() + 1)) dates.push(new Date(d));
     if (dates.length === 0) dates.push(cin); // 日帰り等の保険
+    // チェックイン日をYYYYMMDD形式で保持（チェックイン前の単日イベント除外に使用）
+    const cinYMD = `${cin.getFullYear()}${String(cin.getMonth()+1).padStart(2,'0')}${String(cin.getDate()).padStart(2,'0')}`;
     // 各日を並列フェッチ → イベントIDで重複排除
     const allEvents = new Map();
     await Promise.allSettled(dates.map(async date => {
@@ -4434,9 +4436,13 @@ async function fetchTamaEvents() {
         data.list.forEach(ev => {
           if (!allEvents.has(ev.id)) {
             const sameDay = ev.start_dt === ev.end_dt;
+            // 単日イベントでチェックイン前のものはスキップ
+            if (sameDay && ev.start_dt < cinYMD) return;
+            // タイトル先頭の【〜】ラベルを除去
+            const cleanTitle = ev.event_nm.replace(/^【[^】]*】\s*/, '').trim();
             allEvents.set(ev.id, {
               id:     ev.id,
-              title:  ev.event_nm,
+              title:  cleanTitle,
               dates:  sameDay ? `${ev.start_dt}${ev.start_tm ? ' ' + ev.start_tm : ''}` : `${ev.start_dt}〜${ev.end_dt}`,
               area:   (ev.areas || []).map(a => a.name).join('・'),
               venue:  '',
