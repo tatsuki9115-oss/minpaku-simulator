@@ -4415,8 +4415,9 @@ async function fetchTamaEvents() {
     const dates = [];
     for (let d = new Date(cin); d < cout; d.setDate(d.getDate() + 1)) dates.push(new Date(d));
     if (dates.length === 0) dates.push(cin); // 日帰り等の保険
-    // チェックイン日をYYYYMMDD形式で保持（チェックイン前の単日イベント除外に使用）
-    const cinYMD = `${cin.getFullYear()}${String(cin.getMonth()+1).padStart(2,'0')}${String(cin.getDate()).padStart(2,'0')}`;
+    // チェックイン・チェックアウト日をYYYYMMDD形式で保持（期間外イベント除外に使用）
+    const cinYMD  = `${cin.getFullYear()}${String(cin.getMonth()+1).padStart(2,'0')}${String(cin.getDate()).padStart(2,'0')}`;
+    const coutYMD = `${cout.getFullYear()}${String(cout.getMonth()+1).padStart(2,'0')}${String(cout.getDate()).padStart(2,'0')}`;
     // 各日を並列フェッチ → イベントIDで重複排除
     const allEvents = new Map();
     await Promise.allSettled(dates.map(async date => {
@@ -4436,9 +4437,11 @@ async function fetchTamaEvents() {
         data.list.forEach(ev => {
           if (!allEvents.has(ev.id)) {
             const sameDay = ev.start_dt === ev.end_dt;
-            // 終了日がチェックイン前のイベントはスキップ（スラッシュ除去して数字8桁で比較）
-            const endDt = (ev.end_dt || '').replace(/\//g, '');
-            if (endDt && endDt < cinYMD) return;
+            // 滞在期間外のイベントはスキップ（スラッシュ除去して数字8桁で比較）
+            const startDt = (ev.start_dt || '').replace(/\//g, '');
+            const endDt   = (ev.end_dt   || '').replace(/\//g, '');
+            if (endDt && endDt < cinYMD) return;     // チェックイン前に終了
+            if (startDt && startDt > coutYMD) return; // チェックアウト後に開始
             // タイトル先頭の【〜】ラベルを除去
             const cleanTitle = ev.event_nm.replace(/^【[^】]*】\s*/, '').trim();
             allEvents.set(ev.id, {
