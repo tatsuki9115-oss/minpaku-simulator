@@ -4332,6 +4332,59 @@ function getWelcomeArea(b) {
     eventBaseUrl: null };
 }
 
+// 横浜主要会場 → 最寄駅アクセス対応表
+const YOKOHAMA_VENUE_ACCESS = {
+  '赤レンガ':             '馬車道駅（みなとみらい線）徒歩10分',
+  'ランドマークプラザ':   'みなとみらい駅（みなとみらい線）直結',
+  'MARK IS':              'みなとみらい駅（みなとみらい線）徒歩2分',
+  'ハンマーヘッド':       '馬車道駅（みなとみらい線）徒歩11分',
+  'ベイクォーター':       '横浜駅（各線）徒歩5分',
+  'ワールドポーターズ':   'みなとみらい駅（みなとみらい線）徒歩8分',
+  'パシフィコ':           'みなとみらい駅（みなとみらい線）徒歩5分',
+  'MARINE & WALK':        '馬車道駅（みなとみらい線）徒歩10分',
+  'グランモール':         'みなとみらい駅（みなとみらい線）徒歩3分',
+  'PLOT48':               'みなとみらい駅（みなとみらい線）徒歩6分',
+  'みなとみらいホール':   'みなとみらい駅（みなとみらい線）徒歩3分',
+  'コスモワールド':       'みなとみらい駅（みなとみらい線）徒歩5分',
+  'ぴあアリーナ':         '新高島駅（みなとみらい線）徒歩5分',
+  'KアリーナYOKOHAMA':    '新高島駅（みなとみらい線）徒歩1分',
+  'KアリーナYokohama':    '新高島駅（みなとみらい線）徒歩1分',
+  '横浜スタジアム':       '関内駅（JR・市営地下鉄）徒歩3分',
+  'バンテリンドーム':     '関内駅（JR・市営地下鉄）徒歩3分',
+  '日産スタジアム':       '小机駅（JR横浜線）徒歩5分',
+  '横浜アリーナ':         '新横浜駅（JR・市営地下鉄）徒歩5分',
+};
+function getVenueAccess(venue) {
+  if (!venue) return null;
+  for (const [key, val] of Object.entries(YOKOHAMA_VENUE_ACCESS)) {
+    if (venue.includes(key)) return val;
+  }
+  return null;
+}
+
+// イベント詳細ページから開催日・会場をフェッチ
+async function fetchEventDetailInfo(href, proxyFn) {
+  try {
+    const url = `https://www.welcome.city.yokohama.jp${href}`;
+    const res = await fetch(proxyFn(url));
+    if (!res.ok) return null;
+    const html = await res.text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const info = {};
+    doc.querySelectorAll('table tr').forEach(tr => {
+      const label = tr.querySelector('span.event-disc-category')?.textContent?.trim();
+      const td = tr.querySelector('td');
+      if (!td || !label) return;
+      const clone = td.cloneNode(true);
+      clone.querySelectorAll('a').forEach(a => a.remove());
+      const text = clone.textContent.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+      if (label === '開催日') info.dates = text;
+      if (label === '場所')   info.venue = text;
+    });
+    return info;
+  } catch { return null; }
+}
+
 async function fetchYokohamaEvents() {
   const code = document.getElementById('msg-booking-select')?.value;
   const b = code ? airbnbBookings.find(x => x.code === code) : null;
@@ -4346,34 +4399,51 @@ async function fetchYokohamaEvents() {
   const preview = document.getElementById('welcome-event-preview');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ 取得中...'; }
   try {
-    // CORSプロキシ経由でフェッチ
+    // CORSプロキシ関数（直接アクセス失敗時にフォールバック）
+    let useProxy = false;
+    const proxyFn = url => useProxy ? `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` : url;
     let html = '';
     try {
       const res = await fetch(targetUrl, { signal: AbortSignal.timeout(5000) });
       if (!res.ok) throw new Error('direct failed');
       html = await res.text();
     } catch {
-      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
-      const res = await fetch(proxyUrl);
+      useProxy = true;
+      const res = await fetch(proxyFn(targetUrl));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       html = await res.text();
     }
-    // HTMLをパースしてイベント一覧を抽出
+    // 一覧ページをパースしてイベント抽出
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
     const cards = doc.querySelectorAll('a.event-list-box');
     const events = [];
     cards.forEach(card => {
       const title = card.querySelector('h3.event-list-box-title')?.textContent?.trim();
+      const href  = card.getAttribute('href') || '';
       let area2 = '', dates = '', address = '';
       card.querySelectorAll('div.event-list-disc li').forEach(li => {
         const label = li.querySelector('span.event-disc-category')?.textContent?.trim() || '';
         const text  = li.textContent.replace(label, '').trim();
-        if (label === 'エリア') area2 = text;
-        if (label === '開催日程') dates = text;
-        if (label === '住所') address = text;
+        if (label === 'エリア')  area2   = text;
+        if (label === '開催日程') dates  = text;
+        if (label === '住所')    address = text;
       });
-      if (title) events.push({ title, area: area2, dates, address });
+      if (title) events.push({ title, href, area: area2, dates, address, venue: '', access: null });
+    });
+    // 詳細ページを並列フェッチ（上位5件のみ）→ フル日程・会場・アクセスを補完
+    if (btn) btn.textContent = '⏳ 詳細情報取得中...';
+    const detailResults = await Promise.allSettled(
+      events.slice(0, 5).map(ev => ev.href ? fetchEventDetailInfo(ev.href, proxyFn) : Promise.resolve(null))
+    );
+    detailResults.forEach((r, i) => {
+      if (r.status === 'fulfilled' && r.value) {
+        if (r.value.dates) events[i].dates  = r.value.dates;
+        if (r.value.venue) {
+          events[i].venue  = r.value.venue;
+          events[i].access = getVenueAccess(r.value.venue);
+        }
+      }
     });
     welcomeEventData = { events, startDate, endDate, fetchedAt: new Date(), targetUrl };
     // プレビュー表示
@@ -4383,8 +4453,9 @@ async function fetchYokohamaEvents() {
       const rows = events.map(ev => `
         <div style="padding:7px 0;border-bottom:1px solid #E8E6E1">
           <div style="font-size:13px;font-weight:700;color:#333;line-height:1.4">${ev.title}</div>
-          ${ev.dates ? `<div style="font-size:11px;color:#888;margin-top:2px">📅 ${ev.dates}</div>` : ''}
-          ${ev.area || ev.address ? `<div style="font-size:11px;color:#888;margin-top:1px">📍 ${[ev.area, ev.address].filter(Boolean).join('　')}</div>` : ''}
+          ${ev.dates  ? `<div style="font-size:11px;color:#888;margin-top:2px">📅 ${ev.dates}</div>` : ''}
+          ${ev.venue  ? `<div style="font-size:11px;color:#888;margin-top:1px">📍 ${ev.venue}</div>` : (ev.area ? `<div style="font-size:11px;color:#888;margin-top:1px">📍 ${ev.area}</div>` : '')}
+          ${ev.access ? `<div style="font-size:11px;color:#4a7fc1;margin-top:1px">🚉 ${ev.access}</div>` : ''}
         </div>`).join('');
       if (preview) preview.innerHTML = `
         <div style="font-size:11px;color:#aaa;margin-bottom:6px">✅ ${events.length}件取得（${startDate} 〜 ${endDate}）</div>
@@ -4533,10 +4604,11 @@ function generateWelcomeMsg() {
   let eventLines = '';
   if (welcomeEventData && welcomeEventData.events.length > 0) {
     const evList = welcomeEventData.events.slice(0, 5).map(ev => {
-      const loc  = ev.area ? `（${ev.area}）` : '';
-      const dt   = ev.dates   ? `\n　📅 ${ev.dates}`   : '';
-      const addr = ev.address ? `\n　📍 ${ev.address}` : '';
-      return `・${ev.title}${loc}${dt}${addr}`;
+      const loc    = ev.area  ? `（${ev.area}）` : '';
+      const dt     = ev.dates ? `\n　📅 ${ev.dates}` : '';
+      const place  = (ev.venue || ev.address) ? `\n　📍 ${ev.venue || ev.address}` : '';
+      const access = ev.access ? `\n　🚉 ${ev.access}` : '';
+      return `・${ev.title}${loc}${dt}${place}${access}`;
     }).join('\n');
     eventLines = `＜期間中のイベント情報＞\n${evList}\n\n${welcomeEventData.targetUrl}`;
   } else {
