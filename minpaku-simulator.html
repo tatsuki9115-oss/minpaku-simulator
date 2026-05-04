@@ -4334,7 +4334,8 @@ async function fetchWelcomeWeather() {
     if (daily?.timeSeries) {
       const dailyTempSeries = daily.timeSeries.find(ts => ts.areas?.some(a => a.temps));
       if (dailyTempSeries) {
-        const dArea = findArea(dailyTempSeries.areas);
+        // data[0]のエリア名はdata[1]と異なる場合があるので areas[0] を直接使う
+        const dArea = dailyTempSeries.areas?.[0];
         if (dArea) {
           const temps = dArea.temps || [];
           dailyTempSeries.timeDefines.forEach((t, i) => {
