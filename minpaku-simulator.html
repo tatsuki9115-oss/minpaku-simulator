@@ -4462,7 +4462,7 @@ async function fetchYokohamaEvents() {
       const rows = events.map(ev => `
         <div style="padding:7px 0;border-bottom:1px solid #E8E6E1">
           <div style="font-size:13px;font-weight:700;color:#333;line-height:1.4">${ev.title}</div>
-          ${ev.dates  ? `<div style="font-size:11px;color:#888;margin-top:2px">📅 ${(() => { let d=(ev.dates).replace(/\s*※.*/s,'').trim(); if(d.startsWith('【')){d=d.replace(/【[^】]*】\s*/g,'').replace(/\s*《[^》]*》/g,'').trim();d=(d.split(/[\r\n]/)[0]||'').substring(0,60);} return d; })()}</div>` : ''}
+          ${ev.dates  ? `<div style="font-size:11px;color:#888;margin-top:2px">📅 ${(() => { let d=(ev.dates).replace(/\s*※.*/s,'').trim(); if(d.startsWith('【')){d=d.replace(/【[^】]*】\s*/g,'').replace(/\s*《[^》]*》/g,'').trim();d=(d.split(/[\r\n]/)[0]||d).trim();if(d.length>60){const c=d.substring(0,60);const lb=Math.max(c.lastIndexOf('、'),c.lastIndexOf('。'),c.lastIndexOf(' '),c.lastIndexOf('）'));d=(lb>20?c.substring(0,lb):c)+'…';}} return d; })()}</div>` : ''}
           ${(ev.venue||ev.area) ? `<div style="font-size:11px;color:#888;margin-top:1px">📍 ${ev.venue||ev.area}</div>` : ''}
           ${(ev.access && ((ev.venue||'').match(/[、,]/g)||[]).length < 2) ? `<div style="font-size:11px;color:#4a7fc1;margin-top:1px">🚉 ${ev.access}</div>` : ''}
         </div>`).join('');
@@ -4618,11 +4618,17 @@ function generateWelcomeMsg() {
       // 日程：※以降の注記を除去。【で始まる場合は最初の【〜】ラベルを除いて日付部分を抽出
       let rawDates = (ev.dates || '').replace(/\s*※.*/s, '').trim();
       if (rawDates.startsWith('【')) {
-        // 【ラベル】 日付 の形式から日付部分だけ取り出す
+        // 【ラベル】 日付 の形式からラベルを除去
         rawDates = rawDates.replace(/【[^】]*】\s*/g, '').replace(/\s*《[^》]*》/g, '').trim();
-        // それでも長すぎる場合は最初の日程範囲だけ（最初の改行または80文字まで）
+        // 最初の改行で区切る
         const firstLine = rawDates.split(/[\r\n]/)[0].trim();
-        rawDates = firstLine.length > 0 ? firstLine.substring(0, 60) : rawDates.substring(0, 60);
+        rawDates = firstLine || rawDates;
+        // 60字超える場合は最後の読点・スペース・閉じ括弧の手前で切る
+        if (rawDates.length > 60) {
+          const cut = rawDates.substring(0, 60);
+          const lastBreak = Math.max(cut.lastIndexOf('、'), cut.lastIndexOf('。'), cut.lastIndexOf(' '), cut.lastIndexOf('）'));
+          rawDates = (lastBreak > 20 ? cut.substring(0, lastBreak) : cut) + '…';
+        }
       }
       const dt     = rawDates ? `\n　📅 ${rawDates}` : '';
       // 会場：複数会場（「、」が2個以上）はアクセス表示しない
