@@ -4327,19 +4327,27 @@ async function fetchWelcomeWeather() {
       return areas[0] || null;
     };
     // data[0]（今日・明日の詳細予報）から気温を取得して補完用マップを作成
+    // data[0]の気温は tempsMax/tempsMin ではなく temps で返ってくる
+    // timeDefines の時刻で朝(最低)か昼(最高)かを判断する
     const daily = data[0];
     const dailyTempMap = {};
     if (daily?.timeSeries) {
-      const dailyTempSeries = daily.timeSeries.find(ts => ts.areas?.some(a => a.tempsMax || a.tempsMin));
+      const dailyTempSeries = daily.timeSeries.find(ts => ts.areas?.some(a => a.temps));
       if (dailyTempSeries) {
         const dArea = findArea(dailyTempSeries.areas);
         if (dArea) {
-          const dMax = dArea.tempsMax || [];
-          const dMin = dArea.tempsMin || [];
+          const temps = dArea.temps || [];
           dailyTempSeries.timeDefines.forEach((t, i) => {
-            const key = new Date(t).toDateString();
-            if (dMax[i] !== '' && dMax[i] != null) dailyTempMap[key] = { ...(dailyTempMap[key] || {}), max: String(dMax[i]) };
-            if (dMin[i] !== '' && dMin[i] != null) dailyTempMap[key] = { ...(dailyTempMap[key] || {}), min: String(dMin[i]) };
+            const dt = new Date(t);
+            const key = dt.toDateString();
+            const val = temps[i];
+            if (val === '' || val == null) return;
+            const hour = dt.getHours();
+            if (hour <= 6) {
+              dailyTempMap[key] = { ...(dailyTempMap[key] || {}), min: String(val) };
+            } else {
+              dailyTempMap[key] = { ...(dailyTempMap[key] || {}), max: String(val) };
+            }
           });
         }
       }
