@@ -4462,7 +4462,7 @@ async function fetchYokohamaEvents() {
       const rows = events.map(ev => `
         <div style="padding:7px 0;border-bottom:1px solid #E8E6E1">
           <div style="font-size:13px;font-weight:700;color:#333;line-height:1.4">${ev.title}</div>
-          ${ev.dates  ? `<div style="font-size:11px;color:#888;margin-top:2px">📅 ${(ev.dates).replace(/\s*※.*$/s,'').replace(/\s*【.*$/s,'').trim()}</div>` : ''}
+          ${ev.dates  ? `<div style="font-size:11px;color:#888;margin-top:2px">📅 ${(() => { let d=(ev.dates).replace(/\s*※[^※]*$/s,'').trim(); if(d.startsWith('【')){d=d.replace(/【[^】]*】\s*/g,'').replace(/\s*《[^》]*》/g,'').trim();d=(d.split(/[\r\n]/)[0]||'').substring(0,60);} return d; })()}</div>` : ''}
           ${(ev.venue||ev.area) ? `<div style="font-size:11px;color:#888;margin-top:1px">📍 ${ev.venue||ev.area}</div>` : ''}
           ${(ev.access && ((ev.venue||'').match(/[、,]/g)||[]).length < 2) ? `<div style="font-size:11px;color:#4a7fc1;margin-top:1px">🚉 ${ev.access}</div>` : ''}
         </div>`).join('');
@@ -4614,8 +4614,15 @@ function generateWelcomeMsg() {
   if (welcomeEventData && welcomeEventData.events.length > 0) {
     const evList = welcomeEventData.events.slice(0, 5).map(ev => {
       const loc    = ev.area  ? `（${ev.area}）` : '';
-      // 日程：最初の日程部分だけ（※以降の注記は除去）
-      const rawDates = (ev.dates || '').replace(/\s*※.*$/s, '').replace(/\s*【.*$/s, '').trim();
+      // 日程：※以降の注記を除去。【で始まる場合は最初の【〜】ラベルを除いて日付部分を抽出
+      let rawDates = (ev.dates || '').replace(/\s*※[^※]*$/s, '').trim();
+      if (rawDates.startsWith('【')) {
+        // 【ラベル】 日付 の形式から日付部分だけ取り出す
+        rawDates = rawDates.replace(/【[^】]*】\s*/g, '').replace(/\s*《[^》]*》/g, '').trim();
+        // それでも長すぎる場合は最初の日程範囲だけ（最初の改行または80文字まで）
+        const firstLine = rawDates.split(/[\r\n]/)[0].trim();
+        rawDates = firstLine.length > 0 ? firstLine.substring(0, 60) : rawDates.substring(0, 60);
+      }
       const dt     = rawDates ? `\n　📅 ${rawDates}` : '';
       // 会場：複数会場（「、」が2個以上）はアクセス表示しない
       const venueStr = ev.venue || ev.address || '';
