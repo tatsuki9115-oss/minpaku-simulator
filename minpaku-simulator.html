@@ -4435,13 +4435,31 @@ async function fetchTamaEvents() {
           if (!allEvents.has(ev.id)) {
             const sameDay = ev.start_dt === ev.end_dt;
             allEvents.set(ev.id, {
+              id:     ev.id,
               title:  ev.event_nm,
               dates:  sameDay ? `${ev.start_dt}${ev.start_tm ? ' ' + ev.start_tm : ''}` : `${ev.start_dt}〜${ev.end_dt}`,
               area:   (ev.areas || []).map(a => a.name).join('・'),
               venue:  '',
+              station: '',
             });
           }
         });
+      }
+    }));
+    // 各イベントの詳細APIから具体的な会場名・最寄り駅を並列取得
+    const detailHeaders = { 'Content-Type': 'application/json' };
+    await Promise.allSettled(Array.from(allEvents.values()).map(async ev => {
+      const detailUrl = `https://imatama.jp/imatama/events/view/${ev.id}.json`;
+      let detail = null;
+      for (const reqFn of [
+        () => fetch(detailUrl, { method:'POST', headers: detailHeaders, body: JSON.stringify({}), signal: AbortSignal.timeout(5000) }),
+        () => fetch(`https://corsproxy.io/?${encodeURIComponent(detailUrl)}`, { method:'POST', headers: detailHeaders, body: JSON.stringify({}), signal: AbortSignal.timeout(8000) }),
+      ]) {
+        try { const r = await reqFn(); if (r.ok) { detail = await r.json(); break; } } catch {}
+      }
+      if (detail) {
+        ev.venue   = detail.event_place?.place_nm || '';
+        ev.station = detail.stations1?.name || '';
       }
     }));
     const events = Array.from(allEvents.values());
@@ -4454,7 +4472,7 @@ async function fetchTamaEvents() {
         <div style="padding:7px 0;border-bottom:1px solid #E8E6E1">
           <div style="font-size:13px;font-weight:700;color:#333;line-height:1.4">${ev.title}</div>
           ${ev.dates ? `<div style="font-size:11px;color:#888;margin-top:2px">📅 ${ev.dates}</div>` : ''}
-          ${ev.area  ? `<div style="font-size:11px;color:#888;margin-top:1px">📍 ${ev.area}</div>` : ''}
+          ${(ev.venue || ev.area) ? `<div style="font-size:11px;color:#888;margin-top:1px">📍 ${ev.venue || ev.area}${ev.station ? `（最寄：${ev.station}）` : ''}</div>` : ''}
         </div>`).join('');
       if (preview) preview.innerHTML = `
         <div style="font-size:11px;color:#aaa;margin-bottom:6px">✅ ${events.length}件取得（${welcomeEventData.startDate} 〜 ${welcomeEventData.endDate}）</div>
@@ -4718,10 +4736,11 @@ function generateWelcomeMsg() {
         }
       }
       const dt     = rawDates ? `\n　📅 ${rawDates}` : '';
-      // 会場：複数会場（「、」が2個以上）はアクセス表示しない
+      // 会場＋最寄り駅
       const venueStr = ev.venue || ev.address || ev.area || '';
-      const isMultiVenue = (venueStr.match(/[、,]/g) || []).length >= 2;
-      const place  = venueStr ? `\n　📍 ${venueStr}` : '';
+      let placeLabel = venueStr;
+      if (ev.station) placeLabel += `（最寄：${ev.station}）`;
+      const place  = placeLabel ? `\n　📍 ${placeLabel}` : '';
       return `・${ev.title}${loc}${dt}${place}`;
     }).join('\n');
     eventLines = `＜期間中のイベント情報＞\n${evList}\n\n${welcomeEventData.targetUrl}`;
