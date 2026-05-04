@@ -4365,14 +4365,15 @@ async function fetchYokohamaEvents() {
     const events = [];
     cards.forEach(card => {
       const title = card.querySelector('h3.event-list-box-title')?.textContent?.trim();
-      let area2 = '', dates = '';
+      let area2 = '', dates = '', address = '';
       card.querySelectorAll('div.event-list-disc li').forEach(li => {
         const label = li.querySelector('span.event-disc-category')?.textContent?.trim() || '';
         const text  = li.textContent.replace(label, '').trim();
         if (label === 'エリア') area2 = text;
         if (label === '開催日程') dates = text;
+        if (label === '住所') address = text;
       });
-      if (title) events.push({ title, area: area2, dates });
+      if (title) events.push({ title, area: area2, dates, address });
     });
     welcomeEventData = { events, startDate, endDate, fetchedAt: new Date(), targetUrl };
     // プレビュー表示
@@ -4382,7 +4383,8 @@ async function fetchYokohamaEvents() {
       const rows = events.map(ev => `
         <div style="padding:7px 0;border-bottom:1px solid #E8E6E1">
           <div style="font-size:13px;font-weight:700;color:#333;line-height:1.4">${ev.title}</div>
-          <div style="font-size:11px;color:#888;margin-top:2px">${ev.area ? ev.area + '　' : ''}${ev.dates}</div>
+          ${ev.dates ? `<div style="font-size:11px;color:#888;margin-top:2px">📅 ${ev.dates}</div>` : ''}
+          ${ev.area || ev.address ? `<div style="font-size:11px;color:#888;margin-top:1px">📍 ${[ev.area, ev.address].filter(Boolean).join('　')}</div>` : ''}
         </div>`).join('');
       if (preview) preview.innerHTML = `
         <div style="font-size:11px;color:#aaa;margin-bottom:6px">✅ ${events.length}件取得（${startDate} 〜 ${endDate}）</div>
@@ -4501,7 +4503,7 @@ function buildWeatherComment(days, areaName) {
   const hasRain = days.some(d => d.weather.includes('雨'));
   let c = `今週の${areaName}は、朝晩が${minMin}〜${maxMin}°Cと`;
   if (avgMax >= 28)      c += `かなり暑くなります。日中は${minMax}〜${maxMax}°Cまで上がるため、熱中症対策・こまめな水分補給をお忘れなく。`;
-  else if (avgMax >= 23) c += `日中は${minMax}〜${maxMax}°Cまで上がり、初夏の陽気です。\n薄手の服装で過ごしやすく、紫外線対策もお忘れなく。`;
+  else if (avgMax >= 23) c += `日中は${minMax}〜${maxMax}°Cまで上がり、初夏の陽気です。紫外線対策もお忘れなく。`;
   else if (avgMax >= 18) c += `${minMin < 12 ? 'ややひんやりしますが' : '過ごしやすく'}、日中は${minMax}〜${maxMax}°Cまで上がります。\n長袖シャツや薄手のジャケットがちょうどよい気候です。`;
   else                   c += `かなりひんやりします。日中も${minMax}〜${maxMax}°C程度のため、暖かい服装でお越しください。`;
   if (hasRain) c += '\n折りたたみ傘を持っておくと便利です。';
@@ -4531,8 +4533,10 @@ function generateWelcomeMsg() {
   let eventLines = '';
   if (welcomeEventData && welcomeEventData.events.length > 0) {
     const evList = welcomeEventData.events.slice(0, 5).map(ev => {
-      const loc = ev.area ? `（${ev.area}）` : '';
-      return `・${ev.title}${loc}`;
+      const loc  = ev.area ? `（${ev.area}）` : '';
+      const dt   = ev.dates   ? `\n　📅 ${ev.dates}`   : '';
+      const addr = ev.address ? `\n　📍 ${ev.address}` : '';
+      return `・${ev.title}${loc}${dt}${addr}`;
     }).join('\n');
     eventLines = `＜期間中のイベント情報＞\n${evList}\n\n${welcomeEventData.targetUrl}`;
   } else {
