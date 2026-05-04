@@ -4436,8 +4436,8 @@ async function fetchTamaEvents() {
         data.list.forEach(ev => {
           if (!allEvents.has(ev.id)) {
             const sameDay = ev.start_dt === ev.end_dt;
-            // 単日イベントでチェックイン前のものはスキップ
-            if (sameDay && ev.start_dt < cinYMD) return;
+            // 終了日がチェックイン前のイベントはスキップ（終了日≥チェックインなら表示）
+            if (ev.end_dt < cinYMD) return;
             // タイトル先頭の【〜】ラベルを除去
             const cleanTitle = ev.event_nm.replace(/^【[^】]*】\s*/, '').trim();
             allEvents.set(ev.id, {
