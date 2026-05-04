@@ -4462,7 +4462,19 @@ async function fetchTamaEvents() {
         ev.station = detail.stations1?.name || '';
       }
     }));
-    const events = Array.from(allEvents.values());
+    // 同一名称のイベントを日付マージ（複数日開催を1件にまとめる）
+    const nameMap = new Map();
+    for (const ev of allEvents.values()) {
+      if (nameMap.has(ev.title)) {
+        const existing = nameMap.get(ev.title);
+        if (!existing._dateList) existing._dateList = [existing.dates];
+        existing._dateList.push(ev.dates);
+        existing.dates = existing._dateList.join('・');
+      } else {
+        nameMap.set(ev.title, ev);
+      }
+    }
+    const events = Array.from(nameMap.values());
     const targetUrl = 'https://imatama.jp/event-list/index/1';
     welcomeEventData = { events, startDate: fmtD(cin), endDate: fmtD(new Date(cout - 86400000)), fetchedAt: new Date(), targetUrl };
     if (events.length === 0) {
