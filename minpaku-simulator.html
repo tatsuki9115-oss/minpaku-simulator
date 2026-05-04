@@ -4719,7 +4719,7 @@ function generateWelcomeMsg() {
       }
       const dt     = rawDates ? `\n　📅 ${rawDates}` : '';
       // 会場：複数会場（「、」が2個以上）はアクセス表示しない
-      const venueStr = ev.venue || ev.address || '';
+      const venueStr = ev.venue || ev.address || ev.area || '';
       const isMultiVenue = (venueStr.match(/[、,]/g) || []).length >= 2;
       const place  = venueStr ? `\n　📍 ${venueStr}` : '';
       return `・${ev.title}${loc}${dt}${place}`;
