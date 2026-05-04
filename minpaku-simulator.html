@@ -4123,7 +4123,7 @@ function renderMessageTab() {
     <div class="card" id="welcome-event-card" style="display:none">
       <div class="card-title">🎪 イベント情報取得</div>
       <div id="welcome-event-area-info" style="font-size:12px;color:#888;margin-bottom:10px;padding:6px 10px;background:#F5F5F4;border-radius:8px">予約のチェックイン〜チェックアウト期間のイベントを取得します</div>
-      <button onclick="fetchYokohamaEvents()" id="welcome-event-btn" disabled
+      <button onclick="fetchEvents()" id="welcome-event-btn" disabled
         style="width:100%;padding:13px;background:#4a7fc1;border:none;border-radius:10px;color:white;font-size:14px;font-weight:800;cursor:pointer;opacity:0.4;transition:opacity .2s">
         🎪 イベント情報を取得
       </button>
@@ -4231,11 +4231,11 @@ function onMsgBookingSelect() {
     const eventBtn  = document.getElementById('welcome-event-btn');
     const eventAreaInfo = document.getElementById('welcome-event-area-info');
     if (eventCard) {
-      if (area.eventBaseUrl) {
+      if (area.eventBaseUrl || area.eventApiUrl) {
         eventCard.style.display = 'block';
         const checkin  = b.checkin || '';
         const checkout = getCheckout(b) || '';
-        if (eventAreaInfo) eventAreaInfo.textContent = `📅 取得期間：${checkin} 〜 ${checkout}（${area.eventSiteName}）`;
+        if (eventAreaInfo) eventAreaInfo.textContent = `📅 取得期間：${checkin} 〜 ${checkout}（${area.eventSiteName || ''}）`;
         if (eventBtn) { eventBtn.disabled = false; eventBtn.style.opacity = '1'; }
       } else {
         eventCard.style.display = 'none';
@@ -4329,7 +4329,9 @@ function getWelcomeArea(b) {
   }
   return { label: '高幡不動（多摩）', areaCode: '130000', areaName: '多摩地方', areaNameHint: '多摩',
     jmaUrl: 'https://www.data.jma.go.jp/multi/yoho/yoho_detail.html?code=130020&lang=jp',
-    eventBaseUrl: null };
+    eventBaseUrl: null,
+    eventApiUrl: 'https://imatama.jp/imatama/events/list',
+    eventSiteName: 'いまたま（多摩エリア）' };
 }
 
 // 横浜主要会場 → 最寄駅アクセス対応表
@@ -4383,6 +4385,90 @@ async function fetchEventDetailInfo(href, proxyFn) {
     });
     return info;
   } catch { return null; }
+}
+
+// エリアに応じたフェッチ関数を呼び分けるディスパッチャー
+function fetchEvents() {
+  const code = document.getElementById('msg-booking-select')?.value;
+  const b = code ? airbnbBookings.find(x => x.code === code) : null;
+  const area = b ? getWelcomeArea(b) : null;
+  if (!area) return;
+  if (area.eventBaseUrl) fetchYokohamaEvents();
+  else if (area.eventApiUrl) fetchTamaEvents();
+}
+
+// 多摩エリア（いまたまJSON API）
+async function fetchTamaEvents() {
+  const code = document.getElementById('msg-booking-select')?.value;
+  const b = code ? airbnbBookings.find(x => x.code === code) : null;
+  if (!b) { showToast('予約を選択してください', 'error'); return; }
+  const area = getWelcomeArea(b);
+  const btn     = document.getElementById('welcome-event-btn');
+  const preview = document.getElementById('welcome-event-preview');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 取得中...'; }
+  try {
+    // チェックイン〜チェックアウト前日の各日付を生成
+    const parseD = s => { const [y,m,d] = s.split('/').map(Number); return new Date(y, m-1, d); };
+    const fmtD   = d => `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+    const cin  = parseD(b.checkin || '');
+    const cout = parseD(getCheckout(b) || '');
+    const dates = [];
+    for (let d = new Date(cin); d < cout; d.setDate(d.getDate() + 1)) dates.push(new Date(d));
+    if (dates.length === 0) dates.push(cin); // 日帰り等の保険
+    // 各日を並列フェッチ → イベントIDで重複排除
+    const allEvents = new Map();
+    await Promise.allSettled(dates.map(async date => {
+      const dateStr = fmtD(date);
+      const body = JSON.stringify({ event_date: dateStr, date_type: 1 });
+      const headers = { 'Content-Type': 'application/json' };
+      const apiUrl = `${area.eventApiUrl}/1.json`;
+      let data = null;
+      // 直接 → corsproxy.io の順で試す
+      for (const reqFn of [
+        () => fetch(apiUrl, { method:'POST', headers, body, signal: AbortSignal.timeout(5000) }),
+        () => fetch(`https://corsproxy.io/?${encodeURIComponent(apiUrl)}`, { method:'POST', headers, body, signal: AbortSignal.timeout(8000) }),
+      ]) {
+        try { const r = await reqFn(); if (r.ok) { data = await r.json(); break; } } catch {}
+      }
+      if (data?.list) {
+        data.list.forEach(ev => {
+          if (!allEvents.has(ev.id)) {
+            const sameDay = ev.start_dt === ev.end_dt;
+            allEvents.set(ev.id, {
+              title:  ev.event_nm,
+              dates:  sameDay ? `${ev.start_dt}${ev.start_tm ? ' ' + ev.start_tm : ''}` : `${ev.start_dt}〜${ev.end_dt}`,
+              area:   (ev.areas || []).map(a => a.name).join('・'),
+              venue:  '',
+            });
+          }
+        });
+      }
+    }));
+    const events = Array.from(allEvents.values());
+    const targetUrl = 'https://imatama.jp/event-list/index/1';
+    welcomeEventData = { events, startDate: fmtD(cin), endDate: fmtD(new Date(cout - 86400000)), fetchedAt: new Date(), targetUrl };
+    if (events.length === 0) {
+      if (preview) preview.innerHTML = `<div style="font-size:12px;color:#aaa;padding:8px">この期間のイベント情報はありませんでした</div>`;
+    } else {
+      const rows = events.map(ev => `
+        <div style="padding:7px 0;border-bottom:1px solid #E8E6E1">
+          <div style="font-size:13px;font-weight:700;color:#333;line-height:1.4">${ev.title}</div>
+          ${ev.dates ? `<div style="font-size:11px;color:#888;margin-top:2px">📅 ${ev.dates}</div>` : ''}
+          ${ev.area  ? `<div style="font-size:11px;color:#888;margin-top:1px">📍 ${ev.area}</div>` : ''}
+        </div>`).join('');
+      if (preview) preview.innerHTML = `
+        <div style="font-size:11px;color:#aaa;margin-bottom:6px">✅ ${events.length}件取得（${welcomeEventData.startDate} 〜 ${welcomeEventData.endDate}）</div>
+        <div style="background:#F5F5F4;border-radius:8px;padding:8px 12px">${rows}</div>
+        <div style="font-size:10px;color:#aaa;margin-top:6px;text-align:right">
+          <a href="${targetUrl}" target="_blank" style="color:#4a7fc1">いまたまで確認 →</a>
+        </div>`;
+    }
+    showToast('イベント情報を取得しました', 'success');
+  } catch(e) {
+    if (preview) preview.innerHTML = `<div style="color:#e53e3e;font-size:13px;padding:8px">❌ 取得失敗：${e.message}</div>`;
+    showToast('イベント取得に失敗しました', 'error');
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '🎪 イベント情報を取得'; btn.style.opacity = '1'; }
 }
 
 async function fetchYokohamaEvents() {
@@ -4640,7 +4726,8 @@ function generateWelcomeMsg() {
     }).join('\n');
     eventLines = `＜期間中のイベント情報＞\n${evList}\n\n${welcomeEventData.targetUrl}`;
   } else {
-    eventLines = `＜期間中のイベント情報＞\n${area.eventBaseUrl ? area.eventBaseUrl : '（情報なし）'}`;
+    const evSiteUrl = area.eventBaseUrl || area.eventApiUrl ? 'https://imatama.jp/event-list/index/1' : '';
+    eventLines = evSiteUrl ? `＜期間中のイベント情報＞\n${evSiteUrl}` : '';
   }
   let msg = `${greeting}\n\n当施設をご予約いただき、ありがとうございます。\n快適に過ごしていただけるよう、天気予報と近隣のイベント情報をお知らせしますので、ぜひご参考にしてください。\n\n＜週間天気予報＞\n${weatherLines}\n\n${comment}\n▶ 最新の天気予報はこちら：${area.jmaUrl}\n\n${eventLines}\n\n※ 上記は参考情報です。開催日程・内容は予告なく変更になる場合がありますので、最新情報は各リンクよりご確認ください。有料施設のチケットはお客様ご自身でのご購入をお願いしております。\n\n何かご不明点やリクエストがありましたら、いつでもご連絡ください。素敵な滞在となりますよう願っております！\n\nTy`;
   const ta = document.getElementById('msg-prompt-area');
