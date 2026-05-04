@@ -4464,7 +4464,7 @@ async function fetchYokohamaEvents() {
           <div style="font-size:13px;font-weight:700;color:#333;line-height:1.4">${ev.title}</div>
           ${ev.dates  ? `<div style="font-size:11px;color:#888;margin-top:2px">📅 ${(ev.dates).replace(/\s*※.*$/s,'').replace(/\s*【.*$/s,'').trim()}</div>` : ''}
           ${(ev.venue||ev.area) ? `<div style="font-size:11px;color:#888;margin-top:1px">📍 ${ev.venue||ev.area}</div>` : ''}
-          ${(ev.access && (ev.venue||'').match(/[、,]/g||[]).length < 2) ? `<div style="font-size:11px;color:#4a7fc1;margin-top:1px">🚉 ${ev.access}</div>` : ''}
+          ${(ev.access && ((ev.venue||'').match(/[、,]/g)||[]).length < 2) ? `<div style="font-size:11px;color:#4a7fc1;margin-top:1px">🚉 ${ev.access}</div>` : ''}
         </div>`).join('');
       if (preview) preview.innerHTML = `
         <div style="font-size:11px;color:#aaa;margin-bottom:6px">✅ ${events.length}件取得（${startDate} 〜 ${endDate}）</div>
