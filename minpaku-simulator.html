@@ -4462,9 +4462,9 @@ async function fetchYokohamaEvents() {
       const rows = events.map(ev => `
         <div style="padding:7px 0;border-bottom:1px solid #E8E6E1">
           <div style="font-size:13px;font-weight:700;color:#333;line-height:1.4">${ev.title}</div>
-          ${ev.dates  ? `<div style="font-size:11px;color:#888;margin-top:2px">📅 ${ev.dates}</div>` : ''}
-          ${ev.venue  ? `<div style="font-size:11px;color:#888;margin-top:1px">📍 ${ev.venue}</div>` : (ev.area ? `<div style="font-size:11px;color:#888;margin-top:1px">📍 ${ev.area}</div>` : '')}
-          ${ev.access ? `<div style="font-size:11px;color:#4a7fc1;margin-top:1px">🚉 ${ev.access}</div>` : ''}
+          ${ev.dates  ? `<div style="font-size:11px;color:#888;margin-top:2px">📅 ${(ev.dates).replace(/\s*※.*$/s,'').replace(/\s*【.*$/s,'').trim()}</div>` : ''}
+          ${(ev.venue||ev.area) ? `<div style="font-size:11px;color:#888;margin-top:1px">📍 ${ev.venue||ev.area}</div>` : ''}
+          ${(ev.access && (ev.venue||'').match(/[、,]/g||[]).length < 2) ? `<div style="font-size:11px;color:#4a7fc1;margin-top:1px">🚉 ${ev.access}</div>` : ''}
         </div>`).join('');
       if (preview) preview.innerHTML = `
         <div style="font-size:11px;color:#aaa;margin-bottom:6px">✅ ${events.length}件取得（${startDate} 〜 ${endDate}）</div>
@@ -4581,11 +4581,11 @@ function buildWeatherComment(days, areaName) {
   const minMax = Math.min(...maxArr), maxMax = Math.max(...maxArr);
   const avgMax = Math.round(maxArr.reduce((a,b)=>a+b,0)/maxArr.length);
   const hasRain = days.some(d => d.weather.includes('雨'));
-  let c = `今週の${areaName}は、朝晩が${minMin}〜${maxMin}°Cと`;
-  if (avgMax >= 28)      c += `かなり暑くなります。日中は${minMax}〜${maxMax}°Cまで上がるため、熱中症対策・こまめな水分補給をお忘れなく。`;
+  let c = `今週の${areaName}は、朝晩が${minMin}〜${maxMin}°C、`;
+  if (avgMax >= 28)      c += `日中は${minMax}〜${maxMax}°Cまで上がりかなり暑くなります。熱中症対策・こまめな水分補給をお忘れなく。`;
   else if (avgMax >= 23) c += `日中は${minMax}〜${maxMax}°Cまで上がり、初夏の陽気です。紫外線対策もお忘れなく。`;
-  else if (avgMax >= 18) c += `${minMin < 12 ? 'ややひんやりしますが' : '過ごしやすく'}、日中は${minMax}〜${maxMax}°Cまで上がります。\n長袖シャツや薄手のジャケットがちょうどよい気候です。`;
-  else                   c += `かなりひんやりします。日中も${minMax}〜${maxMax}°C程度のため、暖かい服装でお越しください。`;
+  else if (avgMax >= 18) c += `日中は${minMax}〜${maxMax}°Cまで上がります。${minMin < 12 ? '朝晩はひんやりするので' : ''}長袖シャツや薄手のジャケットがちょうどよい気候です。`;
+  else                   c += `日中も${minMax}〜${maxMax}°C程度とかなりひんやりします。暖かい服装でお越しください。`;
   if (hasRain) c += '\n折りたたみ傘を持っておくと便利です。';
   c += `\nどうぞ快適で安全な${areaName}滞在をお楽しみください☺️`;
   return c;
@@ -4614,9 +4614,14 @@ function generateWelcomeMsg() {
   if (welcomeEventData && welcomeEventData.events.length > 0) {
     const evList = welcomeEventData.events.slice(0, 5).map(ev => {
       const loc    = ev.area  ? `（${ev.area}）` : '';
-      const dt     = ev.dates ? `\n　📅 ${ev.dates}` : '';
-      const place  = (ev.venue || ev.address) ? `\n　📍 ${ev.venue || ev.address}` : '';
-      const access = ev.access ? `\n　🚉 ${ev.access}` : '';
+      // 日程：最初の日程部分だけ（※以降の注記は除去）
+      const rawDates = (ev.dates || '').replace(/\s*※.*$/s, '').replace(/\s*【.*$/s, '').trim();
+      const dt     = rawDates ? `\n　📅 ${rawDates}` : '';
+      // 会場：複数会場（「、」が2個以上）はアクセス表示しない
+      const venueStr = ev.venue || ev.address || '';
+      const isMultiVenue = (venueStr.match(/[、,]/g) || []).length >= 2;
+      const place  = venueStr ? `\n　📍 ${venueStr}` : '';
+      const access = (ev.access && !isMultiVenue) ? `\n　🚉 ${ev.access}` : '';
       return `・${ev.title}${loc}${dt}${place}${access}`;
     }).join('\n');
     eventLines = `＜期間中のイベント情報＞\n${evList}\n\n${welcomeEventData.targetUrl}`;
