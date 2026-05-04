@@ -4599,9 +4599,10 @@ function generateWelcomeMsg() {
   const guestFirst = b ? (b.guestName || '').split(/[\s　]/)[0] : '';
   // 時間帯挨拶
   const h = new Date().getHours();
-  const greeting = h >= 5 && h < 11 ? 'おはようございます！\n朝早くから失礼いたします。'
-    : h >= 11 && h < 17 ? 'こんにちは！'
-    : 'こんばんは！\n夜分遅くに失礼いたします。';
+  const nameSuffix = guestFirst ? `${guestFirst}さん` : '';
+  const greeting = h >= 5 && h < 11 ? `おはようございます！${nameSuffix}\n朝早くから失礼いたします。`
+    : h >= 11 && h < 17 ? `こんにちは！${nameSuffix}`
+    : `こんばんは！${nameSuffix}\n夜分遅くに失礼いたします。`;
   // 天気テーブル
   const dow = ['日','月','火','水','木','金','土'];
   const weatherLines = days.map(d => {
@@ -4635,7 +4636,7 @@ function generateWelcomeMsg() {
   } else {
     eventLines = `＜期間中のイベント情報＞\n${area.eventBaseUrl ? area.eventBaseUrl : '（情報なし）'}`;
   }
-  let msg = `${greeting}\n\n当施設をご予約いただき、ありがとうございます。\n${guestFirst ? guestFirst + '様の' : ''}ご滞在が間もなく始まりますが、準備はいかがでしょうか？\n快適に過ごしていただけるよう、天気予報と近隣のイベント情報をお知らせしますので、ぜひご参考にしてください。\n\n＜週間天気予報＞\n${weatherLines}\n\n${comment}\n${area.jmaUrl}\n\n${eventLines}\n\n有料施設においては、お客様ご自身でのチケット購入をお願いしております。\nトラブル防止のため、ご協力をお願いいたします。\n何かご不明点やリクエストがありましたら、いつでもご連絡ください。素敵な滞在となりますよう、全力でサポートいたします！`;
+  let msg = `${greeting}\n\n当施設をご予約いただき、ありがとうございます。\n快適に過ごしていただけるよう、天気予報と近隣のイベント情報をお知らせしますので、ぜひご参考にしてください。\n\n＜週間天気予報＞\n${weatherLines}\n\n${comment}\n${area.jmaUrl}\n\n${eventLines}\n\n有料施設においては、お客様ご自身でのチケット購入をお願いしております。\nトラブル防止のため、ご協力をお願いいたします。\n何かご不明点やリクエストがありましたら、いつでもご連絡ください。素敵な滞在となりますよう、全力でサポートいたします！`;
   const ta = document.getElementById('msg-prompt-area');
   if (ta) { ta.value = msg; ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 800) + 'px'; }
   document.getElementById('msg-output-card').style.display = 'block';
