@@ -4464,7 +4464,6 @@ async function fetchYokohamaEvents() {
           <div style="font-size:13px;font-weight:700;color:#333;line-height:1.4">${ev.title}</div>
           ${ev.dates  ? `<div style="font-size:11px;color:#888;margin-top:2px">📅 ${(() => { let d=(ev.dates).replace(/\s*※.*/s,'').trim(); if(d.startsWith('【')){d=d.replace(/【[^】]*】\s*/g,'').replace(/\s*《[^》]*》/g,'').trim();d=(d.split(/[\r\n]/)[0]||d).trim();if(d.length>60){const c=d.substring(0,60);const lb=Math.max(c.lastIndexOf('、'),c.lastIndexOf('。'),c.lastIndexOf(' '),c.lastIndexOf('）'));d=(lb>20?c.substring(0,lb):c)+'…';}} return d; })()}</div>` : ''}
           ${(ev.venue||ev.area) ? `<div style="font-size:11px;color:#888;margin-top:1px">📍 ${ev.venue||ev.area}</div>` : ''}
-          ${(ev.access && ((ev.venue||'').match(/[、,]/g)||[]).length < 2) ? `<div style="font-size:11px;color:#4a7fc1;margin-top:1px">🚉 ${ev.access}</div>` : ''}
         </div>`).join('');
       if (preview) preview.innerHTML = `
         <div style="font-size:11px;color:#aaa;margin-bottom:6px">✅ ${events.length}件取得（${startDate} 〜 ${endDate}）</div>
@@ -4619,7 +4618,9 @@ function generateWelcomeMsg() {
       let rawDates = (ev.dates || '').replace(/\s*※.*/s, '').trim();
       if (rawDates.startsWith('【')) {
         // 【ラベル】 日付 の形式からラベルを除去
-        rawDates = rawDates.replace(/【[^】]*】\s*/g, '').replace(/\s*《[^》]*》/g, '').trim();
+        rawDates = rawDates.replace(/【[^】]*】\s*/g, '').trim();
+        // チケット販売日（《先着》などを含む部分）を除去し、実際の開催日だけ残す
+        if (rawDates.includes('《')) rawDates = rawDates.replace(/.*?《[^》]*》\s*/s, '').trim();
         // 最初の改行で区切る
         const firstLine = rawDates.split(/[\r\n]/)[0].trim();
         rawDates = firstLine || rawDates;
@@ -4635,8 +4636,7 @@ function generateWelcomeMsg() {
       const venueStr = ev.venue || ev.address || '';
       const isMultiVenue = (venueStr.match(/[、,]/g) || []).length >= 2;
       const place  = venueStr ? `\n　📍 ${venueStr}` : '';
-      const access = (ev.access && !isMultiVenue) ? `\n　🚉 ${ev.access}` : '';
-      return `・${ev.title}${loc}${dt}${place}${access}`;
+      return `・${ev.title}${loc}${dt}${place}`;
     }).join('\n');
     eventLines = `＜期間中のイベント情報＞\n${evList}\n\n${welcomeEventData.targetUrl}`;
   } else {
