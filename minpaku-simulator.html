@@ -656,7 +656,8 @@ function signInWithGoogle() {
   const provider = new firebase.auth.GoogleAuthProvider();
   const errEl = document.getElementById('login-error');
   errEl.style.display = 'none';
-  fbauth.signInWithPopup(provider).catch(() => {
+  // リダイレクト方式（ポップアップブロック対策）
+  fbauth.signInWithRedirect(provider).catch(() => {
     errEl.style.display = 'block';
   });
 }
@@ -665,6 +666,12 @@ function signOut() {
   if (!confirm('ログアウトしますか？')) return;
   fbauth.signOut();
 }
+
+// リダイレクト後の結果を処理
+fbauth.getRedirectResult().catch(() => {
+  const errEl = document.getElementById('login-error');
+  if (errEl) errEl.style.display = 'block';
+});
 
 let firebaseSyncInitialized = false;
 fbauth.onAuthStateChanged(user => {
