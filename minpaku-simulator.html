@@ -2027,7 +2027,7 @@ function renderProfitChart(monthlyStats, monthlyTarget) {
   const footH = 16; // 月ラベル用の下部余白
   const chartH = H - labelH - footH;
   const baseline = labelH + chartH * 0.62;
-  const fmtBar = n => Math.abs(n) >= 10000 ? (n < 0 ? '▲' : '') + (Math.abs(n)/10000).toFixed(1)+'万' : (n < 0 ? '▲' : '') + Math.abs(n).toLocaleString('ja-JP');
+  const fmtBar = n => (n < 0 ? '▲' : '') + (Math.abs(n)/10000).toFixed(1)+'万';
 
   let svgBars = '';
   profits.forEach((p, i) => {
