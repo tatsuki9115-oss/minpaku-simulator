@@ -656,9 +656,14 @@ function signInWithGoogle() {
   const provider = new firebase.auth.GoogleAuthProvider();
   const errEl = document.getElementById('login-error');
   errEl.style.display = 'none';
-  // リダイレクト方式（ポップアップブロック対策）
-  fbauth.signInWithRedirect(provider).catch(() => {
-    errEl.style.display = 'block';
+  // リダイレクト後の戻りかどうかを判定するフラグをセット
+  sessionStorage.setItem('authRedirectPending', '1');
+  fbauth.signInWithRedirect(provider).catch(err => {
+    sessionStorage.removeItem('authRedirectPending');
+    if (errEl) {
+      errEl.textContent = 'ログインに失敗しました' + (err.code ? '（' + err.code + '）' : '');
+      errEl.style.display = 'block';
+    }
   });
 }
 
@@ -667,9 +672,13 @@ function signOut() {
   fbauth.signOut();
 }
 
-// リダイレクト後の結果を処理（エラーコードがある場合のみ表示）
-fbauth.getRedirectResult().catch(err => {
-  if (err && err.code) {
+// リダイレクト後の結果を処理（フラグがある場合のみエラー表示）
+fbauth.getRedirectResult().then(() => {
+  sessionStorage.removeItem('authRedirectPending');
+}).catch(err => {
+  const wasPending = sessionStorage.getItem('authRedirectPending');
+  sessionStorage.removeItem('authRedirectPending');
+  if (wasPending && err && err.code) {
     console.error('Auth redirect error:', err.code, err.message);
     const errEl = document.getElementById('login-error');
     if (errEl) {
