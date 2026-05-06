@@ -667,10 +667,16 @@ function signOut() {
   fbauth.signOut();
 }
 
-// リダイレクト後の結果を処理
-fbauth.getRedirectResult().catch(() => {
-  const errEl = document.getElementById('login-error');
-  if (errEl) errEl.style.display = 'block';
+// リダイレクト後の結果を処理（エラーコードがある場合のみ表示）
+fbauth.getRedirectResult().catch(err => {
+  if (err && err.code) {
+    console.error('Auth redirect error:', err.code, err.message);
+    const errEl = document.getElementById('login-error');
+    if (errEl) {
+      errEl.textContent = 'ログインに失敗しました（' + err.code + '）';
+      errEl.style.display = 'block';
+    }
+  }
 });
 
 let firebaseSyncInitialized = false;
