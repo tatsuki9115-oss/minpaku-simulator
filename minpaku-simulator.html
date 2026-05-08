@@ -1252,9 +1252,18 @@ function renderMonthly() {
     csvBooks.forEach(b => {
       totalRevenue += b.revenue;
       const prop = properties.find(p => p.id === getBookingPropId(b));
-      if (prop) totalVarCosts += getPerBookingTotal(b, prop);
+      const [by, bm] = b.checkin.split('/').map(Number);
+      // 実費保存済みの月は per-booking 変動費を加算しない（後で実費変動費を加算）
+      if (prop && !hasActualCosts(getBookingPropId(b), by, bm)) {
+        totalVarCosts += getPerBookingTotal(b, prop);
+      }
       totalNights += b.nights;
     });
+    // 実費保存済み物件の変動費を月単位で加算
+    const monthPropsM = monthlyPropFilter === 'all'
+      ? properties.filter(p => isPropertyOperating(p, year, month))
+      : properties.filter(p => String(p.id) === String(monthlyPropFilter) && isPropertyOperating(p, year, month));
+    monthPropsM.forEach(p => { totalVarCosts += getPropMonthActualVarCosts(p, year, month); });
     // 固定費：この月に営業中の物件全体
     const monthFixed = getMonthFixedCosts(year, month, monthlyPropFilter);
     const totalProfit = totalRevenue - monthFixed - totalVarCosts;
@@ -1951,13 +1960,24 @@ function totalMonthsOperating(prop) {
   return Math.max((ny - sy) * 12 + (nm - sm) + 1, 0);
 }
 
-// ある月の固定費合計（フィルター考慮）
+// ある月の固定費合計（実費保存時は固定費項目のみ合計）
 function getPropMonthFixedCosts(prop, year, month) {
   if (!isPropertyOperating(prop, year, month)) return 0; // 営業開始前は0
   const key = `${prop.id}_${year}_${month}`;
   const ac = actualCosts[key];
-  if (ac && Array.isArray(ac)) return ac.reduce((s, c) => s + (c.amount || 0), 0);
+  if (ac && Array.isArray(ac)) {
+    const fixedNames = new Set(prop.monthlyFixedCosts.map(c => c.name));
+    return ac.reduce((s, c) => s + (fixedNames.has(c.name) ? (c.amount || 0) : 0), 0);
+  }
   return prop.monthlyFixedCosts.reduce((s, c) => s + c.amount, 0);
+}
+// ある月の変動費合計（実費保存時のみ有効・非固定費項目の合計）
+function getPropMonthActualVarCosts(prop, year, month) {
+  const key = `${prop.id}_${year}_${month}`;
+  const ac = actualCosts[key];
+  if (!ac || !Array.isArray(ac)) return 0;
+  const fixedNames = new Set(prop.monthlyFixedCosts.map(c => c.name));
+  return ac.reduce((s, c) => s + (!fixedNames.has(c.name) ? (c.amount || 0) : 0), 0);
 }
 function hasActualCosts(propId, year, month) {
   return !!(actualCosts[`${propId}_${year}_${month}`]);
@@ -2212,26 +2232,46 @@ function renderInvestmentRecovery() {
     books.forEach(b => {
       totalRevenue += b.revenue;
       const [by, bm] = b.checkin.split('/').map(Number);
-      // 実費入力済みの月は変動費を加算しない（実費に含まれているため）
       if (!hasActualCosts(p.id, by, bm)) {
         totalVarCosts += getPerBookingTotal(b, p);
       }
     });
+    // 実費保存済み月の変動費を月単位で加算（重複防止）
+    { const _doneM = new Set();
+      books.forEach(b => {
+        const [by, bm] = b.checkin.split('/').map(Number);
+        const _mk = `${by}_${bm}`;
+        if (hasActualCosts(p.id, by, bm) && !_doneM.has(_mk)) {
+          _doneM.add(_mk);
+          totalVarCosts += getPropMonthActualVarCosts(p, by, bm);
+        }
+      });
+    }
 
     const cumulativeProfit = totalRevenue - totalFixedCosts - totalVarCosts;
 
     // 月別の純利益（直近3ヶ月平均 → 回収予想）
-    // 各月の純利益 = 売上 - 固定費 - 変動費
     const monthRevMap = {}, monthVarMap = {};
     books.forEach(b => {
       const [y, mo] = b.checkin.split('/').map(Number);
       const key = `${y}-${String(mo).padStart(2,'0')}`;
       monthRevMap[key] = (monthRevMap[key] || 0) + b.revenue;
-      // 実費入力済みの月は変動費を加算しない
       if (!hasActualCosts(p.id, y, mo)) {
         monthVarMap[key] = (monthVarMap[key] || 0) + getPerBookingTotal(b, p);
       }
     });
+    // 実費保存済み月の変動費を月単位で加算（重複防止）
+    { const _doneM2 = new Set();
+      books.forEach(b => {
+        const [y, mo] = b.checkin.split('/').map(Number);
+        const _mk = `${y}_${mo}`;
+        if (hasActualCosts(p.id, y, mo) && !_doneM2.has(_mk)) {
+          _doneM2.add(_mk);
+          const mkey = `${y}-${String(mo).padStart(2,'0')}`;
+          monthVarMap[mkey] = (monthVarMap[mkey] || 0) + getPropMonthActualVarCosts(p, y, mo);
+        }
+      });
+    }
     // 営業開始〜（確定予約の最終月 or 現在月）の全月を列挙
     const allMonthProfits = [];
     if (p.operationStart) {
@@ -3304,13 +3344,15 @@ function renderAnnual() {
       rev += b.revenue;
       const pid = getBookingPropId(b);
       const prop = properties.find(p => p.id === pid);
-      // 実費入力済みの物件は変動費を加算しない（実費に含まれているため）
+      // 実費保存済みの月は per-booking 変動費を加算しない（後で実費変動費を加算）
       if (prop && !hasActualCosts(pid, mYear, m)) {
         varCosts += getPerBookingTotal(b, prop);
       }
       // 【28泊以上】リスティング（定期借家契約）は稼働日数にカウントしない
       if (!isLongStayListing(b)) nights += b.nights;
     });
+    // 実費保存済み物件の変動費を月単位で加算
+    operatingProps.forEach(p => { varCosts += getPropMonthActualVarCosts(p, mYear, m); });
 
     const profit = rev - monthFixedCosts - varCosts;
     const dim = getDaysInMonth(mYear, m);
