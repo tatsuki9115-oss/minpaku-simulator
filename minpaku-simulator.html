@@ -1989,9 +1989,7 @@ function getMonthFixedCosts(year, month, propFilter) {
   return targetProps.reduce((s, p) => s + getPropMonthFixedCosts(p, year, month), 0);
 }
 function fmtShort(n) {
-  const abs = Math.abs(n);
-  if (abs >= 10000) return (n / 10000).toFixed(1) + '万';
-  return n.toLocaleString('ja-JP');
+  return (Math.abs(n) / 10000).toFixed(1) + '万';
 }
 
 function renderDonut(pct, forecastPct, size=88) {
