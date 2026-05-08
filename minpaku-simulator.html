@@ -1530,7 +1530,7 @@ function renderCalendarTab() {
                 <span style="font-size:11px;color:#555">🧹 清掃費</span>
                 <input type="text" inputmode="numeric" pattern="[0-9]*" value="${dispCleaning}" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','cleaningFee',this.value)" onblur="saveBookingChecks()">
                 <span style="font-size:11px;color:#999">円</span>
-                <span style="font-size:11px;color:#555">🌀 ランドリー代</span>
+                <span style="font-size:11px;color:#555">🌀 コインランドリー</span>
                 <input type="text" inputmode="numeric" pattern="[0-9]*" value="${dispLaundry}" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','laundryFee',this.value)" onblur="saveBookingChecks()">
                 <span style="font-size:11px;color:#999">円</span>
                 <span style="font-size:11px;color:#555">🛒 消耗品</span>
@@ -2930,7 +2930,7 @@ function getPerBookingTotal(booking, prop) {
     : (prop.perBookingCosts.find(c => c.name === '清掃費')?.amount || 0);
   const cleaningFee = chk.cleaningFee != null ? (parseInt(chk.cleaningFee) || 0) : defaultCleaningFee;
 
-  // ランドリー代: 明示入力値 → デフォルト1400
+  // コインランドリー: 明示入力値 → デフォルト1400
   const laundryFee = chk.laundryFee != null ? (parseInt(chk.laundryFee) || 0) : 1400;
 
   // 消耗品: 明示入力値 → デフォルト0
@@ -3978,7 +3978,7 @@ function toggleCheckStaffFromList(code, staffName) {
   renderCalendarTab();
 }
 
-// 予約ごとの実費入力（清掃費・ランドリー代・消耗品）
+// 予約ごとの実費入力（清掃費・コインランドリー・消耗品）
 // oninputで値をメモリに保持 → onblurでsaveBookingChecks()を呼んで保存
 function updateBookingCost(code, field, val) {
   if (!bookingChecks[code]) bookingChecks[code] = {};
