@@ -2498,38 +2498,85 @@ function showActualCostModal(year, month, propId) {
   if (!prop) return;
   const key = `${propId}_${year}_${month}`;
   const existing = actualCosts[key];
-  // 初期値：実費データがあればそれを、なければ設定の概算値を使用
   const baseFixed = prop.monthlyFixedCosts;
-  const initCosts = existing
-    ? JSON.parse(JSON.stringify(existing))
-    : JSON.parse(JSON.stringify(baseFixed));
-
   const fixedCount = baseFixed.length;
 
-  // 変動費（リネン・清掃費・コインランドリー）の実績値：initCostsにあれば使う
-  const EXTRA_ITEMS = ['リネン', '清掃費', 'コインランドリー'];
-  const extraAmounts = EXTRA_ITEMS.map(name => {
-    const found = initCosts.find((c, i) => i >= fixedCount && c.name === name);
-    return found ? found.amount : 0;
+  // === カレンダー実費から自動集計 ===
+  const monthBookings = airbnbBookings.filter(b => {
+    if (!b.checkin) return false;
+    const [by, bm] = b.checkin.split('/').map(Number);
+    return by === year && bm === month && getBookingPropId(b) === propId;
+  });
+
+  const calSum = { '清掃費': 0, 'コインランドリー': 0, '消耗品': 0, 'その他（明細あり）': 0, 'その他（明細なし）': 0 };
+  const memoLines = [];
+
+  monthBookings.forEach(b => {
+    if (!b.code) return;
+    const chk = bookingChecks[b.code] || {};
+    const selStaff = (prop.cleaningStaff || []).find(s => s.name === chk.cleaningStaffName);
+    const defCleaning = (selStaff && selStaff.fee != null && selStaff.fee !== '')
+      ? (parseInt(selStaff.fee) || 0)
+      : (prop.perBookingCosts ? (prop.perBookingCosts.find(c => c.name === '清掃費')?.amount || 0) : 0);
+
+    calSum['清掃費']          += chk.cleaningFee != null ? (parseInt(chk.cleaningFee) || 0) : defCleaning;
+    calSum['コインランドリー'] += chk.laundryFee  != null ? (parseInt(chk.laundryFee)  || 0) : 1400;
+    calSum['消耗品']           += chk.suppliesFee != null ? (parseInt(chk.suppliesFee) || 0) : 0;
+    calSum['その他（明細あり）'] += chk.otherFee   != null ? (parseInt(chk.otherFee)   || 0) : 0;
+    calSum['その他（明細なし）'] += chk.otherFeeOff!= null ? (parseInt(chk.otherFeeOff)|| 0) : 0;
+
+    const parts = b.checkin.split('/');
+    const dateLabel = `${parseInt(parts[1])}/${parseInt(parts[2])}`;
+    if (chk.otherMemo)    memoLines.push(`${dateLabel} ${b.guestName || ''}：${chk.otherMemo}`);
+    if (chk.otherMemoOff) memoLines.push(`${dateLabel} ${b.guestName || ''}：${chk.otherMemoOff}（非公開）`);
+  });
+
+  // 変動費アイテム定義（autoKey=nullはカレンダー集計なし・手動のみ）
+  const EXTRA_DEFS = [
+    { name: 'リネン',           autoKey: null },
+    { name: '清掃費',           autoKey: '清掃費' },
+    { name: 'コインランドリー', autoKey: 'コインランドリー' },
+    { name: '消耗品',           autoKey: '消耗品' },
+    { name: 'その他（明細あり）', autoKey: 'その他（明細あり）' },
+    { name: 'その他（明細なし）', autoKey: 'その他（明細なし）' },
+  ];
+
+  // 金額の初期値：カレンダー集計がある項目はそれを使う、リネンは既存データ優先
+  const extraAmounts = EXTRA_DEFS.map(item => {
+    if (item.autoKey !== null) return calSum[item.autoKey] || 0;
+    if (existing) {
+      const found = existing.find((c, i) => i >= fixedCount && c.name === item.name);
+      if (found) return found.amount;
+    }
+    return 0;
+  });
+
+  // 固定費の初期値（既存データがあればそれを、なければ概算値）
+  const fixedInitAmounts = baseFixed.map((c, i) => {
+    if (existing) {
+      const found = existing.find((e, ei) => ei < fixedCount && e.name === c.name);
+      if (found) return found.amount;
+    }
+    return c.amount;
   });
 
   const overlay = document.createElement('div');
   overlay.setAttribute('data-actual-cost-modal', '1');
   overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
 
-  const fixedRows = initCosts.slice(0, fixedCount).map((c, i) => `
+  const fixedRows = baseFixed.map((c, i) => `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
       <div style="flex:1;font-size:13px;color:#555">${c.name}</div>
       <div style="display:flex;align-items:center;gap:4px">
         <span style="font-size:11px;color:#aaa">¥</span>
-        <input type="number" id="ac-input-${i}" value="${c.amount}" min="0" step="100"
+        <input type="number" id="ac-input-${i}" value="${fixedInitAmounts[i]}" min="0" step="100"
           style="width:90px;padding:6px 8px;border:1.5px solid #eee;border-radius:8px;font-size:13px;font-weight:600;text-align:right;color:#333">
       </div>
     </div>`).join('');
 
-  const extraRows = EXTRA_ITEMS.map((name, ei) => `
+  const extraRows = EXTRA_DEFS.map((item, ei) => `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-      <div style="flex:1;font-size:13px;color:#555">${name}</div>
+      <div style="flex:1;font-size:13px;color:#555">${item.name}${item.autoKey ? '<span style="font-size:9px;color:#1C9A52;margin-left:4px;background:#F0FBF5;padding:1px 5px;border-radius:4px">📅集計</span>' : ''}</div>
       <div style="display:flex;align-items:center;gap:4px">
         <span style="font-size:11px;color:#aaa">¥</span>
         <input type="number" id="ac-extra-${ei}" value="${extraAmounts[ei]}" min="0" step="100"
@@ -2537,16 +2584,26 @@ function showActualCostModal(year, month, propId) {
       </div>
     </div>`).join('');
 
+  const memoSection = memoLines.length > 0 ? `
+    <div style="border-top:1px solid #f0f0f0;margin-top:10px;padding-top:10px">
+      <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:6px">📝 その他費用のメモ</div>
+      ${memoLines.map(m => `<div style="font-size:11px;color:#555;background:#F9F8F6;border-radius:6px;padding:5px 8px;margin-bottom:4px">${escHtml(m)}</div>`).join('')}
+    </div>` : '';
+
   overlay.innerHTML = `
     <div style="background:white;border-radius:16px;padding:20px;width:100%;max-width:360px;max-height:85vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.2)">
       <div style="font-size:15px;font-weight:700;color:#333;margin-bottom:2px">✏️ ${year}年${month}月の実費入力</div>
-      <div style="font-size:11px;color:#aaa;margin-bottom:16px">${prop.name}｜初期値は設定の概算値</div>
+      <div style="font-size:11px;color:#aaa;margin-bottom:16px">${prop.name}｜固定費は概算値・変動費はカレンダーから自動集計</div>
       ${fixedRows}
       <div style="border-top:1px solid #f0f0f0;margin:10px 0 10px;padding-top:10px">
-        <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:4px">変動費（月合計）</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <div style="font-size:10px;font-weight:700;color:#B0ADA8">変動費（月合計）</div>
+          <div style="font-size:9px;color:#1C9A52;background:#F0FBF5;padding:2px 6px;border-radius:4px">📅集計 = カレンダー入力から自動合算</div>
+        </div>
         <div style="font-size:10px;color:#E65100;background:#FFF8EC;border-radius:6px;padding:5px 8px;margin-bottom:8px">⚠️ 入力すると概算の変動費（清掃費・リネン）は加算されません</div>
         ${extraRows}
       </div>
+      ${memoSection}
       <div style="border-top:1px solid #f0f0f0;margin-top:4px;padding-top:10px;display:flex;justify-content:space-between;align-items:center">
         <button onclick="deleteActualCost('${key}')" style="font-size:11px;color:#e53935;background:none;border:none;cursor:pointer;padding:4px 0">概算に戻す</button>
         <div style="display:flex;gap:8px">
@@ -2568,9 +2625,9 @@ function saveActualCostFromModal(key, fixedCount) {
     if (!input) continue;
     costs.push({ name: prop.monthlyFixedCosts[i]?.name || '', amount: parseInt(input.value) || 0 });
   }
-  // 変動費（清掃費・コインランドリー）
-  const EXTRA_ITEMS = ['清掃費', 'コインランドリー'];
-  EXTRA_ITEMS.forEach((name, ei) => {
+  // 変動費（カレンダー集計 + リネン手動）
+  const EXTRA_NAMES = ['リネン', '清掃費', 'コインランドリー', '消耗品', 'その他（明細あり）', 'その他（明細なし）'];
+  EXTRA_NAMES.forEach((name, ei) => {
     const input = document.getElementById(`ac-extra-${ei}`);
     const amount = input ? (parseInt(input.value) || 0) : 0;
     if (amount > 0) costs.push({ name, amount });
