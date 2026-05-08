@@ -2531,9 +2531,8 @@ function showActualCostModal(year, month, propId) {
     if (chk.otherMemoOff) memoLines.push(`${dateLabel} ${b.guestName || ''}：${chk.otherMemoOff}（非公開）`);
   });
 
-  // 変動費アイテム定義（autoKey=nullはカレンダー集計なし・手動のみ）
+  // 変動費アイテム定義
   const EXTRA_DEFS = [
-    { name: 'リネン',           autoKey: null },
     { name: '清掃費',           autoKey: '清掃費' },
     { name: 'コインランドリー', autoKey: 'コインランドリー' },
     { name: '消耗品',           autoKey: '消耗品' },
@@ -2625,8 +2624,8 @@ function saveActualCostFromModal(key, fixedCount) {
     if (!input) continue;
     costs.push({ name: prop.monthlyFixedCosts[i]?.name || '', amount: parseInt(input.value) || 0 });
   }
-  // 変動費（カレンダー集計 + リネン手動）
-  const EXTRA_NAMES = ['リネン', '清掃費', 'コインランドリー', '消耗品', 'その他（明細あり）', 'その他（明細なし）'];
+  // 変動費（カレンダー集計）
+  const EXTRA_NAMES = ['清掃費', 'コインランドリー', '消耗品', 'その他（明細あり）', 'その他（明細なし）'];
   EXTRA_NAMES.forEach((name, ei) => {
     const input = document.getElementById(`ac-extra-${ei}`);
     const amount = input ? (parseInt(input.value) || 0) : 0;
