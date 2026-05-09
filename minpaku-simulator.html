@@ -2612,15 +2612,33 @@ function showActualCostModal(year, month, propId) {
   overlay.setAttribute('data-actual-cost-modal', '1');
   overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
 
+  // 変更不要な固定費（毎月同額確定）
+  const CONFIRMED_FIXED = new Set(['家賃+共益費', '通信費', '旅館業保険']);
+
   const fixedRows = displayFixed.map((c, i) => {
-    const isBudget = fixedInitAmounts[i] === c.amount && !c.name.includes('家賃');
-    const inputStyle = isBudget
-      ? 'width:90px;padding:6px 8px;border:1.5px solid #eee;border-radius:8px;font-size:13px;font-weight:600;text-align:right;color:#bbb;background:#fafafa'
-      : 'width:90px;padding:6px 8px;border:1.5px solid #eee;border-radius:8px;font-size:13px;font-weight:600;text-align:right;color:#333';
-    const labelStyle = isBudget ? 'flex:1;font-size:13px;color:#bbb' : 'flex:1;font-size:13px;color:#555';
+    const isConfirmed = CONFIRMED_FIXED.has(c.name);
+    const needsInput = !isConfirmed && fixedInitAmounts[i] === c.amount; // 概算のまま＝要確定入力
+
+    let inputStyle, labelStyle, badge;
+    if (isConfirmed) {
+      // 毎月固定・変更不要 → グレーで目立たせない
+      inputStyle = 'width:90px;padding:6px 8px;border:1.5px solid #eee;border-radius:8px;font-size:13px;font-weight:600;text-align:right;color:#bbb;background:#fafafa';
+      labelStyle = 'flex:1;font-size:13px;color:#bbb';
+      badge = '<span style="font-size:9px;color:#ccc;margin-left:4px;background:#f5f5f5;padding:1px 5px;border-radius:4px">固定</span>';
+    } else if (needsInput) {
+      // 概算のまま未確定 → オレンジで要確定を強調
+      inputStyle = 'width:90px;padding:6px 8px;border:1.5px solid #F07C3F;border-radius:8px;font-size:13px;font-weight:600;text-align:right;color:#333;background:#FFFAF7';
+      labelStyle = 'flex:1;font-size:13px;color:#E65100;font-weight:600';
+      badge = '<span style="font-size:9px;color:#F07C3F;margin-left:4px;background:#FFF0E6;padding:1px 5px;border-radius:4px">要確定</span>';
+    } else {
+      // 実費入力済み → 通常表示
+      inputStyle = 'width:90px;padding:6px 8px;border:1.5px solid #eee;border-radius:8px;font-size:13px;font-weight:600;text-align:right;color:#333';
+      labelStyle = 'flex:1;font-size:13px;color:#555';
+      badge = '<span style="font-size:9px;color:#1C9A52;margin-left:4px;background:#F0FBF5;padding:1px 5px;border-radius:4px">確定済</span>';
+    }
     return `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-      <div style="${labelStyle}">${c.name}${isBudget ? '<span style="font-size:9px;color:#ccc;margin-left:4px">概算</span>' : ''}</div>
+      <div style="${labelStyle}">${c.name}${badge}</div>
       <div style="display:flex;align-items:center;gap:4px">
         <span style="font-size:11px;color:#aaa">¥</span>
         <input type="number" id="ac-input-${i}" value="${fixedInitAmounts[i]}" min="0" step="100"
