@@ -465,7 +465,7 @@
       <div class="sub-input-group">
         <label>稼働基準日数</label>
         <div style="font-size:11px;color:#B0ADA8;margin-bottom:4px">月額固定費をこの日数で按分して1予約分の固定費を計算</div>
-        <input type="number" id="base-days" min="1" max="366" inputmode="numeric" oninput="this.dataset.manuallyEdited='1';calcProfit()" onchange="calcProfit()">
+        <input type="number" id="base-days" min="1" max="366" inputmode="numeric" value="18" oninput="this.dataset.manuallyEdited='1';calcProfit()" onchange="calcProfit()">
         <div class="sub-unit">日</div>
       </div>
     </div>
@@ -957,14 +957,15 @@ function renderSimPropertySelect() {
 function onSimPropertyChange() {
   document.getElementById('months').value = '1';
   const baseDaysEl = document.getElementById('base-days');
-  baseDaysEl.value = '';
+  baseDaysEl.value = '18';
   delete baseDaysEl.dataset.manuallyEdited;
   calcProfit();
 }
 
 function resetInputs() {
-  ['nights','groups','revenue','months','base-days'].forEach(id => document.getElementById(id).value = '');
+  ['nights','groups','revenue','months'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('months').value = '1';
+  document.getElementById('base-days').value = '18';
   delete document.getElementById('base-days').dataset.manuallyEdited;
   document.getElementById('result-area').innerHTML = '';
 }
