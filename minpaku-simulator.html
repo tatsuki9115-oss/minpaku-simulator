@@ -3173,6 +3173,60 @@ function renderDashboard() {
     </div>` : ''}
   </div>`;
 
+  // ========== アラートカード ==========
+  const hasAlerts = alertForm.length > 0 || alertClean.length > 0 || alertGarbage.length > 0;
+  if (hasAlerts) {
+    const renderAlertRow = (b, type) => {
+      const pid = getBookingPropId(b);
+      const prop = properties.find(p => p.id === pid);
+      const color = getPropColor(pid);
+      const baseDate = type === 'garbage' ? (getCO(b) || getCI(b)) : getCI(b);
+      const diff = Math.round((baseDate - now) / 86400000);
+      const diffLabel = diff < 0 ? `${-diff}日超過` : diff === 0 ? '今日' : `あと${diff}日`;
+      const isOver = diff < 0;
+      const isUrgent = diff <= 1;
+      const urgentColor = isOver ? '#D32F2F' : isUrgent ? '#E65100' : '#F59E0B';
+      const checkField = type === 'form' ? 'formDone' : type === 'garbage' ? 'garbageDone' : 'cleaningDone';
+      const icon = type === 'form' ? '📋' : type === 'garbage' ? '🗑️' : '🧹';
+      const label = type === 'form' ? '宿泊者名簿' : type === 'garbage' ? 'ゴミ回収依頼' : '清掃手配';
+      const btnLabel = type === 'form' ? '✅ 提出済みにする' : type === 'garbage' ? '✅ 依頼済みにする' : '✅ 手配済みにする';
+      return `<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid rgba(0,0,0,.06)">
+        <div style="flex-shrink:0;width:36px;height:36px;border-radius:10px;background:${isOver?'#FFEBEE':isUrgent?'#FFF3E0':'#FFFDE7'};display:flex;align-items:center;justify-content:center;font-size:18px">${icon}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;color:#1C1C1E;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(b.guestName||'ゲスト')}</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap">
+            <span style="font-size:11px;font-weight:700;color:${color}">${prop?.name||''}</span>
+            <span style="font-size:11px;color:#B0ADA8">·</span>
+            <span style="font-size:11px;font-weight:800;color:${urgentColor}">${label} ${diffLabel}</span>
+          </div>
+        </div>
+        <button onclick="toggleCheckForDash('${b.code}','${checkField}')" style="font-size:11px;font-weight:700;padding:8px 10px;border-radius:10px;border:none;cursor:pointer;background:#1C1C1E;color:white;flex-shrink:0;white-space:nowrap;line-height:1.2;text-align:center">${btnLabel}</button>
+      </div>`;
+    };
+    let alertRows = '';
+    if (alertForm.length > 0) {
+      alertRows += `<div style="font-size:10px;font-weight:800;color:#E65100;letter-spacing:.5px;margin:4px 0 2px">📋 宿泊者名簿（チェックイン1週間前までに）</div>`;
+      alertRows += alertForm.map(b => renderAlertRow(b, 'form')).join('');
+    }
+    if (alertClean.length > 0) {
+      if (alertForm.length > 0) alertRows += `<div style="height:8px"></div>`;
+      alertRows += `<div style="font-size:10px;font-weight:800;color:#00796B;letter-spacing:.5px;margin:4px 0 2px">🧹 清掃手配（チェックイン2週間前までに）</div>`;
+      alertRows += alertClean.map(b => renderAlertRow(b, 'clean')).join('');
+    }
+    if (alertGarbage.length > 0) {
+      if (alertForm.length > 0 || alertClean.length > 0) alertRows += `<div style="height:8px"></div>`;
+      alertRows += `<div style="font-size:10px;font-weight:800;color:#6D4C41;letter-spacing:.5px;margin:4px 0 2px">🗑️ ゴミ回収依頼（フィオーレ新子安・チェックアウト3日前までに）</div>`;
+      alertRows += alertGarbage.map(b => renderAlertRow(b, 'garbage')).join('');
+    }
+    html += `<div class="card" style="margin-bottom:12px;border:2px solid #E53935;border-radius:14px;padding:12px 14px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+        <span style="font-size:16px">🚨</span>
+        <span style="font-size:13px;font-weight:800;color:#D32F2F">要対応 ${alertForm.length + alertClean.length + alertGarbage.length}件</span>
+      </div>
+      ${alertRows}
+    </div>`;
+  }
+
   // ========== 180日消費メーター + 繁忙期フェーズ ==========
   {
     // 繁忙期フェーズ判定
@@ -3313,66 +3367,6 @@ function renderDashboard() {
         <div style="font-size:10px;color:#C0BDBA;text-align:right;margin-top:2px">詳細は実績タブで確認</div>
       </div>`;
     }
-  }
-
-  // ========== アラートカード ==========
-  const hasAlerts = alertForm.length > 0 || alertClean.length > 0 || alertGarbage.length > 0;
-  if (hasAlerts) {
-    const renderAlertRow = (b, type) => {
-      const pid = getBookingPropId(b);
-      const prop = properties.find(p => p.id === pid);
-      const color = getPropColor(pid);
-      // ゴミ回収はチェックアウト日基準、それ以外はチェックイン日基準
-      const baseDate = type === 'garbage' ? (getCO(b) || getCI(b)) : getCI(b);
-      const diff = Math.round((baseDate - now) / 86400000);
-      const diffLabel = diff < 0 ? `${-diff}日超過` : diff === 0 ? '今日' : `あと${diff}日`;
-      const isOver = diff < 0;
-      const isUrgent = diff <= 1;
-      const urgentColor = isOver ? '#D32F2F' : isUrgent ? '#E65100' : '#F59E0B';
-      const checkField = type === 'form' ? 'formDone' : type === 'garbage' ? 'garbageDone' : 'cleaningDone';
-      const icon = type === 'form' ? '📋' : type === 'garbage' ? '🗑️' : '🧹';
-      const label = type === 'form' ? '宿泊者名簿' : type === 'garbage' ? 'ゴミ回収依頼' : '清掃手配';
-      const btnLabel = type === 'form' ? '✅ 提出済みにする' : type === 'garbage' ? '✅ 依頼済みにする' : '✅ 手配済みにする';
-      return `<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid rgba(0,0,0,.06)">
-        <div style="flex-shrink:0;width:36px;height:36px;border-radius:10px;background:${isOver?'#FFEBEE':isUrgent?'#FFF3E0':'#FFFDE7'};display:flex;align-items:center;justify-content:center;font-size:18px">${icon}</div>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:700;color:#1C1C1E;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(b.guestName||'ゲスト')}</div>
-          <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap">
-            <span style="font-size:11px;font-weight:700;color:${color}">${prop?.name||''}</span>
-            <span style="font-size:11px;color:#B0ADA8">·</span>
-            <span style="font-size:11px;font-weight:800;color:${urgentColor}">${label} ${diffLabel}</span>
-          </div>
-        </div>
-        <button onclick="toggleCheckForDash('${b.code}','${checkField}')" style="font-size:11px;font-weight:700;padding:8px 10px;border-radius:10px;border:none;cursor:pointer;background:#1C1C1E;color:white;flex-shrink:0;white-space:nowrap;line-height:1.2;text-align:center">${btnLabel}</button>
-      </div>`;
-    };
-
-    let alertRows = '';
-    // 名簿アラート
-    if (alertForm.length > 0) {
-      alertRows += `<div style="font-size:10px;font-weight:800;color:#E65100;letter-spacing:.5px;margin:4px 0 2px">📋 宿泊者名簿（チェックイン1週間前までに）</div>`;
-      alertRows += alertForm.map(b => renderAlertRow(b, 'form')).join('');
-    }
-    // 清掃アラート
-    if (alertClean.length > 0) {
-      if (alertForm.length > 0) alertRows += `<div style="height:8px"></div>`;
-      alertRows += `<div style="font-size:10px;font-weight:800;color:#00796B;letter-spacing:.5px;margin:4px 0 2px">🧹 清掃手配（チェックイン2週間前までに）</div>`;
-      alertRows += alertClean.map(b => renderAlertRow(b, 'clean')).join('');
-    }
-    // ゴミ回収アラート（フィオーレ新子安のみ）
-    if (alertGarbage.length > 0) {
-      if (alertForm.length > 0 || alertClean.length > 0) alertRows += `<div style="height:8px"></div>`;
-      alertRows += `<div style="font-size:10px;font-weight:800;color:#6D4C41;letter-spacing:.5px;margin:4px 0 2px">🗑️ ゴミ回収依頼（フィオーレ新子安・チェックアウト3日前までに）</div>`;
-      alertRows += alertGarbage.map(b => renderAlertRow(b, 'garbage')).join('');
-    }
-
-    html += `<div class="card" style="margin-bottom:12px;border:2px solid #E53935;border-radius:14px;padding:12px 14px">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
-        <span style="font-size:16px">🚨</span>
-        <span style="font-size:13px;font-weight:800;color:#D32F2F">要対応 ${alertForm.length + alertClean.length + alertGarbage.length}件</span>
-      </div>
-      ${alertRows}
-    </div>`;
   }
 
   // 今後7日間のイベント
