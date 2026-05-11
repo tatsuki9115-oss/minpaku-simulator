@@ -3173,6 +3173,148 @@ function renderDashboard() {
     </div>` : ''}
   </div>`;
 
+  // ========== 180日消費メーター + 繁忙期フェーズ ==========
+  {
+    // 繁忙期フェーズ判定
+    const mo = now.getMonth() + 1, dy = now.getDate();
+    let seasonPhase, seasonColor, seasonIcon, strategyHint;
+    if ([10, 11].includes(mo)) {
+      seasonPhase = '最繁忙期'; seasonColor = '#D32F2F'; seasonIcon = '🔥';
+      strategyHint = '短期高単価を優先・長期予約は避ける';
+    } else if ([3, 4].includes(mo)) {
+      seasonPhase = '繁忙期'; seasonColor = '#E65100'; seasonIcon = '📈';
+      strategyHint = '短期予約を優先して単価を守る';
+    } else if (mo === 5 || (mo === 12 && dy >= 25) || (mo === 1 && dy <= 7)) {
+      seasonPhase = '繁忙期'; seasonColor = '#E65100'; seasonIcon = '📈';
+      strategyHint = '短期予約を優先して単価を守る';
+    } else if ([6, 7, 8].includes(mo)) {
+      seasonPhase = '通常期'; seasonColor = '#F59E0B'; seasonIcon = '📊';
+      strategyHint = '空きが続くようなら長期予約を検討';
+    } else {
+      seasonPhase = '閑散期'; seasonColor = '#1C9A52'; seasonIcon = '💤';
+      strategyHint = '28泊以上の長期予約を積極的に受け入れる';
+    }
+
+    // 180日消費計算（28+nights除外・当年チェックインのみ）
+    const days180ByProp = {};
+    airbnbBookings.forEach(b => {
+      if (!b.listing || b.listing.startsWith('【28泊以上】')) return;
+      const ci = getCI(b);
+      if (ci.getFullYear() !== thisYear) return;
+      const pid = getBookingPropId(b);
+      if (!pid) return;
+      days180ByProp[pid] = (days180ByProp[pid] || 0) + (b.nights || 0);
+    });
+
+    const meterRows = properties.map(p => {
+      const max = p.maxAnnualNights || 180;
+      const used = days180ByProp[p.id] || 0;
+      const remaining = Math.max(max - used, 0);
+      const pct = Math.min(Math.round(used / max * 100), 100);
+      const barColor = pct >= 90 ? '#E53935' : pct >= 70 ? '#F59E0B' : getPropColor(p.id);
+      const warnBadge = pct >= 90 ? `<span style="font-size:9px;background:#FFEBEE;color:#D32F2F;font-weight:800;border-radius:4px;padding:1px 4px;margin-left:4px">⚠️ 残りわずか</span>`
+        : pct >= 70 ? `<span style="font-size:9px;background:#FFF8E1;color:#F59E0B;font-weight:800;border-radius:4px;padding:1px 4px;margin-left:4px">要注意</span>` : '';
+      return `<div style="margin-bottom:9px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <div style="font-size:12px;font-weight:800;color:#1C1C1E">${p.name}${warnBadge}</div>
+          <div style="font-size:11px;color:#888">${used}<span style="color:#B0ADA8"> / ${max}泊</span>　<span style="font-weight:700;color:${barColor}">残り${remaining}泊</span></div>
+        </div>
+        <div style="height:7px;background:#F2F1EE;border-radius:4px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${barColor};border-radius:4px;transition:width .3s"></div>
+        </div>
+      </div>`;
+    }).join('');
+
+    html += `<div class="card" style="margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:11px;font-weight:800;color:#B0ADA8;letter-spacing:.5px">📅 180日消費メーター（${thisYear}年）</div>
+        <div style="display:inline-flex;align-items:center;gap:5px;background:${seasonColor}18;border-radius:20px;padding:3px 10px">
+          <span style="font-size:12px">${seasonIcon}</span>
+          <span style="font-size:11px;font-weight:800;color:${seasonColor}">${seasonPhase}</span>
+        </div>
+      </div>
+      ${meterRows}
+      <div style="font-size:11px;color:#888;padding-top:7px;border-top:1px solid #F2F1EE">💡 ${strategyHint}</div>
+    </div>`;
+  }
+
+  // ========== 投資回収ミニカード ==========
+  {
+    const nowM2 = now.getMonth() + 1;
+    const recovStats = properties.map(p => {
+      const initialTotal = (p.initialCosts || []).reduce((s, c) => s + c.amount, 0);
+      if (!initialTotal) return null;
+      const books = airbnbBookings.filter(b => getBookingPropId(b) === p.id);
+      const perBooking = (p.perBookingCosts || []).reduce((s, c) => s + c.amount, 0);
+      // 収益・変動費（実費入力がある月は実費を使う）
+      let totalRev = 0, totalVar = 0;
+      const doneM = new Set();
+      books.forEach(b => {
+        totalRev += b.revenue || 0;
+        const [by, bm] = b.checkin.split('/').map(Number);
+        const mk = `${by}_${bm}`;
+        if (hasActualCosts(p.id, by, bm)) {
+          if (!doneM.has(mk)) { doneM.add(mk); totalVar += getPropMonthActualVarCosts(p, by, bm); }
+        } else {
+          totalVar += getPerBookingTotal(b, p);
+        }
+      });
+      // 固定費（営業開始〜最終予約月まで）
+      let maxBookY = thisYear, maxBookM = nowM2;
+      books.forEach(b => {
+        const [by, bm] = b.checkin.split('/').map(Number);
+        if (by > maxBookY || (by === maxBookY && bm > maxBookM)) { maxBookY = by; maxBookM = bm; }
+      });
+      let totalFixed = 0;
+      if (p.operationStart) {
+        const [sy, sm] = p.operationStart.split('-').map(Number);
+        let cy = sy, cm = sm;
+        while (cy < maxBookY || (cy === maxBookY && cm <= maxBookM)) {
+          totalFixed += getPropMonthFixedCosts(p, cy, cm);
+          cm++; if (cm > 12) { cm = 1; cy++; }
+        }
+      }
+      const cumProfit = totalRev - totalFixed - totalVar;
+      const remaining = Math.max(initialTotal - cumProfit, 0);
+      const pct = initialTotal > 0 ? Math.min(Math.round(cumProfit / initialTotal * 100), 100) : 0;
+      // 直近3ヶ月の月別純利益平均
+      const recent3Profits = [];
+      for (let i = 2; i >= 0; i--) {
+        const d2 = new Date(thisYear, now.getMonth() - i, 1);
+        const ry = d2.getFullYear(), rm = d2.getMonth() + 1;
+        const mRev = books.filter(b => { const [by,bm] = b.checkin.split('/').map(Number); return by===ry&&bm===rm; }).reduce((s,b)=>s+(b.revenue||0),0);
+        const mVar = (() => { const bks = books.filter(b => { const [by,bm] = b.checkin.split('/').map(Number); return by===ry&&bm===rm; }); const dm=`${ry}_${rm}`; if(hasActualCosts(p.id,ry,rm)){return getPropMonthActualVarCosts(p,ry,rm);}return bks.reduce((s,b)=>s+getPerBookingTotal(b,p),0); })();
+        recent3Profits.push(mRev - getPropMonthFixedCosts(p, ry, rm) - mVar);
+      }
+      const avgMonthly = recent3Profits.reduce((a,b)=>a+b,0) / recent3Profits.length;
+      const monthsNeeded = avgMonthly > 500 && remaining > 0 ? Math.ceil(remaining / avgMonthly) : null;
+      return { prop: p, initialTotal, cumProfit, remaining, pct, monthsNeeded };
+    }).filter(Boolean);
+
+    if (recovStats.length > 0) {
+      const recRows = recovStats.map(r => {
+        const barColor = r.pct >= 100 ? '#1C9A52' : r.pct >= 60 ? getPropColor(r.prop.id) : '#B0ADA8';
+        const monthsLabel = r.pct >= 100 ? `<span style="color:#1C9A52;font-weight:800">回収完了！</span>`
+          : r.monthsNeeded !== null ? `<span style="color:#E65100">あと約${r.monthsNeeded}ヶ月</span>`
+          : `<span style="color:#B0ADA8">データ蓄積中</span>`;
+        return `<div style="margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span style="font-size:12px;font-weight:800;color:#1C1C1E">${r.prop.name}</span>
+            <span style="font-size:11px;font-weight:700;color:#888">${r.pct}% 回収　${monthsLabel}</span>
+          </div>
+          <div style="height:6px;background:#F2F1EE;border-radius:3px;overflow:hidden">
+            <div style="height:100%;width:${r.pct}%;background:${barColor};border-radius:3px"></div>
+          </div>
+        </div>`;
+      }).join('');
+      html += `<div class="card" style="margin-bottom:12px">
+        <div style="font-size:11px;font-weight:800;color:#B0ADA8;letter-spacing:.5px;margin-bottom:10px">💰 投資回収進捗</div>
+        ${recRows}
+        <div style="font-size:10px;color:#C0BDBA;text-align:right;margin-top:2px">詳細は実績タブで確認</div>
+      </div>`;
+    }
+  }
+
   // ========== アラートカード ==========
   const hasAlerts = alertForm.length > 0 || alertClean.length > 0 || alertGarbage.length > 0;
   if (hasAlerts) {
