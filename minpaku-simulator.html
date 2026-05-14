@@ -1298,7 +1298,7 @@ function renderMonthly() {
           const bColor = getPropColor(pid);
           const _bcBadge = b.source === 'booking'
             ? `<span style="font-size:9px;font-weight:800;background:#003580;color:white;padding:1px 4px;border-radius:3px;margin-left:4px">📘</span>`
-            : '';
+            : `<span style="font-size:9px;font-weight:800;background:#FF5A5F;color:white;padding:1px 4px;border-radius:3px;margin-left:4px">🅐</span>`;
           return `<div class="booking-row" style="--prop-color:${bColor}">
             <div class="booking-info">
               <div class="booking-prop">${prop ? prop.name : '⚠️ 物件未設定'}</div>
@@ -1517,7 +1517,7 @@ function renderCalendarTab() {
         const _isBookingCom = b.source === 'booking';
         const _chBadge = _isBookingCom
           ? `<span style="font-size:9px;font-weight:800;background:#003580;color:white;padding:1px 5px;border-radius:3px;margin-left:4px">📘 B.com</span>`
-          : '';
+          : `<span style="font-size:9px;font-weight:800;background:#FF5A5F;color:white;padding:1px 5px;border-radius:3px;margin-left:4px">🅐 Airbnb</span>`;
         return `<div style="background:white;border-radius:14px;padding:10px 12px;margin-bottom:6px;${borderStyle}">
           <!-- ヘッダー：物件名・ゲスト名 左／日付 右 -->
           <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px">
@@ -3445,7 +3445,7 @@ function renderDashboard() {
         const isBookingCom = b.source === 'booking';
         const channelBadge = isBookingCom
           ? `<span style="font-size:9px;font-weight:800;background:#003580;color:white;padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:middle">📘 B.com</span>`
-          : '';
+          : `<span style="font-size:9px;font-weight:800;background:#FF5A5F;color:white;padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:middle">🅐 Airbnb</span>`;
         const checkBtns = b.code ? `<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
               <button onclick="toggleCheckForDash('${b.code}','formDone')" style="font-size:12px;font-weight:800;padding:7px 10px;border-radius:10px;border:2px solid ${formDone?'#16a34a':'#f97316'};cursor:pointer;background:${formDone?'#dcfce7':'#fff7ed'};color:${formDone?'#15803d':'#c2410c'};white-space:nowrap;min-width:76px;text-align:center">${formDone?'📋 済':'📋 名簿'}</button>
               <button onclick="toggleCheckForDash('${b.code}','cleaningDone')" style="font-size:12px;font-weight:800;padding:7px 10px;border-radius:10px;border:2px solid ${cleanDone?'#0284c7':'#a855f7'};cursor:pointer;background:${cleanDone?'#e0f2fe':'#faf5ff'};color:${cleanDone?'#0369a1':'#7e22ce'};white-space:nowrap;min-width:76px;text-align:center">${cleanDone?'🧹 済':'🧹 清掃'}</button>
@@ -3674,7 +3674,7 @@ function renderAnnual() {
             : '';
           return `<div class="booking-row" style="--prop-color:${bColor}">
             <div class="booking-info">
-              <div class="booking-prop">${prop?prop.name:'⚠️ 未設定'}${b.source==='pricelabs'?'<span style="font-size:11px;font-weight:700;background:#fff0eb;color:#e05a2b;padding:1px 5px;border-radius:3px;margin-left:5px">PL</span>':''}${b.source==='booking'?'<span style="font-size:10px;font-weight:800;background:#003580;color:white;padding:1px 4px;border-radius:3px;margin-left:4px">📘 B.com</span>':''}</div>
+              <div class="booking-prop">${prop?prop.name:'⚠️ 未設定'}${b.source==='pricelabs'?'<span style="font-size:10px;font-weight:700;background:#fff0eb;color:#e05a2b;padding:1px 5px;border-radius:3px;margin-left:5px">PL</span>':b.source==='booking'?'<span style="font-size:10px;font-weight:800;background:#003580;color:white;padding:1px 4px;border-radius:3px;margin-left:4px">📘 B.com</span>':'<span style="font-size:10px;font-weight:800;background:#FF5A5F;color:white;padding:1px 4px;border-radius:3px;margin-left:4px">🅐 Airbnb</span>'}</div>
               <div class="booking-guest">${escHtml(b.guestName||(b.source==='pricelabs'?'PriceLabs予約':''))}</div>
               <div style="font-size:11px;color:#C8C5C0;margin-top:2px">${fmtD(b.checkin)} → ${fmtD(coStr)} · ${b.nights}泊</div>
             </div>
