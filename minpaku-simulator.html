@@ -598,6 +598,7 @@ const KEYS = {
   listingMap: 'minpaku_listing_map_v1',
   bookingChecks: 'minpaku_booking_checks_v1',
   actualCosts: 'minpaku_actual_costs_v1',
+  bookingCom: 'minpaku_bookingcom_v1',
 };
 
 let properties = loadData();
@@ -605,6 +606,7 @@ let history = loadHistory();
 let monthlyData = loadMonthly();
 let actualCosts = loadActualCosts();
 let airbnbBookings = loadAirbnbData();
+let bookingComBookings = loadBookingComData();
 let listingMap = loadListingMap();
 let pricelabsForecast = loadForecastData();
 let currentAnnualYear = new Date().getFullYear();
@@ -619,7 +621,7 @@ function saveDataUpdatedAt() {
 function updateHeaderTimestamp() {
   const el = document.getElementById('header-updated');
   if (!el) return;
-  const times = ['airbnb','pricelabs','forecast']
+  const times = ['airbnb','pricelabs','forecast','bookingCom']
     .filter(k => dataUpdatedAt[k])
     .map(k => new Date(dataUpdatedAt[k]));
   if (times.length === 0) { el.textContent = ''; return; }
@@ -762,6 +764,14 @@ function loadAirbnbData() {
   return [];
 }
 function saveAirbnbData() { fbSave(KEYS.airbnb, airbnbBookings); }
+function loadBookingComData() {
+  try { const s = localStorage.getItem(KEYS.bookingCom); if (s) return JSON.parse(s); } catch(e) {}
+  return [];
+}
+function saveBookingComData() { fbSave(KEYS.bookingCom, bookingComBookings); }
+// Airbnb + Booking.com 統合配列
+function getAllBookings() { return [...airbnbBookings, ...bookingComBookings]; }
+function findBookingByCode(code) { return getAllBookings().find(x => x.code === code) || null; }
 
 function loadForecastData() {
   try { const s = localStorage.getItem(KEYS.forecast); if (s) return JSON.parse(s); } catch(e) {}
@@ -1235,8 +1245,9 @@ function renderMonthly() {
     ${properties.map(p => `<button class="prop-filter-btn${monthlyPropFilter===String(p.id)?' active':''}" onclick="monthlyPropFilter='${p.id}';renderMonthly()">${p.name}</button>`).join('')}
   </div>`;
 
-  // この月のCSVデータを先に抽出してモードを決定
-  const csvBooks = airbnbBookings.filter(b => {
+  // この月のデータを先に抽出してモードを決定（Airbnb+Booking.com統合）
+  const csvBooks = getAllBookings().filter(b => {
+    if (!b.checkin) return false;
     const parts = b.checkin.split('/');
     if (parseInt(parts[0]) !== year || parseInt(parts[1]) !== month) return false;
     if (monthlyPropFilter !== 'all') return getBookingPropId(b) === parseInt(monthlyPropFilter);
@@ -1285,10 +1296,13 @@ function renderMonthly() {
           const pf = calcAirbnbProfit(b);
           const bIsP = pf !== null && pf >= 0;
           const bColor = getPropColor(pid);
+          const _bcBadge = b.source === 'booking'
+            ? `<span style="font-size:9px;font-weight:800;background:#003580;color:white;padding:1px 4px;border-radius:3px;margin-left:4px">📘</span>`
+            : '';
           return `<div class="booking-row" style="--prop-color:${bColor}">
             <div class="booking-info">
               <div class="booking-prop">${prop ? prop.name : '⚠️ 物件未設定'}</div>
-              <div class="booking-guest">${b.guestName} · ${b.nights}泊 · ${b.checkin}</div>
+              <div class="booking-guest">${escHtml(b.guestName||'')}${_bcBadge} · ${b.nights}泊 · ${b.checkin}</div>
             </div>
             <div class="booking-amounts">
               <div class="booking-rev">${fmt(b.revenue)}円</div>
@@ -1333,7 +1347,7 @@ function renderMonthly() {
     const addBtn = document.querySelector('.btn-add-booking');
     if (addBtn) addBtn.style.display = '';
     const bookings = getMonthBookings();
-    const hasGlobalCsv = airbnbBookings.length > 0;
+    const hasGlobalCsv = getAllBookings().length > 0;
 
     const bookingHTML = bookings.map((b, i) => {
       const profit = calcBookingProfit(b);
@@ -1408,8 +1422,8 @@ function renderCalendarTab() {
   const y = calendarYear, m = calendarMonth;
   const daysInMonth = new Date(y, m, 0).getDate();
 
-  // この月の予約（フィルター適用）
-  const monthBooks = airbnbBookings.filter(b => {
+  // この月の予約（フィルター適用・Airbnb+Booking.com統合）
+  const monthBooks = getAllBookings().filter(b => {
     if (!b.checkin) return false;
     if (calendarPropFilter !== 'all' && getBookingPropId(b) !== parseInt(calendarPropFilter)) return false;
     const coStr = getCheckout(b);
@@ -1500,6 +1514,10 @@ function renderCalendarTab() {
         const diffLabel = daysToCI < 0 ? `${-daysToCI}日超過` : daysToCI === 0 ? '今日' : `あと${daysToCI}日`;
         const diffColor = daysToCI < 0 ? '#D32F2F' : daysToCI <= 3 ? '#E65100' : daysToCI <= 7 ? '#F59E0B' : '#B0ADA8';
 
+        const _isBookingCom = b.source === 'booking';
+        const _chBadge = _isBookingCom
+          ? `<span style="font-size:9px;font-weight:800;background:#003580;color:white;padding:1px 5px;border-radius:3px;margin-left:4px">📘 B.com</span>`
+          : '';
         return `<div style="background:white;border-radius:14px;padding:10px 12px;margin-bottom:6px;${borderStyle}">
           <!-- ヘッダー：物件名・ゲスト名 左／日付 右 -->
           <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px">
@@ -1509,15 +1527,15 @@ function renderCalendarTab() {
                 <span style="font-size:11px;font-weight:800;color:${diffColor}">${diffLabel}</span>
                 ${hasAlert ? '<span style="font-size:10px;font-weight:800;color:#D32F2F;background:#FFEBEE;padding:1px 5px;border-radius:5px">要対応</span>' : ''}
               </div>
-              <div style="font-size:14px;font-weight:700;color:#1a1a2e;margin-top:2px">${escHtml(b.guestName||'ゲスト')}</div>
+              <div style="font-size:14px;font-weight:700;color:#1a1a2e;margin-top:2px">${escHtml(b.guestName||'ゲスト')}${_chBadge}</div>
             </div>
             <div style="font-size:10px;color:#aaa;text-align:right;flex-shrink:0;margin-left:8px;line-height:1.5">
               ${fmtD(b.checkin)} → ${fmtD(coStr)}<br><span style="font-weight:600;color:#888">${b.nights}泊</span>
             </div>
           </div>
-          ${b.code ? `<!-- 行1：名簿 / スタッフ▼ / 清掃 / ゴミ(フィオーレのみ) 横並び -->
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr${getBookingPropId(b)===2?' 1fr':''};gap:4px;margin-bottom:4px;align-items:stretch">
-            <button onclick="toggleCheckFromList('${b.code}','formDone')" style="font-size:11px;font-weight:800;padding:7px 4px;border-radius:9px;border:2px solid ${formBorder};cursor:pointer;background:${formBg};color:${formColor};line-height:1.3">📋 ${chk.formDone?'名簿✓済':'名簿'}</button>
+          ${b.code ? `<!-- 行1：名簿(Airbnbのみ) / スタッフ▼ / 清掃 / ゴミ(フィオーレのみ) 横並び -->
+          <div style="display:grid;grid-template-columns:${_isBookingCom?'1fr 1fr':'1fr 1fr 1fr'}${getBookingPropId(b)===2?' 1fr':''};gap:4px;margin-bottom:4px;align-items:stretch">
+            ${_isBookingCom?'':`<button onclick="toggleCheckFromList('${b.code}','formDone')" style="font-size:11px;font-weight:800;padding:7px 4px;border-radius:9px;border:2px solid ${formBorder};cursor:pointer;background:${formBg};color:${formColor};line-height:1.3">📋 ${chk.formDone?'名簿✓済':'名簿'}</button>`}
             ${staffList.length > 0 ? `<select style="font-size:10px;border:1.5px solid ${noStaffSelected?'#f97316':chk.cleaningDone?'#0284c7':'#e8e8e8'};border-radius:9px;padding:4px 2px;background:${noStaffSelected?'#FFF3E0':'white'};color:${noStaffSelected?'#E65100':'#555'};font-weight:${noStaffSelected?'700':'400'};text-align:center;cursor:pointer" onchange="toggleCheckStaffFromList('${b.code}',this.value)">
               <option value="">${noStaffSelected?'⚠️ 選択':'👤 スタッフ'}</option>
               ${staffList.map(s => `<option value="${escHtml(s.name)}" ${chk.cleaningStaffName===s.name?'selected':''}>${escHtml(s.name)}</option>`).join('')}
@@ -1586,8 +1604,8 @@ function renderCalendar(year, month, propFilter) {
   const todayY = today.getFullYear(), todayM = today.getMonth() + 1, todayD = today.getDate();
   const numWeeks = Math.ceil((firstDay + daysInMonth) / 7);
 
-  // この月に重なる予約を収集（月をまたぐものも含む）
-  const monthBookings = airbnbBookings.filter(b => {
+  // この月に重なる予約を収集（月をまたぐものも含む・Airbnb+Booking.com統合）
+  const monthBookings = getAllBookings().filter(b => {
     if (!b.checkin) return false;
     // 物件フィルター連動
     if (activeFilter !== 'all' && getBookingPropId(b) !== parseInt(activeFilter)) return false;
@@ -2109,7 +2127,8 @@ function parseDateStr(s) {
 
 // ==================== 予約重複チェック ====================
 function getOverlapInnerHTML() {
-  if (airbnbBookings.length === 0) return '';
+  const _allBks = getAllBookings();
+  if (_allBks.length === 0) return '';
   const fmtD = s => { if (!s) return '?'; const p = s.split('/'); return `${p[1]}/${p[2]}`; };
 
   let html = `<div style="font-size:11px;color:#aaa;margin-bottom:12px">集計基準：<strong style="color:#555">チェックイン日</strong>で月を判定・表示しています</div>`;
@@ -2117,7 +2136,7 @@ function getOverlapInnerHTML() {
   let hasAnyOverlap = false;
 
   properties.forEach(prop => {
-    const books = airbnbBookings
+    const books = _allBks
       .filter(b => getBookingPropId(b) === prop.id)
       .sort((a, b) => (parseDateStr(a.checkin) || 0) - (parseDateStr(b.checkin) || 0));
 
@@ -2192,8 +2211,8 @@ function renderInvestmentRecovery() {
     const initialTotal = (p.initialCosts || []).reduce((s, c) => s + c.amount, 0);
     const monthlyFixedTotal = p.monthlyFixedCosts.reduce((s, c) => s + c.amount, 0);
 
-    // 確定済み予約はすべて実績に含める（先日付も含む）
-    const books = airbnbBookings.filter(b => getBookingPropId(b) === p.id);
+    // 確定済み予約はすべて実績に含める（先日付も含む・Airbnb+Booking.com統合）
+    const books = getAllBookings().filter(b => getBookingPropId(b) === p.id);
 
     // 先日付で確定している月を把握（固定費・予測調整用）
     const futureBookedMonths = new Set();
@@ -2331,7 +2350,7 @@ function renderInvestmentRecovery() {
       hasForecastForSummary = true;
       const annualFixedPre = x.prop.monthlyFixedCosts.reduce((s,c)=>s+c.amount,0) * 12;
       const perBookingCostPre = x.prop.perBookingCosts.reduce((s,c)=>s+c.amount,0);
-      const propBooksPre = airbnbBookings.filter(b => getBookingPropId(b) === x.prop.id && b.nights > 0);
+      const propBooksPre = getAllBookings().filter(b => getBookingPropId(b) === x.prop.id && b.nights > 0);
       const avgNightsPre = propBooksPre.length > 0 ? propBooksPre.reduce((s,b)=>s+b.nights,0)/propBooksPre.length : 3;
       const shortRevPre = pfPre.revenue || pfPre.shortTermRevenue || 0; // revenue（最新更新値）を優先
       const estDaysPre = Math.round(pfPre.occupancy / 100 * 365);
@@ -2372,7 +2391,7 @@ function renderInvestmentRecovery() {
       if (!pf) return '';
       const annualFixed = x.prop.monthlyFixedCosts.reduce((s,c)=>s+c.amount,0) * 12;
       const perBookingCost = x.prop.perBookingCosts.reduce((s,c)=>s+c.amount,0);
-      const propBooks = airbnbBookings.filter(b => getBookingPropId(b) === x.prop.id && b.nights > 0);
+      const propBooks = getAllBookings().filter(b => getBookingPropId(b) === x.prop.id && b.nights > 0);
       const avgNights = propBooks.length > 0 ? propBooks.reduce((s,b)=>s+b.nights,0)/propBooks.length : 3;
       const shortRev = pf.revenue || pf.shortTermRevenue || 0; // revenue（最新更新値）を優先
       const estimatedDays = Math.round(pf.occupancy / 100 * 365);
@@ -2499,7 +2518,7 @@ function renderInvestmentRecovery() {
       hasAny = true;
       const annualFixed = x.prop.monthlyFixedCosts.reduce((s,c)=>s+c.amount,0) * 12;
       const perBookingCost = x.prop.perBookingCosts.reduce((s,c)=>s+c.amount,0);
-      const propBooks = airbnbBookings.filter(b => getBookingPropId(b) === x.prop.id && b.nights > 0);
+      const propBooks = getAllBookings().filter(b => getBookingPropId(b) === x.prop.id && b.nights > 0);
       const avgNights = propBooks.length > 0 ? propBooks.reduce((s,b)=>s+b.nights,0)/propBooks.length : 3;
       const shortRev = pf.revenue || pf.shortTermRevenue || 0; // revenue（最新更新値）を優先
       const estDays = Math.round(pf.occupancy / 100 * 365);
@@ -2544,8 +2563,8 @@ function showActualCostModal(year, month, propId) {
   const skipBudget = baseFixed.filter(c => SKIP_FROM_FIXED.has(c.name)).reduce((s,c) => s + c.amount, 0);
   const displayFixed = baseFixed.filter(c => !SKIP_FROM_FIXED.has(c.name));
 
-  // === カレンダー実費から自動集計 ===
-  const monthBookings = airbnbBookings.filter(b => {
+  // === カレンダー実費から自動集計（Airbnb+Booking.com統合）===
+  const monthBookings = getAllBookings().filter(b => {
     if (!b.checkin) return false;
     const [by, bm] = b.checkin.split('/').map(Number);
     return by === year && bm === month && getBookingPropId(b) === propId;
@@ -2999,7 +3018,10 @@ function setListingMapByIndex(idx, propId) {
   renderAnnual();
 }
 
-function getBookingPropId(b) { return listingMap[b.listing] || null; }
+function getBookingPropId(b) {
+  if (b.propId != null) return b.propId;       // Booking.com: propIdを直接保持
+  return listingMap[b.listing] || null;          // Airbnb: listingMapで解決
+}
 // 【28泊以上】リスティング = 定期借家契約 → 稼働日数から除外（収益は実績に含める）
 function isLongStayListing(b) { return b.listing && b.listing.startsWith('【28泊以上】'); }
 
@@ -3056,7 +3078,7 @@ function renderDashboard() {
   const getCI = b => { const p = b.checkin.split('/').map(Number); return new Date(p[0],p[1]-1,p[2]); };
   const getCO = b => { const co = getCheckout(b); if (!co) return null; const p = co.split('/').map(Number); return new Date(p[0],p[1]-1,p[2]); };
 
-  if (airbnbBookings.length === 0) {
+  if (airbnbBookings.length === 0 && bookingComBookings.length === 0) {
     content.innerHTML = `
       <div style="text-align:center;padding:60px 20px 40px">
         <div style="font-size:56px;margin-bottom:16px">📭</div>
@@ -3071,8 +3093,10 @@ function renderDashboard() {
     return;
   }
 
+  const _allBooks = getAllBookings();
+
   // 次の予約
-  const nextBook = [...airbnbBookings]
+  const nextBook = [..._allBooks]
     .filter(b => getCI(b) > now)
     .sort((a,b2) => getCI(a) - getCI(b2))[0];
   const nextDiff = nextBook ? Math.round((getCI(nextBook) - now) / 86400000) : null;
@@ -3083,7 +3107,7 @@ function renderDashboard() {
   for (let i = 0; i <= 7; i++) {
     const d = new Date(now); d.setDate(d.getDate() + i);
     const ds = toStr(d);
-    airbnbBookings.forEach(b => {
+    _allBooks.forEach(b => {
       if (b.checkin === ds) events.push({ date: d, diff: i, type: 'in', booking: b });
       const co = getCheckout(b);
       if (co === ds) events.push({ date: d, diff: i, type: 'out', booking: b });
@@ -3092,18 +3116,19 @@ function renderDashboard() {
   events.sort((a, b2) => a.date - b2.date || (a.type === 'out' ? -1 : 1));
 
   // アラート対象（名簿：7日前、清掃：14日前から）
+  // ※宿泊者名簿はAirbnbのみ（Booking.comはOTA側で管理）
   const alertForm = airbnbBookings.filter(b => {
     if (!b.code || bookingChecks[b.code]?.formDone) return false;
     const diff = Math.round((getCI(b) - now) / 86400000);
-    return diff >= -3 && diff <= 7; // チェックイン1週間前〜3日後まで表示
+    return diff >= -3 && diff <= 7;
   }).sort((a,b2) => getCI(a) - getCI(b2));
-  const alertClean = airbnbBookings.filter(b => {
+  const alertClean = _allBooks.filter(b => {
     if (!b.code || bookingChecks[b.code]?.cleaningDone) return false;
     const diff = Math.round((getCI(b) - now) / 86400000);
-    return diff >= -3 && diff <= 14; // チェックイン2週間前〜3日後まで表示
+    return diff >= -3 && diff <= 14;
   }).sort((a,b2) => getCI(a) - getCI(b2));
   // ゴミ回収依頼アラート（フィオーレ新子安のみ・チェックアウト3日前〜当日）
-  const alertGarbage = airbnbBookings.filter(b => {
+  const alertGarbage = _allBooks.filter(b => {
     if (!b.code || bookingChecks[b.code]?.garbageDone) return false;
     if (getBookingPropId(b) !== 2) return false;
     const co = getCO(b);
@@ -3119,12 +3144,12 @@ function renderDashboard() {
   const thisYear = now.getFullYear();
   const prevMonth = thisMonth === 1 ? 12 : thisMonth - 1;
   const prevYear = thisMonth === 1 ? thisYear - 1 : thisYear;
-  const thisMonthBooks = airbnbBookings.filter(b => {
+  const thisMonthBooks = _allBooks.filter(b => {
     if (!b.checkin) return false;
     const p = b.checkin.split('/').map(Number);
     return p[0] === thisYear && p[1] === thisMonth;
   });
-  const prevMonthBooks = airbnbBookings.filter(b => {
+  const prevMonthBooks = _allBooks.filter(b => {
     if (!b.checkin) return false;
     const p = b.checkin.split('/').map(Number);
     return p[0] === prevYear && p[1] === prevMonth;
@@ -3138,7 +3163,7 @@ function renderDashboard() {
 
   // ヘッダーカード（物件ごとの次の予約）
   const nextPerProp = properties.map(p => {
-    const nb = [...airbnbBookings]
+    const nb = [..._allBooks]
       .filter(b => getCI(b) > now && getBookingPropId(b) === p.id)
       .sort((a, b2) => getCI(a) - getCI(b2))[0];
     const diff = nb ? Math.round((getCI(nb) - now) / 86400000) : null;
@@ -3249,10 +3274,11 @@ function renderDashboard() {
       strategyHint = '28泊以上の長期予約を積極的に受け入れる';
     }
 
-    // 180日消費計算（28+nights除外・当年チェックインのみ）
+    // 180日消費計算（28+nights除外・当年チェックインのみ・Airbnb+Booking.com）
     const days180ByProp = {};
-    airbnbBookings.forEach(b => {
-      if (!b.listing || b.listing.startsWith('【28泊以上】')) return;
+    _allBooks.forEach(b => {
+      // 長期（定期借家）は除外
+      if (b.listing && b.listing.startsWith('【28泊以上】')) return;
       const ci = getCI(b);
       if (ci.getFullYear() !== thisYear) return;
       const pid = getBookingPropId(b);
@@ -3298,7 +3324,7 @@ function renderDashboard() {
     const recovStats = properties.map(p => {
       const initialTotal = (p.initialCosts || []).reduce((s, c) => s + c.amount, 0);
       if (!initialTotal) return null;
-      const books = airbnbBookings.filter(b => getBookingPropId(b) === p.id);
+      const books = _allBooks.filter(b => getBookingPropId(b) === p.id);
       const perBooking = (p.perBookingCosts || []).reduce((s, c) => s + c.amount, 0);
       // 収益・変動費（実費入力がある月は実費を使う）
       let totalRev = 0, totalVar = 0;
@@ -3417,8 +3443,13 @@ function renderDashboard() {
           ? `<button onclick="toggleCheckForDash('${b.code}','garbageDone')" style="font-size:12px;font-weight:800;padding:7px 10px;border-radius:10px;border:2px solid ${garbageDone?'#92400e':'#d97706'};cursor:pointer;background:${garbageDone?'#fef3c7':'#fffbeb'};color:${garbageDone?'#78350f':'#b45309'};white-space:nowrap;min-width:76px;text-align:center">${garbageDone?'🗑️ 依頼済':'🗑️ ゴミ依頼'}</button>`
           : '';
 
+        const isBookingCom = b.source === 'booking';
+        const channelBadge = isBookingCom
+          ? `<span style="font-size:9px;font-weight:800;background:#003580;color:white;padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:middle">📘 B.com</span>`
+          : '';
+        // Booking.comは名簿不要（OTA側で管理）
         const checkBtns = b.code ? `<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
-              <button onclick="toggleCheckForDash('${b.code}','formDone')" style="font-size:12px;font-weight:800;padding:7px 10px;border-radius:10px;border:2px solid ${formDone?'#16a34a':'#f97316'};cursor:pointer;background:${formDone?'#dcfce7':'#fff7ed'};color:${formDone?'#15803d':'#c2410c'};white-space:nowrap;min-width:76px;text-align:center">${formDone?'📋 済':'📋 名簿'}</button>
+              ${!isBookingCom ? `<button onclick="toggleCheckForDash('${b.code}','formDone')" style="font-size:12px;font-weight:800;padding:7px 10px;border-radius:10px;border:2px solid ${formDone?'#16a34a':'#f97316'};cursor:pointer;background:${formDone?'#dcfce7':'#fff7ed'};color:${formDone?'#15803d':'#c2410c'};white-space:nowrap;min-width:76px;text-align:center">${formDone?'📋 済':'📋 名簿'}</button>` : ''}
               <button onclick="toggleCheckForDash('${b.code}','cleaningDone')" style="font-size:12px;font-weight:800;padding:7px 10px;border-radius:10px;border:2px solid ${cleanDone?'#0284c7':'#a855f7'};cursor:pointer;background:${cleanDone?'#e0f2fe':'#faf5ff'};color:${cleanDone?'#0369a1':'#7e22ce'};white-space:nowrap;min-width:76px;text-align:center">${cleanDone?'🧹 済':'🧹 清掃'}</button>
               ${garbageBtn}
             </div>` : '';
@@ -3427,7 +3458,7 @@ function renderDashboard() {
           <div style="width:38px;height:38px;border-radius:10px;background:rgba(255,255,255,.7);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">${icon}</div>
           <div style="flex:1;min-width:0">
             <div style="font-size:11px;font-weight:800;color:${actionLabelColor};margin-bottom:2px">${isLongStay ? '🟣 定期借家' : (type==='in' ? '🟠 チェックイン' : '🔵 チェックアウト')}</div>
-            <div style="font-size:14px;font-weight:700;color:#1C1C1E;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(b.guestName||'ゲスト')}</div>
+            <div style="font-size:14px;font-weight:700;color:#1C1C1E;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(b.guestName||'ゲスト')}${channelBadge}</div>
             <div style="font-size:12px;font-weight:700;color:${color};margin-top:1px">${prop?.name||''} · ${b.nights}泊</div>
           </div>
           ${checkBtns}
@@ -3455,7 +3486,7 @@ function renderAnnual() {
   const content = document.getElementById('annual-content');
   const fmt = n => n.toLocaleString('ja-JP');
 
-  if (airbnbBookings.length === 0) {
+  if (airbnbBookings.length === 0 && bookingComBookings.length === 0) {
     content.innerHTML = `
       <div class="card">
         <div class="card-title" style="margin-bottom:12px">予約データを読み込む</div>
@@ -3484,7 +3515,9 @@ function renderAnnual() {
   const unmapped = allListings.filter(l => !listingMap[l]);
   pendingListings = unmapped;
 
-  const fiscalYears = [...new Set(airbnbBookings.map(b => {
+  const _annualAllBooks = getAllBookings();
+  const fiscalYears = [...new Set(_annualAllBooks.map(b => {
+    if (!b.checkin) return NaN;
     const [by, bm] = b.checkin.split('/').map(Number);
     return bm >= 4 ? by : by - 1;
   }))].filter(y => !isNaN(y)).sort();
@@ -3492,8 +3525,8 @@ function renderAnnual() {
 
   // フィルター適用（会計年度：currentAnnualYear/4〜currentAnnualYear+1/3）
   // ¥0の予約（ブロック期間・キャンセル等）は除外
-  const yearBooks = airbnbBookings.filter(b => {
-    if (!b.revenue || b.revenue === 0) return false;
+  const yearBooks = _annualAllBooks.filter(b => {
+    if (!b.checkin || !b.revenue || b.revenue === 0) return false;
     const [by, bm] = b.checkin.split('/').map(Number);
     const inFY = (by === currentAnnualYear && bm >= 4) || (by === currentAnnualYear + 1 && bm <= 3);
     if (!inFY) return false;
@@ -3643,7 +3676,7 @@ function renderAnnual() {
             : '';
           return `<div class="booking-row" style="--prop-color:${bColor}">
             <div class="booking-info">
-              <div class="booking-prop">${prop?prop.name:'⚠️ 未設定'}${b.source==='pricelabs'?'<span style="font-size:11px;font-weight:700;background:#fff0eb;color:#e05a2b;padding:1px 5px;border-radius:3px;margin-left:5px">PL</span>':''}</div>
+              <div class="booking-prop">${prop?prop.name:'⚠️ 未設定'}${b.source==='pricelabs'?'<span style="font-size:11px;font-weight:700;background:#fff0eb;color:#e05a2b;padding:1px 5px;border-radius:3px;margin-left:5px">PL</span>':''}${b.source==='booking'?'<span style="font-size:10px;font-weight:800;background:#003580;color:white;padding:1px 4px;border-radius:3px;margin-left:4px">📘 B.com</span>':''}</div>
               <div class="booking-guest">${escHtml(b.guestName||(b.source==='pricelabs'?'PriceLabs予約':''))}</div>
               <div style="font-size:11px;color:#C8C5C0;margin-top:2px">${fmtD(b.checkin)} → ${fmtD(coStr)} · ${b.nights}泊</div>
             </div>
@@ -3693,7 +3726,7 @@ function renderAnnual() {
   // ヘッダー
   html += `<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:11px 14px;gap:8px">
     <div style="flex:1;min-width:0">
-      <div style="font-size:13px;font-weight:700;color:#555">${airbnbBookings.length}件読み込み済み</div>
+      <div style="font-size:13px;font-weight:700;color:#555">${airbnbBookings.length}件（Airbnb）+ ${bookingComBookings.length}件（B.com）読み込み済み</div>
       <div style="font-size:10px;color:#aaa;margin-top:1px">チェックイン日基準　${currentAnnualYear}年度（${currentAnnualYear}/4〜${currentAnnualYear+1}/3）</div>
     </div>
     <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
@@ -3948,9 +3981,10 @@ function renderAnnual() {
   {
     // 全データの月リストを生成（最大24ヶ月）
     const allMonths = [];
-    if (airbnbBookings.length > 0) {
+    const _allBksForMonths = getAllBookings();
+    if (_allBksForMonths.length > 0) {
       let earliest = null;
-      airbnbBookings.forEach(b => {
+      _allBksForMonths.forEach(b => {
         if (!b.checkin) return;
         const p = b.checkin.split('/').map(Number);
         const d = new Date(p[0], p[1]-1, 1);
@@ -3981,7 +4015,7 @@ document.getElementById('nav-bookings').classList.add('active');
 
 // ==================== 清掃依頼LINE文生成 ====================
 function generateBookingLineMsg(code) {
-  const b = airbnbBookings.find(x => x.code === code);
+  const b = findBookingByCode(code);
   if (!b) return;
 
   const prop = properties.find(p => p.id === getBookingPropId(b));
@@ -4067,7 +4101,7 @@ function showDayDetail(year, month, day) {
 
   // この日に宿泊中の予約を収集
   const targetDate = new Date(year, month - 1, day);
-  const dayBooks = airbnbBookings.filter(b => {
+  const dayBooks = getAllBookings().filter(b => {
     if (!b.checkin) return false;
     const coStr = getCheckout(b);
     const cinParts = b.checkin.split('/').map(Number);
@@ -4185,7 +4219,7 @@ function toggleCheckFromList(code, field) {
   if (!bookingChecks[code]) bookingChecks[code] = {};
   // 清掃済みにしようとしているとき、スタッフ未選択ならブロック
   if (field === 'cleaningDone' && !bookingChecks[code].cleaningDone) {
-    const bk = airbnbBookings.find(x => x.code === code);
+    const bk = findBookingByCode(code);
     const pr = bk ? properties.find(p => p.id === getBookingPropId(bk)) : null;
     const sl = pr ? (pr.cleaningStaff || []) : [];
     if (sl.length > 0 && !bookingChecks[code].cleaningStaffName) {
@@ -4242,7 +4276,7 @@ function savePayeeHistory(name) {
 }
 
 function showPaymentStatementModal(code) {
-  const b = airbnbBookings.find(x => x.code === code);
+  const b = findBookingByCode(code);
   if (!b) return;
   const chk = bookingChecks[code] || {};
   if (!chk.cleaningStaffName) { showToast('担当スタッフが設定されていません', 'error'); return; }
@@ -4301,7 +4335,7 @@ function generatePaymentStatement(code) {
   savePayeeHistory(payee);
   document.body.removeChild(document.querySelector('[data-paysmt-modal]'));
 
-  const b = airbnbBookings.find(x => x.code === code);
+  const b = findBookingByCode(code);
   if (!b) return;
   const chk = bookingChecks[code] || {};
   const prop = properties.find(p => p.id === getBookingPropId(b));
@@ -4465,7 +4499,7 @@ function renderMessageTab() {
   cleanupMsgUsageLog();
   const el = document.getElementById('message-content');
 
-  const sorted = [...airbnbBookings]
+  const sorted = [...getAllBookings()]
     .filter(b => b.checkin)
     .sort((a, b) => { const da = parseDateStr(a.checkin), db = parseDateStr(b.checkin); return db - da; });
 
@@ -4596,7 +4630,7 @@ function onMsgBookingSelect() {
   const code = document.getElementById('msg-booking-select').value;
   const wrap = document.getElementById('msg-history-wrap');
   if (!code) { if (wrap) wrap.style.display = 'none'; return; }
-  const b = airbnbBookings.find(x => x.code === code);
+  const b = findBookingByCode(code);
   if (!b) return;
   const prop = properties.find(p => p.id === getBookingPropId(b));
 
@@ -4780,7 +4814,7 @@ async function fetchEventDetailInfo(href, proxyFn) {
 // エリアに応じたフェッチ関数を呼び分けるディスパッチャー
 function fetchEvents() {
   const code = document.getElementById('msg-booking-select')?.value;
-  const b = code ? airbnbBookings.find(x => x.code === code) : null;
+  const b = code ? findBookingByCode(code) : null;
   const area = b ? getWelcomeArea(b) : null;
   if (!area) return;
   if (area.eventBaseUrl) fetchYokohamaEvents();
@@ -4790,7 +4824,7 @@ function fetchEvents() {
 // 多摩エリア（いまたまJSON API）
 async function fetchTamaEvents() {
   const code = document.getElementById('msg-booking-select')?.value;
-  const b = code ? airbnbBookings.find(x => x.code === code) : null;
+  const b = code ? findBookingByCode(code) : null;
   if (!b) { showToast('予約を選択してください', 'error'); return; }
   const area = getWelcomeArea(b);
   const btn     = document.getElementById('welcome-event-btn');
@@ -4903,7 +4937,7 @@ async function fetchTamaEvents() {
 
 async function fetchYokohamaEvents() {
   const code = document.getElementById('msg-booking-select')?.value;
-  const b = code ? airbnbBookings.find(x => x.code === code) : null;
+  const b = code ? findBookingByCode(code) : null;
   if (!b) { showToast('予約を選択してください', 'error'); return; }
   const area = getWelcomeArea(b);
   if (!area.eventBaseUrl) { showToast('このエリアはイベント取得非対応です', 'error'); return; }
@@ -4998,7 +5032,7 @@ async function fetchYokohamaEvents() {
 
 async function fetchWelcomeWeather() {
   const code = document.getElementById('msg-booking-select')?.value;
-  const b = code ? airbnbBookings.find(x => x.code === code) : null;
+  const b = code ? findBookingByCode(code) : null;
   const area = b ? getWelcomeArea(b) : { label: '東京', areaCode: '130000', areaName: '東京', jmaUrl: '' };
   const btn = document.getElementById('welcome-fetch-btn');
   const preview = document.getElementById('welcome-weather-preview');
@@ -5110,7 +5144,7 @@ function generateWelcomeMsg() {
   if (!welcomeWeatherData) { showToast('先に天気予報を取得してください', 'error'); return; }
   const { area, days } = welcomeWeatherData;
   const code = document.getElementById('msg-booking-select')?.value;
-  const b = code ? airbnbBookings.find(x => x.code === code) : null;
+  const b = code ? findBookingByCode(code) : null;
   const guestFirst = b ? (b.guestName || '').split(/[\s　]/)[0] : '';
   // 時間帯挨拶
   const h = new Date().getHours();
@@ -5209,7 +5243,7 @@ function generateMsgPrompt() {
 
   if (msgMode === 'review') {
     // ===== レビュー作成モード =====
-    const b = airbnbBookings.find(x => x.code === code);
+    const b = findBookingByCode(code);
     const nights = b ? b.nights : '';
     prompt = `# Airbnbゲストへのホストレビュー作成依頼
 
