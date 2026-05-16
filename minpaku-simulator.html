@@ -4167,7 +4167,7 @@ function showCleaningReminderForm(code) {
         <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">🗑️ ゴミ袋の種類</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <button id="cr-trash-clear" onclick="crSelect('trash','clear')" style="padding:10px;border-radius:10px;border:2px solid #00B900;background:#f0fff0;color:#007a00;font-size:13px;font-weight:700;cursor:pointer">✅ 透明</button>
-          <button id="cr-trash-biz" onclick="crSelect('trash','biz')" style="padding:10px;border-radius:10px;border:2px solid #e0e0e0;background:#f9f9f9;color:#555;font-size:13px;font-weight:700;cursor:pointer">🟡 事業用（黄色）</button>
+          <button id="cr-trash-biz" onclick="crSelect('trash','biz')" style="padding:10px;border-radius:10px;border:2px solid #e0e0e0;background:#f9f9f9;color:#555;font-size:13px;font-weight:700;cursor:pointer">🟡 事業用</button>
         </div>
       </div>
 
@@ -4278,7 +4278,7 @@ function generateCleaningReminderMsg(code) {
   lines.push('━━━━━━ 当日の指示 ━━━━━━');
   lines.push('');
   // ゴミ袋
-  lines.push(`🗑️ ゴミ袋：${st.trash === 'biz' ? '事業用（黄色）' : '透明'}`);
+  lines.push(`🗑️ ゴミ袋：${st.trash === 'biz' ? '事業用' : '透明'}`);
   // 買い出し
   if (st.shop === 'yes') {
     lines.push(`🛒 買い出し：あり`);
