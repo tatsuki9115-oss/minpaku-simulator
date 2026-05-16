@@ -151,16 +151,25 @@ def generate_js(bookings_by_source: dict) -> str:
 # ==================== osascript注入 ====================
 
 def inject_to_simulator(js_code: str) -> bool:
-    """Apple Events JS経由でシミュレーターに注入"""
+    """Apple Events JS経由でシミュレーターに注入（URLでタブを特定）"""
     escaped = js_code.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
     script = f'''tell application "Google Chrome"
-  tell active tab of front window
-    execute javascript "{escaped}"
-  end tell
+  repeat with w in windows
+    repeat with t in tabs of w
+      if URL of t contains "minpaku-simulator" then
+        execute t javascript "{escaped}"
+        return "ok"
+      end if
+    end repeat
+  end repeat
+  return "not found"
 end tell'''
     result = subprocess.run(['osascript', '-e', script], capture_output=True, text=True)
     if result.returncode != 0:
         print(f"注入エラー: {result.stderr}", file=sys.stderr)
+        return False
+    if result.stdout.strip() == "not found":
+        print("⚠️ シミュレータータブが見つかりません。ブラウザで開いてください。", file=sys.stderr)
         return False
     return True
 
