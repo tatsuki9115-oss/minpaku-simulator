@@ -4105,13 +4105,16 @@ function generateBookingLineMsg(code) {
   const coStr = getCheckout(b);
   const propId = getBookingPropId(b);
   const nextEntry = _lineNextEntry(code, propId, coStr);
+  const chk = bookingChecks[b.code] || {};
+  const staffName = chk.cleaningStaffName || '';
 
   const hour = new Date().getHours();
   const greeting = hour >= 5 && hour < 10 ? 'おはようございます！☀️'
                  : hour >= 10 && hour < 18 ? 'こんにちは！😊'
                  : 'こんばんは！🌙';
   const lines = [];
-  lines.push(greeting);
+  if (staffName) lines.push(`${staffName}さん、${greeting}`);
+  else lines.push(greeting);
   lines.push('清掃スケジュールのご確認をお願いします🙏');
   lines.push('');
   lines.push(`🏠✨ ${propName}`);
@@ -4247,6 +4250,8 @@ function generateCleaningReminderMsg(code) {
   const nextEntry = _lineNextEntry(code, propId, coStr);
   const keybox = (document.getElementById('cr-keybox')?.value || '').trim();
   const shopNote = (document.getElementById('cr-shop-note')?.value || '').trim();
+  const chk2 = bookingChecks[b.code] || {};
+  const staffName2 = chk2.cleaningStaffName || '';
 
   const hour = new Date().getHours();
   const greeting = hour >= 5 && hour < 10 ? 'おはようございます！☀️'
@@ -4254,7 +4259,8 @@ function generateCleaningReminderMsg(code) {
                  : 'こんばんは！🌙';
 
   const lines = [];
-  lines.push(greeting);
+  if (staffName2) lines.push(`${staffName2}さん、${greeting}`);
+  else lines.push(greeting);
   lines.push('本日の清掃についてご確認ください🙏');
   lines.push('');
   lines.push(`🏠✨ ${propName}`);
