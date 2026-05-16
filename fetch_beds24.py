@@ -156,7 +156,7 @@ def inject_to_simulator(js_code: str) -> bool:
     script = f'''tell application "Google Chrome"
   repeat with w in windows
     repeat with t in tabs of w
-      if URL of t contains "minpaku-simulator" then
+      if URL of t contains "minpaku-simulator" or URL of t contains "netlify.app" then
         execute t javascript "{escaped}"
         return "ok"
       end if
