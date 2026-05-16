@@ -4056,10 +4056,7 @@ function _lineGuestStr(booking) {
   const a = booking.adults != null ? booking.adults : '?';
   const c = booking.children != null ? booking.children : 0;
   const i = booking.infants != null ? booking.infants : 0;
-  let s = `大人${a}名`;
-  if (c > 0) s += `・子ども${c}名`;
-  if (i > 0) s += `・乳幼児${i}名`;
-  return s;
+  return `大人${a}名・子ども${c}名・乳幼児${i}名`;
 }
 
 function _lineNextEntry(currentCode, propId, coStr) {
