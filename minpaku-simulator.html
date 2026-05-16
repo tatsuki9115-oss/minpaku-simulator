@@ -908,6 +908,19 @@ function initFirebaseSync() {
     renderAnnual && renderAnnual();
   });
 
+  fbdb.ref(KEYS.bookingCom).on('value', snap => {
+    const val = snap.val();
+    if (!Array.isArray(val)) return;
+    // 空配列で有効データを上書きしない
+    if (val.length === 0 && bookingComBookings.length > 0) return;
+    if (JSON.stringify(val) === JSON.stringify(bookingComBookings)) return;
+    try { localStorage.setItem(KEYS.bookingCom, JSON.stringify(val)); } catch(e) {}
+    bookingComBookings = val;
+    renderCalendarTab && renderCalendarTab();
+    renderMonthly && renderMonthly();
+    renderAnnual && renderAnnual();
+  });
+
   // 既存 localStorage データを Firebase に移行（初回のみ）
   fbdb.ref(KEYS.properties).once('value', snap => {
     if (!snap.val()) {
