@@ -22,7 +22,7 @@ TOKEN_FILE = Path.home() / '.beds24_refresh_token'
 # Beds24 propertyId → シミュレーターのpropId マッピング
 PROPERTY_MAP = {
     327669: 1,  # TY Takahatafudo Stay → ATTビル（高幡不動）
-    # 329xxx: 2,  # 新子安（将来追加時）
+    328081: 2,  # TY Shinkoyasu Stay → フィオーレ新子安
 }
 
 # ==================== 認証 ====================
@@ -114,6 +114,9 @@ def convert_booking(b: dict) -> dict | None:
         'code': str(b.get('apiReference', b['id'])),
         'channel': channel,
         'bookingTime': b.get('bookingTime', ''),
+        'adults': b.get('numAdult') or 1,
+        'children': b.get('numChild') or 0,
+        'infants': b.get('numInfant') or 0,
     }
 
 

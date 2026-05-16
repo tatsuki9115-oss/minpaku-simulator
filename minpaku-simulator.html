@@ -1559,7 +1559,7 @@ function renderCalendarTab() {
           </div>
           <!-- 下段: LINE生成 | ゴミ依頼(フィオーレのみ) | 支払明細書 -->
           <div style="display:grid;grid-template-columns:1fr${getBookingPropId(b)===2?' 1fr':''} 1fr;gap:4px">
-            <button onclick="generateBookingLineMsg('${b.code}')" style="padding:7px 6px;font-size:12px;font-weight:800;border-radius:9px;border:2px solid #00B900;background:white;color:#00B900;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;box-sizing:border-box"><span>📱</span><span>LINE生成</span></button>
+            <button onclick="showLineTypeModal('${b.code}')" style="padding:7px 6px;font-size:12px;font-weight:800;border-radius:9px;border:2px solid #00B900;background:white;color:#00B900;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;box-sizing:border-box"><span>📱</span><span>LINE生成</span></button>
             ${getBookingPropId(b) === 2 ? `<button onclick="toggleCheckFromList('${b.code}','garbageDone')" style="padding:7px 4px;font-size:11px;font-weight:800;border-radius:9px;border:2px solid ${chk.garbageDone?'#92400e':garbageAlert?'#E53935':'#d97706'};cursor:pointer;background:${chk.garbageDone?'#fef3c7':garbageAlert?'#FFEBEE':'#fffbeb'};color:${chk.garbageDone?'#78350f':garbageAlert?'#D32F2F':'#b45309'};display:flex;align-items:center;justify-content:center;gap:2px;box-sizing:border-box">🗑️ ${chk.garbageDone?'依頼済':'ゴミ依頼'}</button>` : ''}
             <button onclick="showPaymentStatementModal('${b.code}')" ${!chk.cleaningStaffName?'disabled':''} style="padding:7px 6px;font-size:11px;font-weight:800;border-radius:9px;border:1.5px solid ${chk.cleaningStaffName?'#4a7fc1':'#ddd'};background:${chk.cleaningStaffName?'white':'#f5f5f5'};color:${chk.cleaningStaffName?'#4a7fc1':'#bbb'};cursor:${chk.cleaningStaffName?'pointer':'not-allowed'};display:flex;align-items:center;justify-content:center;gap:4px;box-sizing:border-box"><span>📄</span><span>支払通知書</span></button>
           </div>
@@ -4043,7 +4043,62 @@ renderDashboard();
 document.getElementById('nav-bookings').classList.add('active');
 // initFirebaseSync() はログイン後に fbauth.onAuthStateChanged 内で呼ぶ
 
-// ==================== 清掃依頼LINE文生成 ====================
+// ==================== LINE文生成 共通ヘルパー ====================
+function _lineFmtDate(dateStr) {
+  if (!dateStr) return '不明';
+  const dayNames = ['日','月','火','水','木','金','土'];
+  const parts = dateStr.split('/').map(Number);
+  const d = new Date(parts[0], parts[1]-1, parts[2]);
+  return `${parts[1]}/${parts[2]}（${dayNames[d.getDay()]}）`;
+}
+
+function _lineGuestStr(booking) {
+  const a = booking.adults != null ? booking.adults : '?';
+  const c = booking.children != null ? booking.children : 0;
+  const i = booking.infants != null ? booking.infants : 0;
+  let s = `大人${a}名`;
+  if (c > 0) s += `・子ども${c}名`;
+  if (i > 0) s += `・乳幼児${i}名`;
+  return s;
+}
+
+function _lineNextEntry(currentCode, propId, coStr) {
+  const coDate = parseDateStr(coStr);
+  return getAllBookings()
+    .filter(x => x.code !== currentCode && getBookingPropId(x) === propId && x.checkin)
+    .map(x => ({ x, d: parseDateStr(x.checkin) }))
+    .filter(({ d }) => d && d >= coDate)
+    .sort((a, z) => a.d - z.d)[0];
+}
+
+// ==================== パターン選択モーダル ====================
+function showLineTypeModal(code) {
+  const existing = document.querySelector('[data-line-modal]');
+  if (existing) document.body.removeChild(existing);
+
+  const overlay = document.createElement('div');
+  overlay.setAttribute('data-line-modal', '1');
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:white;border-radius:20px 20px 0 0;padding:20px 16px 36px;width:100%;max-width:600px;box-sizing:border-box">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <div style="font-size:15px;font-weight:800;color:#1a1a2e">📱 LINE文を生成</div>
+        <button onclick="document.body.removeChild(document.querySelector('[data-line-modal]'))" style="background:none;border:none;font-size:24px;color:#bbb;cursor:pointer;line-height:1;padding:0 4px">×</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <button onclick="(function(){document.body.removeChild(document.querySelector('[data-line-modal]'));generateBookingLineMsg('${code}');})()" style="padding:18px 12px;border-radius:14px;border:2px solid #00B900;background:#f0fff0;color:#007a00;font-size:13px;font-weight:800;cursor:pointer;line-height:1.6;text-align:center">
+          🗓️ 清掃依頼<br><span style="font-size:11px;font-weight:500;color:#555">スケジュール確認用</span>
+        </button>
+        <button onclick="(function(){document.body.removeChild(document.querySelector('[data-line-modal]'));showCleaningReminderForm('${code}');})()" style="padding:18px 12px;border-radius:14px;border:2px solid #FF6D00;background:#fff8f0;color:#b34400;font-size:13px;font-weight:800;cursor:pointer;line-height:1.6;text-align:center">
+          🧹 清掃直前<br><span style="font-size:11px;font-weight:500;color:#555">当日指示用</span>
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) document.body.removeChild(overlay); });
+}
+
+// ==================== ① 清掃依頼LINE文生成 ====================
 function generateBookingLineMsg(code) {
   const b = findBookingByCode(code);
   if (!b) return;
@@ -4051,58 +4106,200 @@ function generateBookingLineMsg(code) {
   const prop = properties.find(p => p.id === getBookingPropId(b));
   const propName = prop ? prop.name : '物件';
   const coStr = getCheckout(b);
-  const dayNames = ['日','月','火','水','木','金','土'];
-
-  function fmtDateLine(dateStr) {
-    if (!dateStr) return '不明';
-    const parts = dateStr.split('/').map(Number);
-    const d = new Date(parts[0], parts[1]-1, parts[2]);
-    return `${parts[1]}/${parts[2]}（${dayNames[d.getDay()]}）`;
-  }
-
-  function guestLine(booking) {
-    const a = booking.adults != null ? booking.adults : '?';
-    const c = booking.children != null ? booking.children : 0;
-    const i = booking.infants != null ? booking.infants : 0;
-    return `　大人${a}名・子ども${c}名・乳幼児${i}名`;
-  }
-
-  // 同物件で次のチェックイン（チェックアウト日以降で最も近い）
   const propId = getBookingPropId(b);
-  const coDate = parseDateStr(coStr);
-  const nextEntry = airbnbBookings
-    .filter(x => x.code !== code && getBookingPropId(x) === propId && x.checkin)
-    .map(x => ({ x, d: parseDateStr(x.checkin) }))
-    .filter(({ d }) => d && d >= coDate)
-    .sort((a, z) => a.d - z.d)[0];
+  const nextEntry = _lineNextEntry(code, propId, coStr);
 
   const hour = new Date().getHours();
-  const greeting = hour >= 5 && hour < 10 ? 'おはようございます。'
-                 : hour >= 10 && hour < 18 ? 'こんにちは。'
-                 : 'こんばんは。';
+  const greeting = hour >= 5 && hour < 10 ? 'おはようございます！☀️'
+                 : hour >= 10 && hour < 18 ? 'こんにちは！😊'
+                 : 'こんばんは！🌙';
   const lines = [];
   lines.push(greeting);
-  lines.push('清掃スケジュールのご確認お願いします。');
+  lines.push('清掃スケジュールのご確認をお願いします🙏');
   lines.push('');
-  lines.push(`🏠 ${propName}`);
+  lines.push(`🏠✨ ${propName}`);
   lines.push('');
-  lines.push(`【チェックアウト10時】${fmtDateLine(coStr)}`);
-  lines.push(guestLine(b));
+  lines.push(`🚪【チェックアウト 10:00】`);
+  lines.push(`📅 ${_lineFmtDate(coStr)}`);
+  lines.push(`👥 ${_lineGuestStr(b)}`);
   lines.push('');
   if (nextEntry) {
-    lines.push(`【次のチェックイン15時】${fmtDateLine(nextEntry.x.checkin)}`);
-    lines.push(guestLine(nextEntry.x));
+    lines.push(`🔑【次のチェックイン 15:00】`);
+    lines.push(`📅 ${_lineFmtDate(nextEntry.x.checkin)}`);
+    lines.push(`👥 ${_lineGuestStr(nextEntry.x)}`);
   } else {
-    lines.push('【次のチェックイン】現時点で予約なし');
+    lines.push('🔑【次のチェックイン】');
+    lines.push('　現時点で予約なし');
   }
   lines.push('');
-  lines.push('ご都合いかがでしょうか。');
-  lines.push('お返事お待ちしてます。');
+  lines.push('ご都合いかがでしょうか？😊');
+  lines.push('お返事お待ちしています！');
 
-  showLineMessageModal(lines.join('\n'));
+  showLineMessageModal('🗓️ 清掃依頼', lines.join('\n'));
 }
 
-function showLineMessageModal(msg) {
+// ==================== ② 清掃直前指示フォーム ====================
+function showCleaningReminderForm(code) {
+  const b = findBookingByCode(code);
+  if (!b) return;
+
+  const existing = document.querySelector('[data-line-modal]');
+  if (existing) document.body.removeChild(existing);
+
+  const overlay = document.createElement('div');
+  overlay.setAttribute('data-line-modal', '1');
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:flex-end;justify-content:center;overflow-y:auto';
+
+  const prop = properties.find(p => p.id === getBookingPropId(b));
+  const propId = getBookingPropId(b);
+  // 物件ごとのデフォルトキーボックス番号
+  const defaultKeybox = propId === 1 ? '2288' : propId === 2 ? '2288' : '';
+
+  overlay.innerHTML = `
+    <div style="background:white;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:600px;box-sizing:border-box">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div style="font-size:15px;font-weight:800;color:#1a1a2e">🧹 清掃直前指示の設定</div>
+        <button onclick="document.body.removeChild(document.querySelector('[data-line-modal]'))" style="background:none;border:none;font-size:24px;color:#bbb;cursor:pointer;line-height:1;padding:0 4px">×</button>
+      </div>
+
+      <!-- ゴミ袋 -->
+      <div style="margin-bottom:14px">
+        <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">🗑️ ゴミ袋の種類</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button id="cr-trash-clear" onclick="crSelect('trash','clear')" style="padding:10px;border-radius:10px;border:2px solid #00B900;background:#f0fff0;color:#007a00;font-size:13px;font-weight:700;cursor:pointer">✅ 透明</button>
+          <button id="cr-trash-biz" onclick="crSelect('trash','biz')" style="padding:10px;border-radius:10px;border:2px solid #e0e0e0;background:#f9f9f9;color:#555;font-size:13px;font-weight:700;cursor:pointer">🟡 事業用（黄色）</button>
+        </div>
+      </div>
+
+      <!-- 買い出し -->
+      <div style="margin-bottom:14px">
+        <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">🛒 買い出し</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button id="cr-shop-none" onclick="crSelect('shop','none')" style="padding:10px;border-radius:10px;border:2px solid #00B900;background:#f0fff0;color:#007a00;font-size:13px;font-weight:700;cursor:pointer">✅ 不要</button>
+          <button id="cr-shop-yes" onclick="crSelect('shop','yes')" style="padding:10px;border-radius:10px;border:2px solid #e0e0e0;background:#f9f9f9;color:#555;font-size:13px;font-weight:700;cursor:pointer">🛍️ あり</button>
+        </div>
+        <textarea id="cr-shop-note" placeholder="買い出し内容（例: ボディソープ・シャンプー）" style="display:none;margin-top:6px;width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:13px;color:#333;resize:none;height:60px;font-family:inherit"></textarea>
+      </div>
+
+      <!-- キーボックス番号 -->
+      <div style="margin-bottom:14px">
+        <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">🔐 キーボックス番号</div>
+        <input id="cr-keybox" type="text" inputmode="numeric" value="${defaultKeybox}" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:16px;font-weight:700;color:#333;text-align:center">
+      </div>
+
+      <!-- メッセージカード -->
+      <div style="margin-bottom:14px">
+        <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">💌 メッセージカードの種類</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button id="cr-card-ja" onclick="crSelect('card','ja')" style="padding:10px;border-radius:10px;border:2px solid #00B900;background:#f0fff0;color:#007a00;font-size:13px;font-weight:700;cursor:pointer">✅ 日本語</button>
+          <button id="cr-card-en" onclick="crSelect('card','en')" style="padding:10px;border-radius:10px;border:2px solid #e0e0e0;background:#f9f9f9;color:#555;font-size:13px;font-weight:700;cursor:pointer">🌍 英語</button>
+        </div>
+      </div>
+
+      <!-- リネン人数 -->
+      <div style="margin-bottom:20px">
+        <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">🛏️ リネンのセット人数</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button id="cr-linen-2" onclick="crSelect('linen','2')" style="padding:10px;border-radius:10px;border:2px solid #00B900;background:#f0fff0;color:#007a00;font-size:13px;font-weight:700;cursor:pointer">✅ 2人分</button>
+          <button id="cr-linen-3" onclick="crSelect('linen','3')" style="padding:10px;border-radius:10px;border:2px solid #e0e0e0;background:#f9f9f9;color:#555;font-size:13px;font-weight:700;cursor:pointer">👨‍👩‍👧 3人分</button>
+        </div>
+      </div>
+
+      <button onclick="generateCleaningReminderMsg('${code}')" style="width:100%;padding:15px;background:#FF6D00;border:none;border-radius:12px;color:white;font-size:15px;font-weight:800;cursor:pointer;letter-spacing:.5px">
+        🧹 LINE文を生成する
+      </button>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) document.body.removeChild(overlay); });
+
+  // デフォルト選択状態を初期化
+  window._crState = { trash: 'clear', shop: 'none', card: 'ja', linen: '2' };
+}
+
+function crSelect(group, val) {
+  if (!window._crState) window._crState = {};
+  window._crState[group] = val;
+
+  const configs = {
+    trash: { clear: ['cr-trash-clear','cr-trash-biz'], biz: ['cr-trash-biz','cr-trash-clear'] },
+    shop:  { none:  ['cr-shop-none','cr-shop-yes'],   yes: ['cr-shop-yes','cr-shop-none'] },
+    card:  { ja:    ['cr-card-ja','cr-card-en'],       en:  ['cr-card-en','cr-card-ja'] },
+    linen: { '2':   ['cr-linen-2','cr-linen-3'],      '3': ['cr-linen-3','cr-linen-2'] },
+  };
+  const [activeId, inactiveId] = configs[group][val];
+  const active = document.getElementById(activeId);
+  const inactive = document.getElementById(inactiveId);
+  if (active) { active.style.border='2px solid #00B900'; active.style.background='#f0fff0'; active.style.color='#007a00'; }
+  if (inactive) { inactive.style.border='2px solid #e0e0e0'; inactive.style.background='#f9f9f9'; inactive.style.color='#555'; }
+
+  // 買い出しメモの表示切替
+  if (group === 'shop') {
+    const note = document.getElementById('cr-shop-note');
+    if (note) note.style.display = val === 'yes' ? 'block' : 'none';
+  }
+}
+
+function generateCleaningReminderMsg(code) {
+  const b = findBookingByCode(code);
+  if (!b) return;
+  const st = window._crState || {};
+  const prop = properties.find(p => p.id === getBookingPropId(b));
+  const propName = prop ? prop.name : '物件';
+  const coStr = getCheckout(b);
+  const propId = getBookingPropId(b);
+  const nextEntry = _lineNextEntry(code, propId, coStr);
+  const keybox = (document.getElementById('cr-keybox')?.value || '').trim();
+  const shopNote = (document.getElementById('cr-shop-note')?.value || '').trim();
+
+  const hour = new Date().getHours();
+  const greeting = hour >= 5 && hour < 10 ? 'おはようございます！☀️'
+                 : hour >= 10 && hour < 18 ? 'こんにちは！😊'
+                 : 'こんばんは！🌙';
+
+  const lines = [];
+  lines.push(greeting);
+  lines.push('本日の清掃についてご確認ください🙏');
+  lines.push('');
+  lines.push(`🏠✨ ${propName}`);
+  lines.push('');
+  lines.push(`🚪【チェックアウト 10:00】`);
+  lines.push(`📅 ${_lineFmtDate(coStr)}`);
+  lines.push(`👥 ${_lineGuestStr(b)}`);
+  lines.push('');
+  if (nextEntry) {
+    lines.push(`🔑【次のチェックイン 15:00】`);
+    lines.push(`📅 ${_lineFmtDate(nextEntry.x.checkin)}`);
+    lines.push(`👥 ${_lineGuestStr(nextEntry.x)}`);
+  } else {
+    lines.push('🔑【次のチェックイン】');
+    lines.push('　現時点で予約なし');
+  }
+  lines.push('');
+  lines.push('━━━━━━ 当日の指示 ━━━━━━');
+  lines.push('');
+  // ゴミ袋
+  lines.push(`🗑️ ゴミ袋：${st.trash === 'biz' ? '事業用（黄色）' : '透明'}`);
+  // 買い出し
+  if (st.shop === 'yes') {
+    lines.push(`🛒 買い出し：あり`);
+    if (shopNote) lines.push(`　→ ${shopNote}`);
+  } else {
+    lines.push(`🛒 買い出し：不要`);
+  }
+  // キーボックス
+  if (keybox) lines.push(`🔐 キーボックス：${keybox}`);
+  // メッセージカード
+  lines.push(`💌 メッセージカード：${st.card === 'en' ? '英語' : '日本語'}`);
+  // リネン
+  lines.push(`🛏️ リネン：${st.linen === '3' ? '3人分' : '2人分'}セット`);
+  lines.push('');
+  lines.push('よろしくお願いします！🙌');
+
+  showLineMessageModal('🧹 清掃直前指示', lines.join('\n'));
+}
+
+// ==================== LINEメッセージ表示モーダル ====================
+function showLineMessageModal(title, msg) {
   const existing = document.querySelector('[data-line-modal]');
   if (existing) document.body.removeChild(existing);
 
@@ -4112,12 +4309,12 @@ function showLineMessageModal(msg) {
   overlay.innerHTML = `
     <div style="background:white;border-radius:20px 20px 0 0;padding:20px 16px 36px;width:100%;max-width:600px;max-height:82vh;display:flex;flex-direction:column;box-sizing:border-box">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-shrink:0">
-        <div style="font-size:15px;font-weight:800;color:#1a1a2e">📱 清掃依頼LINE文</div>
+        <div style="font-size:15px;font-weight:800;color:#1a1a2e">📱 ${escHtml(title)}</div>
         <button onclick="document.body.removeChild(document.querySelector('[data-line-modal]'))" style="background:none;border:none;font-size:24px;color:#bbb;cursor:pointer;line-height:1;padding:0 4px">×</button>
       </div>
       <textarea id="line-msg-area" readonly style="flex:1;min-height:220px;border:1.5px solid #eee;border-radius:12px;padding:14px;font-size:14px;line-height:1.8;color:#333;resize:none;font-family:inherit;background:#f8f8f8;white-space:pre">${escHtml(msg)}</textarea>
       <button onclick="(function(){const t=document.getElementById('line-msg-area');if(navigator.clipboard){navigator.clipboard.writeText(t.value).then(()=>showToast('コピーしました！LINEに貼り付けてください','success')).catch(()=>{t.select();document.execCommand('copy');showToast('コピーしました！','success')});}else{t.select();document.execCommand('copy');showToast('コピーしました！','success');}})()" style="margin-top:12px;flex-shrink:0;width:100%;padding:15px;background:#00B900;border:none;border-radius:12px;color:white;font-size:15px;font-weight:800;cursor:pointer;letter-spacing:.5px">
-        コピーしてLINEに貼り付け
+        📋 コピーしてLINEに貼り付け
       </button>
     </div>`;
   document.body.appendChild(overlay);
