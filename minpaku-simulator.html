@@ -495,7 +495,7 @@
 </div>
 
 <!-- 予約一覧 -->
-<div class="page active" id="page-bookings">
+<div class="page" id="page-bookings">
   <div id="bookings-content"></div>
 </div>
 
@@ -505,7 +505,7 @@
 </div>
 
 <!-- メッセージ -->
-<div class="page" id="page-message">
+<div class="page active" id="page-message">
   <div id="message-content"></div>
 </div>
 
@@ -4052,8 +4052,9 @@ renderSimPropertySelect();
 renderHistory();
 updateHeaderTimestamp();
 renderDashboard();
+renderMessageTab();
 // ボトムナビの初期アクティブ状態
-document.getElementById('nav-bookings').classList.add('active');
+document.getElementById('nav-message').classList.add('active');
 // initFirebaseSync() はログイン後に fbauth.onAuthStateChanged 内で呼ぶ
 
 // ==================== LINE文生成 共通ヘルパー ====================
