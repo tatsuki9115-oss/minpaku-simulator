@@ -1282,7 +1282,7 @@ function renderMonthly() {
       if (prop && !hasActualCosts(getBookingPropId(b), by, bm)) {
         totalVarCosts += getPerBookingTotal(b, prop);
       }
-      totalNights += b.nights;
+      if (!isLongStayListing(b)) totalNights += b.nights;
     });
     // 実費保存済み物件の変動費を月単位で加算
     const monthPropsM = monthlyPropFilter === 'all'
@@ -3039,8 +3039,10 @@ function getBookingPropId(b) {
   if (b.propId != null) return b.propId;       // Booking.com: propIdを直接保持
   return listingMap[b.listing] || null;          // Airbnb: listingMapで解決
 }
-// 【28泊以上】リスティング = 定期借家契約 → 稼働日数から除外（収益は実績に含める）
-function isLongStayListing(b) { return b.listing && b.listing.startsWith('【28泊以上】'); }
+// 【28泊以上】リスティング or 28泊以上の予約 = 定期借家契約 → 稼働日数から除外（収益は実績に含める）
+function isLongStayListing(b) {
+  return (b.listing && b.listing.startsWith('【28泊以上】')) || (b.nights >= 28);
+}
 
 // 予約ごとの変動費合計（清掃スタッフに料金設定がある場合はその金額を使う）
 function getPerBookingTotal(booking, prop) {
@@ -3185,8 +3187,8 @@ function renderDashboard() {
   const thisMonthRev = thisMonthBooks.reduce((s, b) => s + b.revenue, 0);
   const prevMonthRev = prevMonthBooks.reduce((s, b) => s + b.revenue, 0);
   const revDiff = thisMonthRev - prevMonthRev;
-  const thisMonthNights = thisMonthBooks.reduce((s, b) => s + b.nights, 0);
-  const prevMonthNights = prevMonthBooks.reduce((s, b) => s + b.nights, 0);
+  const thisMonthNights = thisMonthBooks.reduce((s, b) => s + (isLongStayListing(b) ? 0 : b.nights), 0);
+  const prevMonthNights = prevMonthBooks.reduce((s, b) => s + (isLongStayListing(b) ? 0 : b.nights), 0);
   const nightsDiff = thisMonthNights - prevMonthNights;
 
   // ヘッダーカード（物件ごとの次の予約）
