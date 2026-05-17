@@ -4052,9 +4052,10 @@ renderSimPropertySelect();
 renderHistory();
 updateHeaderTimestamp();
 renderDashboard();
-renderMessageTab();
 // ボトムナビの初期アクティブ状態
 document.getElementById('nav-message').classList.add('active');
+// renderMessageTab はmsgUsageLog初期化後に呼ぶ必要があるためsetTimeoutで遅延
+setTimeout(() => renderMessageTab(), 0);
 // initFirebaseSync() はログイン後に fbauth.onAuthStateChanged 内で呼ぶ
 
 // ==================== LINE文生成 共通ヘルパー ====================
