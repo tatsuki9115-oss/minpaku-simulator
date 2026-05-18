@@ -3387,11 +3387,11 @@ function renderDashboard() {
       strategyHint = '28泊以上の長期予約を積極的に受け入れる';
     }
 
-    // 180日消費計算（28+nights除外・当年チェックインのみ・Airbnb+Booking.com）
+    // 180日消費計算（28泊以上除外・当年チェックインのみ・Airbnb+Booking.com）
     const days180ByProp = {};
     _allBooks.forEach(b => {
-      // 長期（定期借家）は除外
-      if (b.listing && b.listing.startsWith('【28泊以上】')) return;
+      // 長期（定期借家・28泊以上）は除外
+      if (isLongStayListing(b)) return;
       const ci = getCI(b);
       if (ci.getFullYear() !== thisYear) return;
       const pid = getBookingPropId(b);
