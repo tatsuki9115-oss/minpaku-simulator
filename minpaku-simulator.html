@@ -5371,16 +5371,19 @@ function buildWeatherComment(days, areaName) {
   const valid = days.filter(d => d.tempMax !== null && d.tempMin !== null);
   if (valid.length === 0) return `どうぞ快適で安全な${areaName}滞在をお楽しみください☺️`;
   const maxArr = valid.map(d => parseInt(d.tempMax)).filter(n => !isNaN(n));
-  const minArr = valid.map(d => parseInt(d.tempMin)).filter(n => !isNaN(n));
+  // 最高気温＝最低気温の日（APIデータ不備）は朝晩気温の計算から除外
+  const minArrFull = valid.map(d => parseInt(d.tempMin)).filter(n => !isNaN(n));
+  const minArrFiltered = valid.filter(d => parseInt(d.tempMax) !== parseInt(d.tempMin)).map(d => parseInt(d.tempMin)).filter(n => !isNaN(n));
+  const minArr = minArrFiltered.length > 0 ? minArrFiltered : minArrFull;
   if (!maxArr.length) return '';
   const minMin = Math.min(...minArr), maxMin = Math.max(...minArr);
   const minMax = Math.min(...maxArr), maxMax = Math.max(...maxArr);
   const avgMax = Math.round(maxArr.reduce((a,b)=>a+b,0)/maxArr.length);
   const hasRain = days.some(d => d.weather.includes('雨'));
-  let c = `今週の${areaName}は、朝晩が${minMin}〜${maxMin}°C、`;
-  if (avgMax >= 28)      c += `日中は${minMax}〜${maxMax}°Cまで上がりかなり暑くなります。熱中症対策・こまめな水分補給をお忘れなく。`;
-  else if (avgMax >= 23) c += `日中は${minMax}〜${maxMax}°Cまで上がり、初夏の陽気です。紫外線対策もお忘れなく。`;
-  else if (avgMax >= 18) c += `日中は${minMax}〜${maxMax}°Cまで上がります。${minMin < 12 ? '朝晩はひんやりするので' : ''}長袖シャツや薄手のジャケットがちょうどよい気候です。`;
+  let c = `今週の${areaName}は、朝晩${minMin}〜${maxMin}°C、`;
+  if (avgMax >= 28)      c += `日中${minMax}〜${maxMax}°Cまで上がりかなり暑くなります。熱中症対策・こまめな水分補給をお忘れなく。`;
+  else if (avgMax >= 23) c += `日中${minMax}〜${maxMax}°Cまで上がり、初夏の陽気です。紫外線対策もお忘れなく。`;
+  else if (avgMax >= 18) c += `日中${minMax}〜${maxMax}°Cまで上がります。${minMin < 12 ? '朝晩はひんやりするので' : ''}長袖シャツや薄手のジャケットがちょうどよい気候です。`;
   else                   c += `日中も${minMax}〜${maxMax}°C程度とかなりひんやりします。暖かい服装でお越しください。`;
   if (hasRain) c += '\n折りたたみ傘を持っておくと便利です。';
   c += `\nどうぞ快適で安全な${areaName}滞在をお楽しみください☺️`;
@@ -5393,16 +5396,15 @@ function generateWelcomeMsg() {
   const code = document.getElementById('msg-booking-select')?.value;
   const b = code ? findBookingByCode(code) : null;
   const guestFirst = b ? (b.guestName || '').split(/[\s　]/)[0] : '';
-  // 時間帯挨拶
-  const h = new Date().getHours();
+  // 挨拶（時間帯によらず「こんにちは」で統一）
   const nameSuffix = guestFirst ? `${guestFirst}さん` : '';
-  const greeting = h >= 5 && h < 11 ? `おはようございます！${nameSuffix}\n朝早くから失礼いたします。`
-    : h >= 11 && h < 17 ? `こんにちは！${nameSuffix}`
-    : `こんばんは！${nameSuffix}\n夜分遅くに失礼いたします。`;
+  const greeting = nameSuffix ? `こんにちは、${nameSuffix}！` : `こんにちは！`;
   // 天気テーブル
   const dow = ['日','月','火','水','木','金','土'];
   const weatherLines = days.map(d => {
-    const temp = (d.tempMax || d.tempMin) ? ` ${d.tempMax ?? '?'}°C / ${d.tempMin ?? '?'}°C` : '';
+    // 最高気温＝最低気温のとき（APIデータ不備）は1値のみ表示
+    const sameTemp = d.tempMax != null && d.tempMin != null && String(d.tempMax) === String(d.tempMin);
+    const temp = (d.tempMax || d.tempMin) ? (sameTemp ? ` ${d.tempMax}°C` : ` ${d.tempMax ?? '?'}°C / ${d.tempMin ?? '?'}°C`) : '';
     return `${d.date.getMonth()+1}月${d.date.getDate()}日(${dow[d.date.getDay()]})：${d.weather}${temp}`;
   }).join('\n');
   const comment = buildWeatherComment(days, area.areaName);
