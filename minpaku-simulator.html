@@ -5251,7 +5251,27 @@ async function fetchYokohamaEvents() {
         }
       }
     });
-    welcomeEventData = { events, startDate, endDate, fetchedAt: new Date(), targetUrl };
+    // 日付フィルター：滞在期間（startDate〜endDate）に1日も重ならないイベントを除外
+    // datesフィールドから "YYYY年M月D日" を抽出し、stay期間内の日付があるか確認
+    const stayS = new Date(startDate); stayS.setHours(0,0,0,0);
+    const stayE = new Date(endDate);   stayE.setHours(23,59,59,999);
+    function hasDatesInStay(datesStr) {
+      if (!datesStr) return true; // 日付不明はそのまま表示
+      // "YYYY年M月D日" または "M月D日" を全て抽出
+      const matched = [];
+      const re = /(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日/g;
+      let m;
+      let lastYear = stayS.getFullYear();
+      while ((m = re.exec(datesStr)) !== null) {
+        const y = m[1] ? parseInt(m[1]) : lastYear;
+        lastYear = y;
+        matched.push(new Date(y, parseInt(m[2])-1, parseInt(m[3])));
+      }
+      if (matched.length === 0) return true; // 日付抽出できない場合は表示
+      return matched.some(d => d >= stayS && d <= stayE);
+    }
+    const filteredEvents = events.filter(ev => hasDatesInStay(ev.dates));
+    welcomeEventData = { events: filteredEvents, startDate, endDate, fetchedAt: new Date(), targetUrl };
     // プレビュー表示
     if (events.length === 0) {
       if (preview) preview.innerHTML = `<div style="font-size:12px;color:#aaa;padding:8px">この期間のイベント情報はありませんでした</div>`;
