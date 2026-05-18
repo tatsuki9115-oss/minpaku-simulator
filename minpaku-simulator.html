@@ -372,6 +372,79 @@
     white-space: nowrap;
   }
   #logout-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
+
+  /* ===== PC レイアウト（900px以上） ===== */
+  @media (min-width: 900px) {
+    /* サイドバーナビ */
+    .bottom-nav {
+      flex-direction: column;
+      width: 200px;
+      top: 56px;
+      bottom: 0;
+      right: auto;
+      height: auto;
+      border-top: none;
+      border-right: 1px solid #E8E6E1;
+      padding: 16px 0 24px;
+      justify-content: flex-start;
+      overflow-y: auto;
+    }
+    .bottom-nav-item {
+      flex-direction: row;
+      gap: 12px;
+      justify-content: flex-start;
+      padding: 11px 22px;
+      font-size: 13px;
+      width: 100%;
+      min-height: 46px;
+    }
+    .bottom-nav-item svg { width: 20px; height: 20px; }
+    .bottom-nav-item.active {
+      background: #FFF3ED;
+      border-right: 3px solid #F07C3F;
+    }
+
+    /* コンテンツエリア */
+    .page {
+      margin-left: 200px;
+      max-width: none;
+      padding: 28px 40px;
+      padding-bottom: 48px;
+    }
+    .page#page-settings {
+      padding-bottom: 100px;
+    }
+
+    /* 設定の保存バー */
+    .save-bar {
+      left: 200px;
+      bottom: 0;
+    }
+    .save-bar-inner {
+      max-width: none;
+    }
+
+    /* ダッシュボード：予約カードを2列グリッド */
+    .pc-booking-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .pc-booking-grid > * { margin-bottom: 0 !important; }
+
+    /* カードのmax-width制限を解除 */
+    .day-modal { max-width: 520px; border-radius: 16px; }
+    .day-modal-overlay { align-items: center; }
+
+    /* ヘッダーのh1を少し大きく */
+    .header h1 { font-size: 16px; }
+
+    /* カードのpadding調整 */
+    .card { padding: 20px; }
+
+    /* 物件設定フォームのグリッド拡張 */
+    .input-grid { grid-template-columns: repeat(4, 1fr); }
+  }
 </style>
 </head>
 <body>
@@ -3451,6 +3524,7 @@ function renderDashboard() {
       grouped[key].items.push(e);
     });
 
+    html += `<div class="pc-booking-grid">`;
     Object.values(grouped).forEach(({ date, diff, items }) => {
       const label = diff === 0 ? '今日' : diff === 1 ? '明日' : `${date.getMonth()+1}/${date.getDate()}（${dayNames[date.getDay()]}）`;
       const isToday = diff === 0;
@@ -3515,6 +3589,7 @@ function renderDashboard() {
         ${rows}
       </div>`;
     });
+    html += `</div>`; // pc-booking-grid
   }
 
   content.innerHTML = html;
