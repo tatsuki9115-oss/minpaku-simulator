@@ -375,75 +375,93 @@
 
   /* ===== PC レイアウト（900px以上） ===== */
   @media (min-width: 900px) {
-    /* サイドバーナビ */
+
+    /* ── サイドバーナビ ── */
     .bottom-nav {
       flex-direction: column;
-      width: 200px;
+      width: 210px;
       top: 56px;
       bottom: 0;
       right: auto;
       height: auto;
       border-top: none;
       border-right: 1px solid #E8E6E1;
-      padding: 16px 0 24px;
+      padding: 20px 0 24px;
       justify-content: flex-start;
       overflow-y: auto;
+      background: #FAFAF9;
     }
     .bottom-nav-item {
       flex-direction: row;
       gap: 12px;
       justify-content: flex-start;
-      padding: 11px 22px;
+      padding: 12px 24px;
       font-size: 13px;
+      font-weight: 700;
       width: 100%;
-      min-height: 46px;
+      min-height: 48px;
+      border-radius: 0;
     }
-    .bottom-nav-item svg { width: 20px; height: 20px; }
+    .bottom-nav-item svg { width: 19px; height: 19px; flex-shrink: 0; }
     .bottom-nav-item.active {
       background: #FFF3ED;
+      color: #F07C3F;
       border-right: 3px solid #F07C3F;
     }
+    .bottom-nav-item:hover:not(.active) { background: #F5F3F0; color: #555; }
 
-    /* コンテンツエリア */
+    /* ── ヘッダー ── */
+    .header h1 { font-size: 16px; }
+    .header { padding-left: 24px; }
+
+    /* ── コンテンツ共通 ── */
     .page {
-      margin-left: 200px;
-      max-width: none;
-      padding: 28px 40px;
-      padding-bottom: 48px;
+      margin-left: 210px;
+      max-width: 1200px;         /* 極端な横伸びを防止 */
+      padding: 32px 48px;
+      padding-bottom: 60px;
     }
-    .page#page-settings {
-      padding-bottom: 100px;
-    }
+    .page#page-settings { padding-bottom: 100px; }
 
-    /* 設定の保存バー */
-    .save-bar {
-      left: 200px;
-      bottom: 0;
-    }
-    .save-bar-inner {
-      max-width: none;
-    }
+    /* カード共通 */
+    .card { padding: 22px 24px; }
 
-    /* ダッシュボード：予約カードを2列グリッド */
+    /* ── 設定タブ ── */
+    .save-bar { left: 210px; bottom: 0; }
+    .save-bar-inner { max-width: 1200px; }
+    /* 物件カードを2列グリッド */
+    #property-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+    /* リスティング紐付けカードは全幅 */
+    #property-list .property-item:last-child { grid-column: 1 / -1; }
+    .property-item { margin-bottom: 0; }
+    /* 入力グリッド：PC は3列のまま（4列は狭すぎる場合がある） */
+    .input-grid { grid-template-columns: repeat(3, 1fr); }
+
+    /* ── 試算タブ ── */
+    #page-sim .card { max-width: 860px; }
+
+    /* ── 予約タブ（ダッシュボード）── */
     .pc-booking-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 12px;
+      gap: 14px;
     }
     .pc-booking-grid > * { margin-bottom: 0 !important; }
 
-    /* カードのmax-width制限を解除 */
-    .day-modal { max-width: 520px; border-radius: 16px; }
+    /* ── カレンダータブ ── */
+    #page-calendar .card { max-width: 100%; }
+
+    /* ── メッセージタブ ── */
+    #page-message .card { max-width: 760px; }
+
+    /* ── モーダル（カレンダー詳細） ── */
+    .day-modal { max-width: 560px; border-radius: 16px; }
     .day-modal-overlay { align-items: center; }
-
-    /* ヘッダーのh1を少し大きく */
-    .header h1 { font-size: 16px; }
-
-    /* カードのpadding調整 */
-    .card { padding: 20px; }
-
-    /* 物件設定フォームのグリッド拡張 */
-    .input-grid { grid-template-columns: repeat(4, 1fr); }
   }
 </style>
 </head>
@@ -1904,7 +1922,7 @@ function renderSettings() {
 
   // Airbnb物件紐付け（データある場合のみ表示）
   if (airbnbBookings.length > 0) {
-    const allListings = [...new Set(airbnbBookings.map(b => b.listing))];
+    const allListings = [...new Set(airbnbBookings.map(b => b.listing).filter(l => l))];
     settingsHTML += `<div class="property-item">
       <div class="property-header">
         <span style="font-size:14px;font-weight:700;flex:1;color:#1C1C1E">Airbnbリスティング → 物件の紐付け</span>
@@ -3100,7 +3118,7 @@ function handleForecastFile(input) {
 }
 
 function setListingMapByIndex(idx, propId) {
-  const allListings = [...new Set(airbnbBookings.map(b => b.listing))];
+  const allListings = [...new Set(airbnbBookings.map(b => b.listing).filter(l => l))];
   const listing = allListings[idx];
   if (listing === undefined) return;
   listingMap[listing] = parseInt(propId) || null;
