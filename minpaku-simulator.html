@@ -41,6 +41,16 @@
   .bottom-nav-item.active { color: #F07C3F; }
   .bottom-nav-item svg { width: 20px; height: 20px; flex-shrink: 0; }
 
+  /* アイコンカラー（スマホ・PC共通） */
+  #nav-message svg    { stroke: #3B82F6; }
+  #nav-sim svg        { stroke: #8B5CF6; }
+  #nav-bookings svg   { stroke: #10B981; }
+  #nav-calendar svg   { stroke: #F07C3F; }
+  #nav-annual svg     { stroke: #EF4444; }
+  #nav-settings svg   { stroke: #6B7280; }
+  /* アクティブ時はオレンジで統一 */
+  .bottom-nav-item.active svg { stroke: #F07C3F; }
+
   .page { display: none; padding: 16px; max-width: 640px; margin: 0 auto; padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
   .page.active { display: block; }
   .page#page-settings { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
@@ -384,7 +394,7 @@
       bottom: auto;
       right: 0;
       left: 0;
-      height: 46px;
+      height: 52px;
       border-top: none;
       border-bottom: 1px solid #E8E6E1;
       padding: 0;
@@ -396,19 +406,19 @@
     }
     .bottom-nav-item {
       flex-direction: row;
-      gap: 7px;
+      gap: 8px;
       justify-content: center;
-      padding: 0 20px;
-      font-size: 12px;
+      padding: 0 24px;
+      font-size: 13px;
       font-weight: 700;
       width: auto;
-      min-height: 46px;
-      height: 46px;
+      min-height: 52px;
+      height: 52px;
       border-radius: 0;
       border-bottom: 3px solid transparent;
       flex: none;
     }
-    .bottom-nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+    .bottom-nav-item svg { width: 17px; height: 17px; flex-shrink: 0; }
     .bottom-nav-item.active {
       color: #F07C3F;
       border-bottom: 3px solid #F07C3F;
@@ -424,7 +434,7 @@
       margin-left: auto;
       margin-right: auto;
       max-width: 980px;
-      padding: 72px 40px 60px;   /* 72px = 上部タブ46px + 余白26px */
+      padding: 80px 40px 60px;   /* 80px = 上部タブ52px + 余白28px */
     }
     .page#page-settings { padding-bottom: 100px; }
 
