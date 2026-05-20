@@ -3424,10 +3424,15 @@ function renderDashboard() {
       const icon = type === 'form' ? '📋' : type === 'garbage' ? '🗑️' : type === 'checkinMsg' ? '📩' : type === 'welcomeMsg' ? '👋' : '🧹';
       const label = type === 'form' ? '宿泊者名簿' : type === 'garbage' ? 'ゴミ回収依頼' : type === 'checkinMsg' ? 'チェックイン情報送付' : type === 'welcomeMsg' ? 'ウェルカムメッセージ送付' : '清掃手配';
       const btnLabel = type === 'form' ? '✅ 提出済みにする' : type === 'garbage' ? '✅ 依頼済みにする' : type === 'checkinMsg' ? '✅ 送付済みにする' : type === 'welcomeMsg' ? '✅ 送付済みにする' : '✅ 手配済みにする';
+      const ciStr = b.checkin || '';
+      const coStr = getCheckout(b) || '';
+      const fmtD = s => { const p = s.split('/'); return p.length >= 3 ? `${parseInt(p[1])}/${parseInt(p[2])}` : s; };
+      const dateLabel = ciStr ? `🔑 ${fmtD(ciStr)}　→　🚪 ${fmtD(coStr)}` : '';
       return `<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid rgba(0,0,0,.06)">
         <div style="flex-shrink:0;width:36px;height:36px;border-radius:10px;background:${isOver?'#FFEBEE':isUrgent?'#FFF3E0':'#FFFDE7'};display:flex;align-items:center;justify-content:center;font-size:18px">${icon}</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:700;color:#1C1C1E;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(b.guestName||'ゲスト')}</div>
+          <div style="font-size:11px;color:#888;margin-top:1px">${dateLabel}</div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap">
             <span style="font-size:11px;font-weight:700;color:${color}">${prop?.name||''}</span>
             <span style="font-size:11px;color:#B0ADA8">·</span>
