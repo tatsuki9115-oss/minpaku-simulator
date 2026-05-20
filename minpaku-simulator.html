@@ -5996,14 +5996,18 @@ async function runResearch() {
 }
 
 function renderResearchResult(data) {
-  const { airroi, urls } = data;
+  const { airroi, urls, cache } = data;
   const el = document.getElementById('ck-research-result');
+
+  const cacheBadge = cache?.hit
+    ? `<span style="background:#D1FAE5;color:#065F46;font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;margin-left:6px;text-transform:none;letter-spacing:0">💾 キャッシュ取得（無料・24h有効）</span>`
+    : `<span style="background:#FEF3C7;color:#92400E;font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;margin-left:6px;text-transform:none;letter-spacing:0">📡 新規取得（$0.01課金）</span>`;
 
   let airroiHtml = '';
   if (airroi && !airroi.error) {
     airroiHtml = `
       <div class="card" style="margin-bottom:10px">
-        <div class="card-title">🟦 AirROI（周辺類似物件・年間データ）</div>
+        <div class="card-title">🟦 AirROI（周辺類似物件・年間データ）${cacheBadge}</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px">
           <div>周辺類似物件数</div><div style="text-align:right;font-weight:700">${airroi.count}件</div>
           <div>年間ADR 中央値</div><div style="text-align:right;font-weight:700">¥${(airroi.adr_median||0).toLocaleString()}</div>
