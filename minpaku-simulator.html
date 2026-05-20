@@ -3587,7 +3587,8 @@ function renderDashboard() {
           totalVar += getPerBookingTotal(b, p);
         }
       });
-      // 固定費（営業開始〜最終予約月まで）+ 未来の空き月はPriceLabs予測で埋める
+      // 集計範囲：営業開始〜年度末（または最終予約月のうち後の方）
+      // 未来の空き月はPriceLabs予測で売上・変動費を補填
       let maxBookY = thisYear, maxBookM = nowM2;
       const bookedMonthSet = new Set();
       books.forEach(b => {
@@ -3595,7 +3596,14 @@ function renderDashboard() {
         bookedMonthSet.add(`${by}_${bm}`);
         if (by > maxBookY || (by === maxBookY && bm > maxBookM)) { maxBookY = by; maxBookM = bm; }
       });
-      // PriceLabs予測データ取得
+      // 年度末（FYは4月開始3月終わり）
+      let fyEndY = nowM2 >= 4 ? thisYear + 1 : thisYear;
+      let fyEndM = 3;
+      let endY = fyEndY, endM = fyEndM;
+      if (maxBookY > endY || (maxBookY === endY && maxBookM > endM)) {
+        endY = maxBookY; endM = maxBookM;
+      }
+      // PriceLabs予測データ
       const fyKey = String(thisYear);
       const pf = pricelabsForecast[fyKey] && pricelabsForecast[fyKey][p.id];
       const monthForecastRev = pf ? ((pf.revenue || pf.shortTermRevenue || 0) / 12) : 0;
@@ -3607,12 +3615,15 @@ function renderDashboard() {
       if (p.operationStart) {
         const [sy, sm] = p.operationStart.split('-').map(Number);
         let cy = sy, cm = sm;
-        while (cy < maxBookY || (cy === maxBookY && cm <= maxBookM)) {
-          totalFixed += getPropMonthFixedCosts(p, cy, cm);
-          // 未来の空き月：PriceLabs予測で売上・変動費を補填
+        while (cy < endY || (cy === endY && cm <= endM)) {
           const isFuture = cy > thisYear || (cy === thisYear && cm > nowM2);
           const hasBooking = bookedMonthSet.has(`${cy}_${cm}`);
-          if (isFuture && !hasBooking && pf) {
+          // 過去月・予約あり月：実費固定費を加算
+          // 未来空き月で予測あり：固定費＋予測売上＋予測変動費を加算
+          if (!isFuture || hasBooking) {
+            totalFixed += getPropMonthFixedCosts(p, cy, cm);
+          } else if (pf) {
+            totalFixed += getPropMonthFixedCosts(p, cy, cm);
             totalRev += monthForecastRev;
             totalVar += monthForecastVar;
           }
