@@ -636,7 +636,7 @@
 
     <div style="margin-bottom:8px">
       <div style="font-size:12px;color:#888;margin-bottom:4px">住所（または地名）<span style="color:#E53935">*</span></div>
-      <input type="text" id="ck-address" placeholder="例: 神奈川県横浜市神奈川区子安通3" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
+      <input type="text" id="ck-address" placeholder="例: 神奈川県横浜市神奈川区子安通3" oninput="autoFillAddress()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
     </div>
 
     <div style="margin-bottom:8px">
@@ -5952,6 +5952,41 @@ function copyMsgPrompt() {
 // ==================== 物件候補チェック（リサーチアシスタント版） ====================
 
 const PROPERTY_RESEARCH_WORKER_URL = 'https://property-research-worker.tatsuki9115.workers.dev/api/research';
+
+// 住所文字列から都道府県と市区町村を抽出
+function parseJapaneseAddress(addr) {
+  if (!addr) return { prefecture: '', municipality: '' };
+  // 郵便番号削除
+  let s = addr.replace(/^〒?\s*\d{3}-?\d{4}\s*/, '').trim();
+  // 都道府県
+  const prefRe = /^(東京都|北海道|(?:京都|大阪)府|.{2,3}県)/;
+  const pm = s.match(prefRe);
+  if (!pm) return { prefecture: '', municipality: '' };
+  const prefecture = pm[0];
+  const rest = s.slice(prefecture.length).trim();
+  // 政令指定都市は「市+区」までを市区町村とする
+  const designated = ['札幌','仙台','さいたま','千葉','横浜','川崎','相模原','新潟','静岡','浜松','名古屋','京都','大阪','堺','神戸','岡山','広島','北九州','福岡','熊本'];
+  for (const c of designated) {
+    const re = new RegExp(`^(${c}市[^市区町村0-9]{1,4}区)`);
+    const m = rest.match(re);
+    if (m) return { prefecture, municipality: m[1] };
+  }
+  // 東京23区
+  const tokyo23 = /^(千代田区|中央区|港区|新宿区|文京区|台東区|墨田区|江東区|品川区|目黒区|大田区|世田谷区|渋谷区|中野区|杉並区|豊島区|北区|荒川区|板橋区|練馬区|足立区|葛飾区|江戸川区)/;
+  const t = rest.match(tokyo23);
+  if (t) return { prefecture, municipality: t[1] };
+  // 一般市区町村（XX市・XX町・XX村）
+  const m = rest.match(/^([^\s\d0-9]{1,8}?[市町村])/);
+  if (m) return { prefecture, municipality: m[1] };
+  return { prefecture, municipality: '' };
+}
+
+function autoFillAddress() {
+  const addr = document.getElementById('ck-address').value;
+  const { prefecture, municipality } = parseJapaneseAddress(addr);
+  if (prefecture)  document.getElementById('ck-prefecture').value = prefecture;
+  if (municipality) document.getElementById('ck-municipality').value = municipality;
+}
 
 const _ckReadNum = (id, def) => {
   const el = document.getElementById(id);
