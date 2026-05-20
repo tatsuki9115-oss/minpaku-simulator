@@ -3370,6 +3370,25 @@ function renderDashboard() {
   const prevMonthNights = prevMonthBooks.reduce((s, b) => s + (isLongStayListing(b) ? 0 : b.nights), 0);
   const nightsDiff = thisMonthNights - prevMonthNights;
 
+  // 月別利益率を計算（売上 − 固定費 − 変動費）
+  const calcMonthProfit = (books, y, m) => {
+    let rev = 0, varCosts = 0;
+    books.forEach(b => {
+      rev += b.revenue;
+      const prop = properties.find(p => p.id === getBookingPropId(b));
+      if (prop && !hasActualCosts(getBookingPropId(b), y, m)) varCosts += getPerBookingTotal(b, prop);
+    });
+    const opProps = properties.filter(p => isPropertyOperating(p, y, m));
+    opProps.forEach(p => { varCosts += getPropMonthActualVarCosts(p, y, m); });
+    const fixed = getMonthFixedCosts(y, m, 'all');
+    return { rev, profit: rev - fixed - varCosts };
+  };
+  const thisProfitObj = calcMonthProfit(thisMonthBooks, thisYear, thisMonth);
+  const prevProfitObj = calcMonthProfit(prevMonthBooks, prevYear, prevMonth);
+  const thisMargin = thisProfitObj.rev > 0 ? Math.round(thisProfitObj.profit / thisProfitObj.rev * 100) : null;
+  const prevMargin = prevProfitObj.rev > 0 ? Math.round(prevProfitObj.profit / prevProfitObj.rev * 100) : null;
+  const marginDiff = (thisMargin !== null && prevMargin !== null) ? thisMargin - prevMargin : null;
+
   // ヘッダーカード（物件ごとの次の予約）
   const nextPerProp = properties.map(p => {
     const nb = [..._allBooks]
@@ -3393,7 +3412,7 @@ function renderDashboard() {
       <div style="display:flex;gap:8px">${nextBadges}</div>
     </div>
     ${thisMonthBooks.length > 0 || prevMonthBooks.length > 0 ? `
-    <div style="margin-top:12px;padding-top:10px;border-top:1px solid #F2F1EE;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    <div style="margin-top:12px;padding-top:10px;border-top:1px solid #F2F1EE;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
       <div class="kpi-card" style="background:#F9F8F6;box-shadow:none">
         <div class="kpi-label">今月の売上</div>
         <div class="kpi-value">${fmtShort(thisMonthRev)}円</div>
@@ -3403,6 +3422,11 @@ function renderDashboard() {
         <div class="kpi-label">今月の稼働日数</div>
         <div class="kpi-value">${thisMonthNights}泊</div>
         ${prevMonthNights > 0 ? `<div class="kpi-sub" style="color:${nightsDiff>=0?'#1C9A52':'#E53935'}">${nightsDiff>=0?'↑':'↓'} ${Math.abs(nightsDiff)}泊 前月比</div>` : ''}
+      </div>
+      <div class="kpi-card" style="background:#F9F8F6;box-shadow:none">
+        <div class="kpi-label">今月の利益率</div>
+        <div class="kpi-value" style="color:${thisMargin===null?'#B0ADA8':thisMargin>=0?'#1C9A52':'#E53935'}">${thisMargin===null?'—':thisMargin+'%'}</div>
+        ${marginDiff !== null ? `<div class="kpi-sub" style="color:${marginDiff>=0?'#1C9A52':'#E53935'}">${marginDiff>=0?'↑':'↓'} ${Math.abs(marginDiff)}pt 前月比</div>` : ''}
       </div>
     </div>` : ''}
   </div>`;
