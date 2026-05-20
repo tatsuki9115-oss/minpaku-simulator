@@ -2487,21 +2487,20 @@ function renderInvestmentRecovery() {
         }
       });
     }
-    // 営業開始〜（確定予約の最終月 or 現在月）の全月を列挙
-    const allMonthProfits = [];
+    // 営業開始〜現在月の過去月のみを列挙（未来空き月の損失を回収予測の足を引っ張らせない）
+    const pastMonthProfits = [];
     if (p.operationStart) {
       const [sy, sm] = p.operationStart.split('-').map(Number);
       let cy = sy, cm = sm;
-      while (cy < maxBookYear || (cy === maxBookYear && cm <= maxBookMonth)) {
+      while (cy < nowY || (cy === nowY && cm <= nowM)) {
         const key = `${cy}-${String(cm).padStart(2,'0')}`;
-        // 実費入力済み月は実費固定費を、それ以外は概算を使用
         const mFixedCost = getPropMonthFixedCosts(p, cy, cm);
         const mp = (monthRevMap[key] || 0) - mFixedCost - (monthVarMap[key] || 0);
-        allMonthProfits.push(mp);
+        pastMonthProfits.push(mp);
         cm++; if (cm > 12) { cm = 1; cy++; }
       }
     }
-    const recent3 = allMonthProfits.slice(-3);
+    const recent3 = pastMonthProfits.slice(-3);
     const avgMonthlyProfit = recent3.length > 0 ? recent3.reduce((a, b) => a + b, 0) / recent3.length : 0;
 
     const remaining = Math.max(initialTotal - cumulativeProfit, 0);
