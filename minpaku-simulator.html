@@ -2428,7 +2428,7 @@ function renderInvestmentRecovery() {
     });
 
     // 営業開始から（確定予約の最終月 or 現在月）までの全固定費
-    // ただし未来月で予約がない月はスキップ（過去月は予約なくても損失計上）
+    // 未来の空き月はPriceLabs予測で売上・変動費を補填する（後で加算）
     const months = totalMonthsOperating(p);
     const bookedMonthKeys = new Set();
     books.forEach(b => {
@@ -2436,14 +2436,16 @@ function renderInvestmentRecovery() {
       bookedMonthKeys.add(`${by}_${bm}`);
     });
     let totalFixedCosts = 0;
+    const futureEmptyMonths = [];
     if (p.operationStart) {
       const [_sy, _sm] = p.operationStart.split('-').map(Number);
       let _cy = _sy, _cm = _sm;
       while (_cy < maxBookYear || (_cy === maxBookYear && _cm <= maxBookMonth)) {
+        totalFixedCosts += getPropMonthFixedCosts(p, _cy, _cm);
         const isFuture = _cy > nowY || (_cy === nowY && _cm > nowM);
         const hasBooking = bookedMonthKeys.has(`${_cy}_${_cm}`);
-        if (!isFuture || hasBooking) {
-          totalFixedCosts += getPropMonthFixedCosts(p, _cy, _cm);
+        if (isFuture && !hasBooking) {
+          futureEmptyMonths.push({ y: _cy, m: _cm });
         }
         _cm++; if (_cm > 12) { _cm = 1; _cy++; }
       }
@@ -2470,6 +2472,24 @@ function renderInvestmentRecovery() {
           totalVarCosts += getPropMonthActualVarCosts(p, by, bm);
         }
       });
+    }
+
+    // 未来の空き月をPriceLabs予測で補填
+    {
+      const fyKey = String(nowY);
+      const pf = pricelabsForecast[fyKey] && pricelabsForecast[fyKey][p.id];
+      if (pf && futureEmptyMonths.length > 0) {
+        const monthForecastRev = (pf.revenue || pf.shortTermRevenue || 0) / 12;
+        const propBooksLocal = books.filter(b => b.nights > 0);
+        const avgNightsLocal = propBooksLocal.length > 0 ? propBooksLocal.reduce((s,b)=>s+b.nights,0)/propBooksLocal.length : 3;
+        const estMonthBookings = Math.round((pf.occupancy / 100 * 365 / 12) / avgNightsLocal);
+        const perBookingLocal = (p.perBookingCosts||[]).reduce((s,c)=>s+c.amount,0);
+        const monthForecastVar = estMonthBookings * perBookingLocal;
+        futureEmptyMonths.forEach(() => {
+          totalRevenue += monthForecastRev;
+          totalVarCosts += monthForecastVar;
+        });
+      }
     }
 
     const cumulativeProfit = totalRevenue - totalFixedCosts - totalVarCosts;
@@ -3597,7 +3617,7 @@ function renderDashboard() {
           totalVar += getPerBookingTotal(b, p);
         }
       });
-      // 固定費（営業開始〜最終予約月まで・未来の空き月は除外）
+      // 固定費（営業開始〜最終予約月まで）+ 未来の空き月はPriceLabs予測で埋める
       let maxBookY = thisYear, maxBookM = nowM2;
       const bookedMonthSet = new Set();
       books.forEach(b => {
@@ -3605,16 +3625,26 @@ function renderDashboard() {
         bookedMonthSet.add(`${by}_${bm}`);
         if (by > maxBookY || (by === maxBookY && bm > maxBookM)) { maxBookY = by; maxBookM = bm; }
       });
+      // PriceLabs予測データ取得
+      const fyKey = String(thisYear);
+      const pf = pricelabsForecast[fyKey] && pricelabsForecast[fyKey][p.id];
+      const monthForecastRev = pf ? ((pf.revenue || pf.shortTermRevenue || 0) / 12) : 0;
+      const propBooks = books.filter(b => b.nights > 0);
+      const avgNights = propBooks.length > 0 ? propBooks.reduce((s,b)=>s+b.nights,0)/propBooks.length : 3;
+      const estMonthBookings = pf ? Math.round((pf.occupancy / 100 * 365 / 12) / avgNights) : 0;
+      const monthForecastVar = estMonthBookings * perBooking;
       let totalFixed = 0;
       if (p.operationStart) {
         const [sy, sm] = p.operationStart.split('-').map(Number);
         let cy = sy, cm = sm;
         while (cy < maxBookY || (cy === maxBookY && cm <= maxBookM)) {
-          // 未来月で予約がない月はスキップ（過去月は予約なくても損失として計上）
+          totalFixed += getPropMonthFixedCosts(p, cy, cm);
+          // 未来の空き月：PriceLabs予測で売上・変動費を補填
           const isFuture = cy > thisYear || (cy === thisYear && cm > nowM2);
           const hasBooking = bookedMonthSet.has(`${cy}_${cm}`);
-          if (!isFuture || hasBooking) {
-            totalFixed += getPropMonthFixedCosts(p, cy, cm);
+          if (isFuture && !hasBooking && pf) {
+            totalRev += monthForecastRev;
+            totalVar += monthForecastVar;
           }
           cm++; if (cm > 12) { cm = 1; cy++; }
         }
