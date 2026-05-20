@@ -4049,7 +4049,7 @@ function renderAnnual() {
       <div style="background:${isAP?'#F0FBF5':'#FFF5F5'};border-radius:10px;padding:10px 12px">
         <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:4px">利益</div>
         <div style="font-family:'Inter',sans-serif;font-size:18px;font-weight:900;color:${isAP?'#1C9A52':'#E53935'};line-height:1.1">${isAP?'':'▲'}${fmtShort(Math.abs(totalProfit))}円</div>
-        <div style="font-size:9px;color:#C8C5C0;margin-top:2px">費用差引後</div>
+        <div style="font-size:9px;color:#C8C5C0;margin-top:2px">利益率 <span style="font-weight:800;color:${isAP?'#1C9A52':'#E53935'}">${totalRevenue>0 ? (isAP?'':'▲')+Math.abs(Math.round(totalProfit/totalRevenue*100))+'%' : '—'}</span></div>
       </div>
     </div>
     <div style="display:flex;gap:16px;padding-top:8px;border-top:1px solid #F2F1EE">
