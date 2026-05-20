@@ -2428,13 +2428,23 @@ function renderInvestmentRecovery() {
     });
 
     // 営業開始から（確定予約の最終月 or 現在月）までの全固定費
+    // ただし未来月で予約がない月はスキップ（過去月は予約なくても損失計上）
     const months = totalMonthsOperating(p);
+    const bookedMonthKeys = new Set();
+    books.forEach(b => {
+      const [by, bm] = b.checkin.split('/').map(Number);
+      bookedMonthKeys.add(`${by}_${bm}`);
+    });
     let totalFixedCosts = 0;
     if (p.operationStart) {
       const [_sy, _sm] = p.operationStart.split('-').map(Number);
       let _cy = _sy, _cm = _sm;
       while (_cy < maxBookYear || (_cy === maxBookYear && _cm <= maxBookMonth)) {
-        totalFixedCosts += getPropMonthFixedCosts(p, _cy, _cm);
+        const isFuture = _cy > nowY || (_cy === nowY && _cm > nowM);
+        const hasBooking = bookedMonthKeys.has(`${_cy}_${_cm}`);
+        if (!isFuture || hasBooking) {
+          totalFixedCosts += getPropMonthFixedCosts(p, _cy, _cm);
+        }
         _cm++; if (_cm > 12) { _cm = 1; _cy++; }
       }
     } else {
@@ -3587,10 +3597,12 @@ function renderDashboard() {
           totalVar += getPerBookingTotal(b, p);
         }
       });
-      // 固定費（営業開始〜最終予約月まで）
+      // 固定費（営業開始〜最終予約月まで・未来の空き月は除外）
       let maxBookY = thisYear, maxBookM = nowM2;
+      const bookedMonthSet = new Set();
       books.forEach(b => {
         const [by, bm] = b.checkin.split('/').map(Number);
+        bookedMonthSet.add(`${by}_${bm}`);
         if (by > maxBookY || (by === maxBookY && bm > maxBookM)) { maxBookY = by; maxBookM = bm; }
       });
       let totalFixed = 0;
@@ -3598,7 +3610,12 @@ function renderDashboard() {
         const [sy, sm] = p.operationStart.split('-').map(Number);
         let cy = sy, cm = sm;
         while (cy < maxBookY || (cy === maxBookY && cm <= maxBookM)) {
-          totalFixed += getPropMonthFixedCosts(p, cy, cm);
+          // 未来月で予約がない月はスキップ（過去月は予約なくても損失として計上）
+          const isFuture = cy > thisYear || (cy === thisYear && cm > nowM2);
+          const hasBooking = bookedMonthSet.has(`${cy}_${cm}`);
+          if (!isFuture || hasBooking) {
+            totalFixed += getPropMonthFixedCosts(p, cy, cm);
+          }
           cm++; if (cm > 12) { cm = 1; cy++; }
         }
       }
