@@ -48,6 +48,7 @@
   #nav-calendar svg   { stroke: #F07C3F; }
   #nav-annual svg     { stroke: #EF4444; }
   #nav-settings svg   { stroke: #6B7280; }
+  #nav-check svg      { stroke: #059669; }
   /* アクティブ時はオレンジで統一 */
   .bottom-nav-item.active svg { stroke: #F07C3F; }
 
@@ -523,6 +524,10 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
     実績
   </button>
+  <button class="bottom-nav-item" onclick="showTab('check')" id="nav-check">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
+    物件候補
+  </button>
   <button class="bottom-nav-item" onclick="showTab('settings')" id="nav-settings">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>
     設定
@@ -620,6 +625,78 @@
       <button class="btn-save" id="save-btn" onclick="saveSettings()">設定を保存</button>
     </div>
   </div>
+</div>
+
+<!-- 物件候補チェック -->
+<div class="page" id="page-check">
+
+  <!-- エリアデータ登録 -->
+  <div class="card">
+    <div class="card-title">エリアデータ（AirROIで調べた値を登録）</div>
+    <div id="check-area-list"></div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <input type="text"   id="check-area-name"  placeholder="エリア名（例：横浜市中区）" style="flex:2;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px">
+      <input type="number" id="check-area-adr"   placeholder="ADR（円/泊）"             style="flex:1;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px">
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <input type="number" id="check-area-occ"   placeholder="稼働率（%）"              style="flex:1;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px">
+      <input type="number" id="check-area-los"   placeholder="平均滞在日数（泊）"        style="flex:1;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px" value="4">
+    </div>
+    <button onclick="saveCheckArea()" style="margin-top:10px;width:100%;padding:11px;background:#059669;color:white;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">＋ エリアを登録</button>
+  </div>
+
+  <!-- 物件情報入力 -->
+  <div class="card">
+    <div class="card-title">物件情報</div>
+
+    <div style="margin-bottom:10px">
+      <div style="font-size:12px;color:#888;margin-bottom:4px">エリア選択</div>
+      <select id="check-area-select" onchange="onCheckAreaChange()" style="width:100%;padding:11px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;background:white">
+        <option value="">── エリアを選ぶ、または下に直接入力 ──</option>
+      </select>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <div>
+        <div style="font-size:12px;color:#888;margin-bottom:4px">ADR（円/泊）</div>
+        <input type="number" id="check-adr" placeholder="例: 9000" oninput="calcCheck()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
+      </div>
+      <div>
+        <div style="font-size:12px;color:#888;margin-bottom:4px">稼働率（%）</div>
+        <input type="number" id="check-occ" placeholder="例: 65" oninput="calcCheck()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
+      </div>
+    </div>
+
+    <div style="margin-bottom:8px">
+      <div style="font-size:12px;color:#888;margin-bottom:4px">家賃（月額・円）</div>
+      <input type="number" id="check-rent" placeholder="例: 80000" oninput="calcCheck()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <div>
+        <div style="font-size:12px;color:#888;margin-bottom:4px">礼金（ヶ月）</div>
+        <input type="number" id="check-reikin" value="2" oninput="calcCheck()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
+      </div>
+      <div>
+        <div style="font-size:12px;color:#888;margin-bottom:4px">敷金（ヶ月）</div>
+        <input type="number" id="check-shikikin" value="2" oninput="calcCheck()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
+      </div>
+    </div>
+
+    <div style="margin-bottom:8px">
+      <div style="font-size:12px;color:#888;margin-bottom:4px">仲介手数料（円）</div>
+      <input type="number" id="check-agency" placeholder="例: 家賃1ヶ月分" oninput="calcCheck()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
+    </div>
+
+    <div style="margin-bottom:8px">
+      <div style="font-size:12px;color:#888;margin-bottom:4px">その他初期費用（改装・備品等・円）</div>
+      <input type="number" id="check-initial" value="200000" oninput="calcCheck()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
+    </div>
+  </div>
+
+  <!-- 収支結果 -->
+  <div id="check-result"></div>
+
 </div>
 
 <script>
@@ -1046,7 +1123,7 @@ function getPropColor(propId) {
 
 // ==================== タブ ====================
 function showTab(tab) {
-  const tabs = ['sim','bookings','calendar','annual','settings','message'];
+  const tabs = ['sim','bookings','calendar','annual','settings','message','check'];
   // ボトムナビのアクティブ状態
   tabs.forEach(id => {
     const navBtn = document.getElementById('nav-' + id);
@@ -1061,6 +1138,7 @@ function showTab(tab) {
   if (tab === 'annual') { initAnnualTab(); }
   if (tab === 'settings') renderSettingsKeepOpen();
   if (tab === 'message') renderMessageTab();
+  if (tab === 'check') renderCheckTab();
 }
 
 // ==================== シミュレーション ====================
@@ -5767,6 +5845,225 @@ function copyMsgPrompt() {
     showToast('コピーしました！', 'success');
   }
 }
+
+// ==================== 物件候補チェック ====================
+
+const CHECK_AREAS_KEY = 'minpaku_check_areas_v1';
+
+function loadCheckAreas() {
+  try { return JSON.parse(localStorage.getItem(CHECK_AREAS_KEY)) || []; }
+  catch { return []; }
+}
+
+function saveCheckArea() {
+  const name = document.getElementById('check-area-name').value.trim();
+  const adr  = parseFloat(document.getElementById('check-area-adr').value);
+  const occ  = parseFloat(document.getElementById('check-area-occ').value);
+  const los  = parseFloat(document.getElementById('check-area-los').value) || 4;
+  if (!name || !adr || !occ) { showToast('エリア名・ADR・稼働率を入力してください', 'error'); return; }
+  const areas = loadCheckAreas();
+  const idx = areas.findIndex(a => a.name === name);
+  const entry = { name, adr, occ, los, updatedAt: new Date().toLocaleDateString('ja-JP') };
+  if (idx >= 0) areas[idx] = entry; else areas.push(entry);
+  localStorage.setItem(CHECK_AREAS_KEY, JSON.stringify(areas));
+  document.getElementById('check-area-name').value = '';
+  document.getElementById('check-area-adr').value  = '';
+  document.getElementById('check-area-occ').value  = '';
+  document.getElementById('check-area-los').value  = '4';
+  renderCheckTab();
+  showToast('エリアデータを登録しました', 'success');
+}
+
+function deleteCheckArea(name) {
+  const areas = loadCheckAreas().filter(a => a.name !== name);
+  localStorage.setItem(CHECK_AREAS_KEY, JSON.stringify(areas));
+  renderCheckTab();
+}
+
+function onCheckAreaChange() {
+  const name = document.getElementById('check-area-select').value;
+  if (!name) return;
+  const area = loadCheckAreas().find(a => a.name === name);
+  if (!area) return;
+  document.getElementById('check-adr').value = area.adr;
+  document.getElementById('check-occ').value = area.occ;
+  calcCheck();
+}
+
+function renderCheckTab() {
+  // エリア一覧
+  const areas = loadCheckAreas();
+  const listEl = document.getElementById('check-area-list');
+  if (areas.length === 0) {
+    listEl.innerHTML = '<div style="font-size:13px;color:#B0ADA8;padding:6px 0">まだ登録されていません。AirROIで調べた値を入力してください。</div>';
+  } else {
+    listEl.innerHTML = areas.map(a => `
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #F0EDE9">
+        <div style="flex:1">
+          <div style="font-size:14px;font-weight:700;color:#333">${a.name}</div>
+          <div style="font-size:12px;color:#888">ADR ¥${a.adr.toLocaleString()} &nbsp;|&nbsp; 稼働率 ${a.occ}% &nbsp;|&nbsp; 平均${a.los}泊 &nbsp;|&nbsp; 更新: ${a.updatedAt}</div>
+        </div>
+        <button onclick="deleteCheckArea('${a.name}')" style="padding:5px 10px;font-size:12px;border:1px solid #E5E2DE;border-radius:8px;background:white;cursor:pointer;color:#888">削除</button>
+      </div>`).join('');
+  }
+  // プルダウン更新
+  const sel = document.getElementById('check-area-select');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">── エリアを選ぶ、または下に直接入力 ──</option>';
+  areas.forEach(a => {
+    const o = document.createElement('option');
+    o.value = a.name; o.textContent = `${a.name}（ADR ¥${a.adr.toLocaleString()} / 稼働率 ${a.occ}%）`;
+    if (a.name === cur) o.selected = true;
+    sel.appendChild(o);
+  });
+  calcCheck();
+}
+
+function calcCheck() {
+  const adr     = parseFloat(document.getElementById('check-adr').value)     || 0;
+  const occ     = parseFloat(document.getElementById('check-occ').value)     || 0;
+  const rent    = parseFloat(document.getElementById('check-rent').value)    || 0;
+  const reikin  = parseFloat(document.getElementById('check-reikin').value)  || 2;
+  const shikikin= parseFloat(document.getElementById('check-shikikin').value)|| 2;
+  const agency  = parseFloat(document.getElementById('check-agency').value)  || rent;
+  const initial = parseFloat(document.getElementById('check-initial').value) || 0;
+  const el = document.getElementById('check-result');
+
+  if (!adr || !occ || !rent) {
+    el.innerHTML = '<div style="text-align:center;color:#B0ADA8;padding:24px;font-size:14px">ADR・稼働率・家賃を入力すると<br>収支が自動計算されます</div>';
+    return;
+  }
+
+  // 計算
+  const AIRBNB_FEE  = 0.155;
+  const FIXED_OTHER = 23000;   // 光熱費15,000+WiFi5,000+消耗品3,000
+  const VAR_PER_STAY= 7400;    // 清掃6,000+リネン1,400
+  const LOS = parseFloat(document.getElementById('check-area-select').value
+    ? (loadCheckAreas().find(a=>a.name===document.getElementById('check-area-select').value)||{los:4}).los
+    : 4);
+
+  const maxDays      = 15;                                      // 180日/年÷12ヶ月
+  const monthlyDays  = Math.min(maxDays, 30 * occ / 100);      // 月稼働日数
+  const revenue      = adr * monthlyDays * (1 - AIRBNB_FEE);   // 手数料控除後売上
+  const stays        = monthlyDays / LOS;                       // 月間予約組数
+  const varCost      = VAR_PER_STAY * stays;                    // 変動費
+  const fixedCost    = rent + FIXED_OTHER;                      // 固定費
+  const profit       = revenue - fixedCost - varCost;           // 月間利益
+  const profitRate   = revenue > 0 ? profit / revenue * 100 : 0;
+
+  // 損益分岐
+  const beDays = fixedCost / (adr * (1 - AIRBNB_FEE) - VAR_PER_STAY / LOS);
+  const beRate = beDays / maxDays * 100;
+
+  // 初期費用
+  const initialTotal = rent * reikin + rent * shikikin + agency + initial;
+  const paybackMonths= profit > 0 ? initialTotal / profit : Infinity;
+
+  // 既存物件
+  const ATT_PROFIT    = 86000;
+  const ATT_ADR       = 8600;
+  const ATT_OCC       = 87;
+  const SHIN_PROFIT   = 59000;
+  const SHIN_ADR      = 10000;
+  const SHIN_OCC      = 53;
+
+  const isProfit = profit >= 0;
+  const profitColor = isProfit ? '#1C9A52' : '#E53935';
+  const paybackText = !isFinite(paybackMonths)
+    ? '赤字のため回収不可'
+    : paybackMonths < 24
+      ? `約 ${Math.ceil(paybackMonths)} ヶ月（${Math.ceil(paybackMonths/12*10)/10} 年）`
+      : `約 ${Math.ceil(paybackMonths/12)} 年（長期）`;
+
+  const beText = beRate <= 60
+    ? `<span style="color:#1C9A52">● 安全圏（達成しやすい）</span>`
+    : beRate <= 80
+      ? `<span style="color:#F59E0B">● 注意（稼働率管理が必要）</span>`
+      : `<span style="color:#E53935">● 高リスク（達成が難しい）</span>`;
+
+  // 比較バー
+  function bar(val, max, color) {
+    const pct = Math.min(100, Math.round(val / max * 100));
+    return `<div style="background:#F0EDE9;border-radius:4px;height:8px;margin-top:4px"><div style="background:${color};width:${pct}%;height:8px;border-radius:4px"></div></div>`;
+  }
+
+  el.innerHTML = `
+    <!-- 月間収支 -->
+    <div class="result-card ${isProfit ? 'profit' : 'loss'}" style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
+        <div style="font-size:13px;font-weight:700;color:#666">月間利益（推定）</div>
+        <div style="font-size:26px;font-weight:900;color:${profitColor}">${profit>=0?'＋':''}¥${Math.round(profit).toLocaleString()}</div>
+      </div>
+      <div style="font-size:12px;color:#888;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div>月稼働日数</div><div style="text-align:right;font-weight:600;color:#333">${monthlyDays.toFixed(1)} 日（上限15日）</div>
+        <div>月間売上（手数料後）</div><div style="text-align:right;font-weight:600;color:#333">¥${Math.round(revenue).toLocaleString()}</div>
+        <div>月間固定費</div><div style="text-align:right;font-weight:600;color:#E53935">▲¥${fixedCost.toLocaleString()}</div>
+        <div style="padding-left:10px;color:#aaa">家賃</div><div style="text-align:right;color:#aaa">¥${rent.toLocaleString()}</div>
+        <div style="padding-left:10px;color:#aaa">その他固定</div><div style="text-align:right;color:#aaa">¥${FIXED_OTHER.toLocaleString()}</div>
+        <div>月間変動費</div><div style="text-align:right;font-weight:600;color:#E53935">▲¥${Math.round(varCost).toLocaleString()}</div>
+        <div>利益率</div><div style="text-align:right;font-weight:600;color:${profitColor}">${profitRate.toFixed(1)}%</div>
+      </div>
+    </div>
+
+    <!-- 損益分岐 -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-title">損益分岐ライン</div>
+      <div style="font-size:14px;font-weight:700;color:#333;margin-bottom:4px">稼働率 ${beRate.toFixed(1)}% 以上で黒字</div>
+      <div style="font-size:12px;color:#888;margin-bottom:8px">月 ${beDays.toFixed(1)} 日以上の稼働が必要 &nbsp;${beText}</div>
+      ${bar(Math.min(beRate, 100), 100, beRate <= 60 ? '#1C9A52' : beRate <= 80 ? '#F59E0B' : '#E53935')}
+    </div>
+
+    <!-- 初期費用 -->
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-title">初期費用・回収期間</div>
+      <div style="font-size:12px;color:#888;display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:10px">
+        <div>礼金（${reikin}ヶ月）</div><div style="text-align:right;color:#333">¥${(rent*reikin).toLocaleString()}</div>
+        <div>敷金（${shikikin}ヶ月）</div><div style="text-align:right;color:#333">¥${(rent*shikikin).toLocaleString()}</div>
+        <div>仲介手数料</div><div style="text-align:right;color:#333">¥${agency.toLocaleString()}</div>
+        <div>その他初期費用</div><div style="text-align:right;color:#333">¥${initial.toLocaleString()}</div>
+        <div style="font-weight:700;color:#333;border-top:1px solid #E5E2DE;padding-top:4px;margin-top:2px">初期費用合計</div>
+        <div style="text-align:right;font-weight:700;color:#333;border-top:1px solid #E5E2DE;padding-top:4px;margin-top:2px">¥${Math.round(initialTotal).toLocaleString()}</div>
+      </div>
+      <div style="background:${isProfit?'#F0FDF4':'#FEF2F2'};border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:12px;color:#888;margin-bottom:2px">回収期間</div>
+        <div style="font-size:18px;font-weight:800;color:${profitColor}">${paybackText}</div>
+      </div>
+    </div>
+
+    <!-- 既存物件比較 -->
+    <div class="card">
+      <div class="card-title">既存物件との比較（2026年4月実績）</div>
+      <div style="font-size:11px;color:#B0ADA8;margin-bottom:10px">※既存物件は2物件合計の固定費・変動費を売上比率で按分した推定値</div>
+
+      <div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px">
+          <span style="font-weight:700">本物件（予測）</span>
+          <span style="font-weight:800;color:${profitColor}">¥${Math.round(profit).toLocaleString()}/月</span>
+        </div>
+        <div style="font-size:11px;color:#888;margin-bottom:4px">ADR ¥${adr.toLocaleString()} &nbsp;|&nbsp; 稼働率 ${occ}%</div>
+        ${bar(Math.max(0,profit), Math.max(ATT_PROFIT, Math.abs(profit), 100000), profitColor)}
+      </div>
+
+      <div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px">
+          <span style="color:#666">ATTビル（高幡不動）</span>
+          <span style="color:#666">約¥${ATT_PROFIT.toLocaleString()}/月</span>
+        </div>
+        <div style="font-size:11px;color:#B0ADA8;margin-bottom:4px">ADR 約¥${ATT_ADR.toLocaleString()} &nbsp;|&nbsp; 稼働率 約${ATT_OCC}%</div>
+        ${bar(ATT_PROFIT, Math.max(ATT_PROFIT, Math.abs(profit), 100000), '#B0ADA8')}
+      </div>
+
+      <div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px">
+          <span style="color:#666">フィオーレ新子安</span>
+          <span style="color:#666">約¥${SHIN_PROFIT.toLocaleString()}/月</span>
+        </div>
+        <div style="font-size:11px;color:#B0ADA8;margin-bottom:4px">ADR 約¥${SHIN_ADR.toLocaleString()} &nbsp;|&nbsp; 稼働率 約${SHIN_OCC}%</div>
+        ${bar(SHIN_PROFIT, Math.max(ATT_PROFIT, Math.abs(profit), 100000), '#B0ADA8')}
+      </div>
+    </div>`;
+}
+
 </script>
 </body>
 </html>
