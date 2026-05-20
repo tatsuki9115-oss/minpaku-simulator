@@ -5928,10 +5928,17 @@ function calcCheck() {
   const adr     = parseFloat(document.getElementById('check-adr').value)     || 0;
   const occ     = parseFloat(document.getElementById('check-occ').value)     || 0;
   const rent    = parseFloat(document.getElementById('check-rent').value)    || 0;
-  const reikin  = parseFloat(document.getElementById('check-reikin').value)  || 2;
-  const shikikin= parseFloat(document.getElementById('check-shikikin').value)|| 2;
-  const agency  = parseFloat(document.getElementById('check-agency').value)  || rent;
-  const initial = parseFloat(document.getElementById('check-initial').value) || 0;
+  // 空欄なら2、0が明示的に入力されたら0を使う
+  const _readNum = (id, def) => {
+    const v = document.getElementById(id).value;
+    if (v === '' || v === null || v === undefined) return def;
+    const n = parseFloat(v);
+    return isNaN(n) ? def : n;
+  };
+  const reikin   = _readNum('check-reikin',   2);
+  const shikikin = _readNum('check-shikikin', 2);
+  const agency   = _readNum('check-agency',   rent);
+  const initial  = _readNum('check-initial',  0);
   const el = document.getElementById('check-result');
 
   if (!adr || !occ || !rent) {
@@ -6001,13 +6008,28 @@ function calcCheck() {
       </div>
       <div style="font-size:12px;color:#888;display:grid;grid-template-columns:1fr 1fr;gap:6px">
         <div>月稼働日数</div><div style="text-align:right;font-weight:600;color:#333">${monthlyDays.toFixed(1)} 日（上限15日）</div>
-        <div>月間売上（手数料後）</div><div style="text-align:right;font-weight:600;color:#333">¥${Math.round(revenue).toLocaleString()}</div>
+        <div>月間売上(手数料後)</div><div style="text-align:right;font-weight:600;color:#333">¥${Math.round(revenue).toLocaleString()}</div>
         <div>月間固定費</div><div style="text-align:right;font-weight:600;color:#E53935">▲¥${fixedCost.toLocaleString()}</div>
         <div style="padding-left:10px;color:#aaa">家賃</div><div style="text-align:right;color:#aaa">¥${rent.toLocaleString()}</div>
         <div style="padding-left:10px;color:#aaa">その他固定</div><div style="text-align:right;color:#aaa">¥${FIXED_OTHER.toLocaleString()}</div>
         <div>月間変動費</div><div style="text-align:right;font-weight:600;color:#E53935">▲¥${Math.round(varCost).toLocaleString()}</div>
         <div>利益率</div><div style="text-align:right;font-weight:600;color:${profitColor}">${profitRate.toFixed(1)}%</div>
       </div>
+    </div>
+
+    <!-- 年間収支 -->
+    <div class="result-card ${isProfit ? 'profit' : 'loss'}" style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
+        <div style="font-size:13px;font-weight:700;color:#666">年間利益（推定・×12ヶ月）</div>
+        <div style="font-size:26px;font-weight:900;color:${profitColor}">${profit>=0?'＋':''}¥${Math.round(profit*12).toLocaleString()}</div>
+      </div>
+      <div style="font-size:12px;color:#888;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div>年間稼働日数</div><div style="text-align:right;font-weight:600;color:#333">${(monthlyDays*12).toFixed(0)} 日（180日上限）</div>
+        <div>年間売上(手数料後)</div><div style="text-align:right;font-weight:600;color:#333">¥${Math.round(revenue*12).toLocaleString()}</div>
+        <div>年間固定費</div><div style="text-align:right;font-weight:600;color:#E53935">▲¥${(fixedCost*12).toLocaleString()}</div>
+        <div>年間変動費</div><div style="text-align:right;font-weight:600;color:#E53935">▲¥${Math.round(varCost*12).toLocaleString()}</div>
+      </div>
+      <div style="font-size:11px;color:#B0ADA8;margin-top:8px">※繁忙期・閑散期の変動は反映していない単純×12の概算</div>
     </div>
 
     <!-- 損益分岐 -->
