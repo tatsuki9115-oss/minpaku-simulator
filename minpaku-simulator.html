@@ -2317,21 +2317,45 @@ function renderProfitChart(monthlyStats, monthlyTarget) {
     const y = p >= 0 ? baseline - bh : baseline;
     const fill = p >= 0 ? '#4caf50' : '#ef5350';
     svgBars += '<rect x="'+(cx - barW/2).toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+bh.toFixed(1)+'" fill="'+fill+'" rx="2"/>';
-    // 金額＋利益率ラベル
-    const ms = monthlyStats[i];
-    const margin = (ms && ms.revenue > 0) ? Math.round(p / ms.revenue * 100) : null;
-    const marginText = margin !== null ? ' ('+(p<0?'▲':'')+Math.abs(margin)+'%)' : '';
+    // 金額ラベルのみ（利益率は折れ線で表示）
     const anchor = cx < 30 ? 'start' : cx > W - 30 ? 'end' : 'middle';
     const lx = anchor === 'start' ? (cx - barW/2).toFixed(1) : anchor === 'end' ? (cx + barW/2).toFixed(1) : cx.toFixed(1);
     const labelText = fmtBar(p);
     if (p >= 0) {
       const ly = (baseline - bh - 4).toFixed(1);
-      svgBars += '<text x="'+lx+'" y="'+ly+'" text-anchor="'+anchor+'" font-size="9" font-weight="800" fill="#2e7d32" stroke="white" stroke-width="2.5" paint-order="stroke">'+labelText+marginText+'</text>';
+      svgBars += '<text x="'+lx+'" y="'+ly+'" text-anchor="'+anchor+'" font-size="9" font-weight="800" fill="#2e7d32" stroke="white" stroke-width="2.5" paint-order="stroke">'+labelText+'</text>';
     } else {
       const ly = (baseline + Math.max(bh, 4) + 10).toFixed(1);
-      svgBars += '<text x="'+lx+'" y="'+ly+'" text-anchor="'+anchor+'" font-size="9" font-weight="800" fill="#c62828" stroke="white" stroke-width="2.5" paint-order="stroke">'+labelText+marginText+'</text>';
+      svgBars += '<text x="'+lx+'" y="'+ly+'" text-anchor="'+anchor+'" font-size="9" font-weight="800" fill="#c62828" stroke="white" stroke-width="2.5" paint-order="stroke">'+labelText+'</text>';
     }
   });
+
+  // 利益率の折れ線（紫）：上部labelH〜下部baseline+chartH*0.38の範囲を -50%〜100% にマップ
+  const marginMin = -50, marginMax = 100;
+  const marginYTop = labelH + 4;
+  const marginYBot = H - footH - 4;
+  const marginToY = m => {
+    const clamped = Math.max(marginMin, Math.min(marginMax, m));
+    return marginYBot - (clamped - marginMin) / (marginMax - marginMin) * (marginYBot - marginYTop);
+  };
+  const marginPoints = [];
+  monthlyStats.forEach((ms, i) => {
+    if (!ms || ms.revenue <= 0) return;
+    const cx = (W / 12) * (i + 0.5);
+    const margin = Math.round(ms.profit / ms.revenue * 100);
+    marginPoints.push({ x: cx, y: marginToY(margin), margin });
+  });
+  let svgLine = '';
+  if (marginPoints.length >= 1) {
+    if (marginPoints.length >= 2) {
+      const path = marginPoints.map((pt, i) => (i===0?'M':'L')+pt.x.toFixed(1)+' '+pt.y.toFixed(1)).join(' ');
+      svgLine += '<path d="'+path+'" fill="none" stroke="#7c3aed" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>';
+    }
+    marginPoints.forEach(pt => {
+      svgLine += '<circle cx="'+pt.x.toFixed(1)+'" cy="'+pt.y.toFixed(1)+'" r="2.5" fill="#7c3aed"/>';
+      svgLine += '<text x="'+pt.x.toFixed(1)+'" y="'+(pt.y - 5).toFixed(1)+'" text-anchor="middle" font-size="8" font-weight="800" fill="#7c3aed" stroke="white" stroke-width="2" paint-order="stroke">'+(pt.margin<0?'▲':'')+Math.abs(pt.margin)+'%</text>';
+    });
+  }
 
   const fyOrder = [4,5,6,7,8,9,10,11,12,1,2,3];
   const labels = monthlyStats.map((m, i) => {
@@ -2349,9 +2373,13 @@ function renderProfitChart(monthlyStats, monthlyTarget) {
       + '<text x="'+(W-2)+'" y="'+(parseFloat(ty)-3)+'" text-anchor="end" font-size="7.5" font-weight="700" fill="#ff9800">目標 '+fmtT(targetLine)+'</text>';
   }
 
-  return '<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="display:block">'
+  return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;font-size:10px;color:#888">'
+    + '<span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:8px;background:#4caf50;border-radius:1px"></span>利益（円）</span>'
+    + '<span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:2px;background:#7c3aed"></span>利益率（％）</span>'
+    + '</div>'
+    + '<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="display:block">'
     + '<line x1="0" y1="'+baseline+'" x2="'+W+'" y2="'+baseline+'" stroke="#eee" stroke-width="1.5"/>'
-    + targetLineHtml + svgBars + labels
+    + targetLineHtml + svgBars + svgLine + labels
     + '</svg>';
 }
 
