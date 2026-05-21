@@ -2540,22 +2540,7 @@ function renderInvestmentRecovery() {
       }
     });
 
-    // 営業開始から（確定予約の最終月 or 現在月）までの全固定費
-    // 実績タブは「実績」と「予測」を別表示する設計のため、実績側は予測補填しない
-    const months = totalMonthsOperating(p);
-    let totalFixedCosts = 0;
-    if (p.operationStart) {
-      const [_sy, _sm] = p.operationStart.split('-').map(Number);
-      let _cy = _sy, _cm = _sm;
-      while (_cy < maxBookYear || (_cy === maxBookYear && _cm <= maxBookMonth)) {
-        totalFixedCosts += getPropMonthFixedCosts(p, _cy, _cm);
-        _cm++; if (_cm > 12) { _cm = 1; _cy++; }
-      }
-    } else {
-      totalFixedCosts = monthlyFixedTotal * months;
-    }
-
-    // 現在月までの売上と変動費
+    // 売上・変動費（実費 or per-booking）
     let totalRevenue = 0, totalVarCosts = 0;
     books.forEach(b => {
       totalRevenue += b.revenue;
@@ -2574,6 +2559,44 @@ function renderInvestmentRecovery() {
           totalVarCosts += getPropMonthActualVarCosts(p, by, bm);
         }
       });
+    }
+
+    // 営業開始〜年度末まで固定費 + 未来空き月は PriceLabs 予測で補填（ダッシュボードと統一）
+    const bookedMonthKeys = new Set();
+    books.forEach(b => {
+      const [by, bm] = b.checkin.split('/').map(Number);
+      bookedMonthKeys.add(`${by}_${bm}`);
+    });
+    let fyEndY = nowM >= 4 ? nowY + 1 : nowY;
+    let endY = fyEndY, endM = 3;
+    if (maxBookYear > endY || (maxBookYear === endY && maxBookMonth > endM)) { endY = maxBookYear; endM = maxBookMonth; }
+    const fyKey = String(nowY);
+    const pf = pricelabsForecast[fyKey] && pricelabsForecast[fyKey][p.id];
+    const monthForecastRev = pf ? ((pf.revenue || pf.shortTermRevenue || 0) / 12) : 0;
+    const propBooksLocal = books.filter(b => b.nights > 0);
+    const avgNightsLocal = propBooksLocal.length > 0 ? propBooksLocal.reduce((s,b)=>s+b.nights,0)/propBooksLocal.length : 3;
+    const perBookingLocal = (p.perBookingCosts||[]).reduce((s,c)=>s+c.amount,0);
+    const estMonthBookings = pf ? Math.round((pf.occupancy / 100 * 365 / 12) / avgNightsLocal) : 0;
+    const monthForecastVar = estMonthBookings * perBookingLocal;
+    const months = totalMonthsOperating(p);
+    let totalFixedCosts = 0;
+    if (p.operationStart) {
+      const [_sy, _sm] = p.operationStart.split('-').map(Number);
+      let _cy = _sy, _cm = _sm;
+      while (_cy < endY || (_cy === endY && _cm <= endM)) {
+        const isFuture = _cy > nowY || (_cy === nowY && _cm > nowM);
+        const hasBooking = bookedMonthKeys.has(`${_cy}_${_cm}`);
+        if (!isFuture || hasBooking) {
+          totalFixedCosts += getPropMonthFixedCosts(p, _cy, _cm);
+        } else if (pf) {
+          totalFixedCosts += getPropMonthFixedCosts(p, _cy, _cm);
+          totalRevenue += monthForecastRev;
+          totalVarCosts += monthForecastVar;
+        }
+        _cm++; if (_cm > 12) { _cm = 1; _cy++; }
+      }
+    } else {
+      totalFixedCosts = monthlyFixedTotal * months;
     }
 
     const cumulativeProfit = totalRevenue - totalFixedCosts - totalVarCosts;
@@ -2656,25 +2679,12 @@ function renderInvestmentRecovery() {
     const fyKeyPre = String(nowY);
     const pfPre = pricelabsForecast[fyKeyPre] && pricelabsForecast[fyKeyPre][x.prop.id];
     if (pfPre) {
-      hasForecastForSummary = true;
-      const annualFixedPre = x.prop.monthlyFixedCosts.reduce((s,c)=>s+c.amount,0) * 12;
-      const perBookingCostPre = x.prop.perBookingCosts.reduce((s,c)=>s+c.amount,0);
-      const propBooksPre = getAllBookings().filter(b => getBookingPropId(b) === x.prop.id && b.nights > 0);
-      const avgNightsPre = propBooksPre.length > 0 ? propBooksPre.reduce((s,b)=>s+b.nights,0)/propBooksPre.length : 3;
-      const shortRevPre = pfPre.revenue || pfPre.shortTermRevenue || 0; // revenue（最新更新値）を優先
-      const estDaysPre = Math.round(pfPre.occupancy / 100 * 365);
-      const maxDaysPre = x.prop.maxAnnualNights;
-      const cappedDaysPre = maxDaysPre && estDaysPre > maxDaysPre ? maxDaysPre : estDaysPre;
-      const cappedRevPre = maxDaysPre && estDaysPre > maxDaysPre ? Math.round(shortRevPre * maxDaysPre / estDaysPre) : shortRevPre;
-      remainingMonthsForSummary = Math.max((nowM >= 4 ? (15 - nowM) : (3 - nowM + 1)) - x.futureBookedMonths.size, 0);
-      const monthFractionPre = Math.min(remainingMonthsForSummary, 12) / 12;
-      const cappedRevAdjPre = Math.round(cappedRevPre * monthFractionPre);
-      const annualFixedAdjPre = Math.round(annualFixedPre * monthFractionPre);
-      const estBookingsPre = Math.round(cappedDaysPre * monthFractionPre / avgNightsPre);
-      forecastProfitForSummary = cappedRevAdjPre - annualFixedAdjPre - perBookingCostPre * estBookingsPre;
-      totalProfitWithForecast = x.cumulativeProfit + forecastProfitForSummary;
-      totalRemainingWithForecast = Math.max(x.initialTotal - totalProfitWithForecast, 0);
-      forecastPctForDonut = x.initialTotal > 0 ? Math.max(Math.min(Math.round(forecastProfitForSummary / x.initialTotal * 100), 100 - x.pct), 0) : 0;
+      // cumulativeProfit に既に未来空き月の予測が含まれているため、追加予測は0（二重カウント防止）
+      hasForecastForSummary = false;
+      forecastProfitForSummary = 0;
+      totalProfitWithForecast = x.cumulativeProfit;
+      totalRemainingWithForecast = x.remaining;
+      forecastPctForDonut = 0;
     }
 
     const donutSvg = renderDonut(x.pct, forecastPctForDonut);
