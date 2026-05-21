@@ -2338,9 +2338,9 @@ function renderProfitChart(monthlyStats, monthlyTarget) {
   if (validP.length === 0) return '<div style="text-align:center;color:#ccc;padding:20px;font-size:13px">データなし</div>';
   const targetLine = (typeof monthlyTarget === 'number' && monthlyTarget > 0) ? monthlyTarget : null;
   const maxAbs = Math.max(...validP.map(Math.abs), targetLine || 0, 1);
-  const W = 300, H = 180;
+  const W = 300, H = 195;
   const barW = (W / 12) * 0.58;
-  const labelH = 22; // 金額ラベル用の上部余白
+  const labelH = 32; // 金額＋利益率の2行分の上部余白
   const footH = 16; // 月ラベル用の下部余白
   const chartH = H - labelH - footH;
   const baseline = labelH + chartH * 0.62;
@@ -2355,45 +2355,27 @@ function renderProfitChart(monthlyStats, monthlyTarget) {
     const y = p >= 0 ? baseline - bh : baseline;
     const fill = p >= 0 ? '#4caf50' : '#ef5350';
     svgBars += '<rect x="'+(cx - barW/2).toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+bh.toFixed(1)+'" fill="'+fill+'" rx="2"/>';
-    // 金額ラベルのみ（利益率は折れ線で表示）
+    // 金額＋利益率を2行で併記
+    const ms = monthlyStats[i];
+    const margin = (ms && ms.revenue > 0) ? Math.round(p / ms.revenue * 100) : null;
+    const marginText = margin !== null ? '('+(margin<0?'▲':'')+Math.abs(margin)+'%)' : '';
     const anchor = cx < 30 ? 'start' : cx > W - 30 ? 'end' : 'middle';
     const lx = anchor === 'start' ? (cx - barW/2).toFixed(1) : anchor === 'end' ? (cx + barW/2).toFixed(1) : cx.toFixed(1);
     const labelText = fmtBar(p);
     if (p >= 0) {
-      const ly = (baseline - bh - 4).toFixed(1);
-      svgBars += '<text x="'+lx+'" y="'+ly+'" text-anchor="'+anchor+'" font-size="9" font-weight="800" fill="#2e7d32" stroke="white" stroke-width="2.5" paint-order="stroke">'+labelText+'</text>';
+      const lyAmount = (baseline - bh - 12).toFixed(1);
+      const lyMargin = (baseline - bh - 3).toFixed(1);
+      svgBars += '<text x="'+lx+'" y="'+lyAmount+'" text-anchor="'+anchor+'" font-size="9" font-weight="800" fill="#2e7d32" stroke="white" stroke-width="2.5" paint-order="stroke">'+labelText+'</text>';
+      if (marginText) svgBars += '<text x="'+lx+'" y="'+lyMargin+'" text-anchor="'+anchor+'" font-size="7.5" font-weight="700" fill="#7c3aed" stroke="white" stroke-width="2" paint-order="stroke">'+marginText+'</text>';
     } else {
-      const ly = (baseline + Math.max(bh, 4) + 10).toFixed(1);
-      svgBars += '<text x="'+lx+'" y="'+ly+'" text-anchor="'+anchor+'" font-size="9" font-weight="800" fill="#c62828" stroke="white" stroke-width="2.5" paint-order="stroke">'+labelText+'</text>';
+      const lyAmount = (baseline + Math.max(bh, 4) + 9).toFixed(1);
+      const lyMargin = (baseline + Math.max(bh, 4) + 18).toFixed(1);
+      svgBars += '<text x="'+lx+'" y="'+lyAmount+'" text-anchor="'+anchor+'" font-size="9" font-weight="800" fill="#c62828" stroke="white" stroke-width="2.5" paint-order="stroke">'+labelText+'</text>';
+      if (marginText) svgBars += '<text x="'+lx+'" y="'+lyMargin+'" text-anchor="'+anchor+'" font-size="7.5" font-weight="700" fill="#7c3aed" stroke="white" stroke-width="2" paint-order="stroke">'+marginText+'</text>';
     }
   });
 
-  // 利益率の折れ線（紫）：上部labelH〜下部baseline+chartH*0.38の範囲を -50%〜100% にマップ
-  const marginMin = -50, marginMax = 100;
-  const marginYTop = labelH + 4;
-  const marginYBot = H - footH - 4;
-  const marginToY = m => {
-    const clamped = Math.max(marginMin, Math.min(marginMax, m));
-    return marginYBot - (clamped - marginMin) / (marginMax - marginMin) * (marginYBot - marginYTop);
-  };
-  const marginPoints = [];
-  monthlyStats.forEach((ms, i) => {
-    if (!ms || ms.revenue <= 0) return;
-    const cx = (W / 12) * (i + 0.5);
-    const margin = Math.round(ms.profit / ms.revenue * 100);
-    marginPoints.push({ x: cx, y: marginToY(margin), margin });
-  });
-  let svgLine = '';
-  if (marginPoints.length >= 1) {
-    if (marginPoints.length >= 2) {
-      const path = marginPoints.map((pt, i) => (i===0?'M':'L')+pt.x.toFixed(1)+' '+pt.y.toFixed(1)).join(' ');
-      svgLine += '<path d="'+path+'" fill="none" stroke="#7c3aed" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>';
-    }
-    marginPoints.forEach(pt => {
-      svgLine += '<circle cx="'+pt.x.toFixed(1)+'" cy="'+pt.y.toFixed(1)+'" r="2.5" fill="#7c3aed"/>';
-      svgLine += '<text x="'+pt.x.toFixed(1)+'" y="'+(pt.y - 5).toFixed(1)+'" text-anchor="middle" font-size="8" font-weight="800" fill="#7c3aed" stroke="white" stroke-width="2" paint-order="stroke">'+(pt.margin<0?'▲':'')+Math.abs(pt.margin)+'%</text>';
-    });
-  }
+  const svgLine = ''; // 折れ線は廃止（金額の下に括弧で併記）
 
   const fyOrder = [4,5,6,7,8,9,10,11,12,1,2,3];
   const labels = monthlyStats.map((m, i) => {
@@ -2411,9 +2393,9 @@ function renderProfitChart(monthlyStats, monthlyTarget) {
       + '<text x="'+(W-2)+'" y="'+(parseFloat(ty)-3)+'" text-anchor="end" font-size="7.5" font-weight="700" fill="#ff9800">目標 '+fmtT(targetLine)+'</text>';
   }
 
-  return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;font-size:10px;color:#888">'
+  return '<div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;font-size:10px;color:#888;flex-wrap:wrap">'
     + '<span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:8px;background:#4caf50;border-radius:1px"></span>利益（円）</span>'
-    + '<span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:2px;background:#7c3aed"></span>利益率（％）</span>'
+    + '<span style="color:#7c3aed;font-weight:700">(XX%) = 利益率</span>'
     + '</div>'
     + '<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="display:block">'
     + '<line x1="0" y1="'+baseline+'" x2="'+W+'" y2="'+baseline+'" stroke="#eee" stroke-width="1.5"/>'
@@ -2559,6 +2541,8 @@ function renderInvestmentRecovery() {
     const monthForecastVar = estMonthBookings * perBookingLocal;
 
     let totalRevenue = 0, totalVarCosts = 0, totalFixedCosts = 0;
+    let pastActualProfit = 0;     // 過去月の実績利益（純粋な実績）
+    let futureForecastProfit = 0; // 未来月の利益（実績予約＋PriceLabs予測補填）
     const futureMonthProfits = []; // 未来月の利益（回収月数計算用）
     const months = totalMonthsOperating(p);
     if (p.operationStart) {
@@ -2586,7 +2570,13 @@ function renderInvestmentRecovery() {
         }
         totalRevenue += monthRev;
         totalVarCosts += monthVar;
-        if (isFuture) futureMonthProfits.push(monthRev - monthFixed - monthVar);
+        const monthProfit = monthRev - monthFixed - monthVar;
+        if (isFuture) {
+          futureMonthProfits.push(monthProfit);
+          futureForecastProfit += monthProfit;
+        } else {
+          pastActualProfit += monthProfit;
+        }
         _cm++; if (_cm > 12) { _cm = 1; _cy++; }
       }
     } else {
@@ -2629,7 +2619,7 @@ function renderInvestmentRecovery() {
     const pct = initialTotal > 0 ? Math.round(cumulativeProfit / initialTotal * 100) : 0;
     const monthsNeeded = avgMonthlyProfit > 0 && remaining > 0 ? Math.ceil(remaining / avgMonthlyProfit) : null;
 
-    return { prop: p, initialTotal, cumulativeProfit, totalFixedCosts, totalRevenue, months, remaining, pct, avgMonthlyProfit, monthsNeeded, futureBookedMonths, yearEndProfit, yearEndPct };
+    return { prop: p, initialTotal, cumulativeProfit, totalFixedCosts, totalRevenue, months, remaining, pct, avgMonthlyProfit, monthsNeeded, futureBookedMonths, yearEndProfit, yearEndPct, pastActualProfit, futureForecastProfit };
   });
 
   const totalInitial = propStats.reduce((s, x) => s + x.initialTotal, 0);
@@ -2754,27 +2744,30 @@ function renderInvestmentRecovery() {
       : fmtS(displayRemaining);
     const displayRemainingColor = displayRemaining === 0 ? '#1C9A52' : '#e65100';
 
+    const actualPctDonut = x.initialTotal > 0 ? Math.max(Math.round(x.pastActualProfit / x.initialTotal * 100), 0) : 0;
+    const forecastPctDonut2 = x.initialTotal > 0 ? Math.max(Math.round(x.futureForecastProfit / x.initialTotal * 100), 0) : 0;
+    const donutSvg2 = renderDonut(actualPctDonut, forecastPctDonut2);
     html += `<div class="recovery-prop-row">
       <!-- ヘッダー: ドーナツ + 物件名 -->
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-        ${donutSvg}
+        ${donutSvg2}
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:700;color:${getPropColor(x.prop.id)}">${x.prop.name}</div>
-          <div style="font-size:11px;color:#888;margin-top:2px">実績 <strong style="color:#66bb6a">${x.pct}%</strong>${hasForecastForSummary ? ' + 予測 <strong style="color:#42a5f5">'+forecastPctForDonut+'%</strong>' : ''}</div>
-          ${x.monthsNeeded !== null ? '<div style="font-size:10px;color:#888;margin-top:2px">実績ベース: あと約<strong style="color:#e65100">'+x.monthsNeeded+'ヶ月</strong>で回収見込み</div>' : ''}
+          <div style="font-size:11px;color:#888;margin-top:2px">実績 <strong style="color:#66bb6a">${actualPctDonut}%</strong>${forecastPctDonut2 !== 0 ? ' + 予測 <strong style="color:#42a5f5">'+forecastPctDonut2+'%</strong>' : ''} = <strong style="color:#1C1C1E">${x.pct}%</strong></div>
+          ${x.monthsNeeded !== null ? '<div style="font-size:10px;color:#888;margin-top:2px">あと約<strong style="color:#e65100">'+x.monthsNeeded+'ヶ月</strong>で回収見込み</div>' : ''}
         </div>
       </div>
 
-      <!-- 3ステップ表示: 実績利益 → 予測利益 → 残り回収額 -->
+      <!-- 3ステップ表示: 実績利益（過去） + 予測利益（未来） = 残り回収額 -->
       <div style="display:grid;grid-template-columns:1fr 18px 1fr 18px 1fr;align-items:center;gap:2px;padding:10px;background:#f8f9fb;border-radius:12px;margin-bottom:8px">
         <div style="text-align:center">
-          <div style="font-size:11px;color:#888;margin-bottom:4px">実績利益</div>
-          <div style="font-size:13px;font-weight:800;color:${x.cumulativeProfit>=0?'#1C9A52':'#E53935'}">${x.cumulativeProfit<0?'▲':''}${fmtS(Math.abs(x.cumulativeProfit))}</div>
+          <div style="font-size:11px;color:#888;margin-bottom:4px">実績利益（過去）</div>
+          <div style="font-size:13px;font-weight:800;color:${x.pastActualProfit>=0?'#1C9A52':'#E53935'}">${x.pastActualProfit<0?'▲':''}${fmtS(Math.abs(x.pastActualProfit))}</div>
         </div>
         <div style="text-align:center;font-size:14px;color:#bbb;font-weight:300">＋</div>
         <div style="text-align:center">
-          <div style="font-size:11px;color:#888;margin-bottom:4px">${hasForecastForSummary ? '予測利益（残'+remainingMonthsForSummary+'ヶ月）' : '予測利益'}</div>
-          <div style="font-size:13px;font-weight:800;color:${hasForecastForSummary?'#F07C3F':'#ddd'}">${hasForecastForSummary ? (forecastProfitForSummary<0?'▲':'')+fmtS(Math.abs(forecastProfitForSummary)) : '−'}</div>
+          <div style="font-size:11px;color:#888;margin-bottom:4px">予測利益（未来）</div>
+          <div style="font-size:13px;font-weight:800;color:${x.futureForecastProfit>=0?'#F07C3F':'#E53935'}">${x.futureForecastProfit<0?'▲':''}${fmtS(Math.abs(x.futureForecastProfit))}</div>
         </div>
         <div style="text-align:center;font-size:14px;color:#bbb;font-weight:300">＝</div>
         <div style="text-align:center">
@@ -2811,44 +2804,21 @@ function renderInvestmentRecovery() {
     </div>`;
   });
 
-  // 合計（予測利益 = 売上 - 固定費按分 - 変動費）
-  const fyForecastTotal = (() => {
-    const fyKey = String(nowY);
-    const fd = pricelabsForecast[fyKey];
-    if (!fd) return null;
-    let total = 0, hasAny = false;
-    propStats.forEach(x => {
-      const pf = fd[x.prop.id];
-      if (!pf) return;
-      hasAny = true;
-      const annualFixed = x.prop.monthlyFixedCosts.reduce((s,c)=>s+c.amount,0) * 12;
-      const perBookingCost = x.prop.perBookingCosts.reduce((s,c)=>s+c.amount,0);
-      const propBooks = getAllBookings().filter(b => getBookingPropId(b) === x.prop.id && b.nights > 0);
-      const avgNights = propBooks.length > 0 ? propBooks.reduce((s,b)=>s+b.nights,0)/propBooks.length : 3;
-      const shortRev = pf.revenue || pf.shortTermRevenue || 0; // revenue（最新更新値）を優先
-      const estDays = Math.round(pf.occupancy / 100 * 365);
-      const maxDays = x.prop.maxAnnualNights;
-      const cappedDays = maxDays && estDays > maxDays ? maxDays : estDays;
-      const cappedRev = maxDays && estDays > maxDays ? Math.round(shortRev * maxDays / estDays) : shortRev;
-      const remainingMonths2 = Math.max((nowM >= 4 ? (15 - nowM) : (3 - nowM + 1)) - x.futureBookedMonths.size, 0);
-      const monthFraction2 = Math.min(remainingMonths2, 12) / 12;
-      const cappedRevAdj = Math.round(cappedRev * monthFraction2);
-      const annualFixedAdj = Math.round(annualFixed * monthFraction2);
-      const estBookings2 = Math.round(cappedDays * monthFraction2 / avgNights);
-      total += cappedRevAdj - annualFixedAdj - perBookingCost * estBookings2;
-    });
-    return hasAny ? total : null;
-  })();
+  // 合計（実績/予測の内訳・二重カウント回避）
+  const totalPastActual = propStats.reduce((s, x) => s + x.pastActualProfit, 0);
+  const totalFutureForecast = propStats.reduce((s, x) => s + x.futureForecastProfit, 0);
+  const netActualBase = totalPastActual - totalInitial;
+  const netWithForecast = totalProfit - totalInitial; // totalProfit = pastActual + futureForecast
 
   html += `<div class="recovery-total">
     <div class="recovery-total-row"><span style="color:#666">総初期投資</span><span style="font-weight:700">${fmtS(totalInitial)}</span></div>
-    <div class="recovery-total-row"><span style="color:#666">累積実績利益合計</span><span style="font-weight:700;color:${totalProfit>=0?'#1C9A52':'#E53935'}">${totalProfit<0?'▲':''}${fmtS(Math.abs(totalProfit))}</span></div>
-    ${fyForecastTotal !== null ? `<div class="recovery-total-row"><span style="color:#7b1fa2">PL年間予測利益合計（残月按分）</span><span style="font-weight:700;color:${fyForecastTotal>=0?'#7b1fa2':'#E53935'}">${fyForecastTotal<0?'▲':''}${fmtS(Math.abs(fyForecastTotal))}</span></div>` : ''}
+    <div class="recovery-total-row"><span style="color:#666">実績利益合計（過去）</span><span style="font-weight:700;color:${totalPastActual>=0?'#1C9A52':'#E53935'}">${totalPastActual<0?'▲':''}${fmtS(Math.abs(totalPastActual))}</span></div>
+    <div class="recovery-total-row"><span style="color:#7b1fa2">予測利益合計（未来・PriceLabs補填）</span><span style="font-weight:700;color:${totalFutureForecast>=0?'#7b1fa2':'#E53935'}">${totalFutureForecast<0?'▲':''}${fmtS(Math.abs(totalFutureForecast))}</span></div>
     <div class="recovery-total-row">
       <span style="color:#444">純損益（実績ベース）</span>
-      <span style="color:${netPos>=0?'#1C9A52':'#E53935'}">${netPos>=0?'':'▲'}${fmtS(Math.abs(netPos))}</span>
+      <span style="color:${netActualBase>=0?'#1C9A52':'#E53935'}">${netActualBase>=0?'':'▲'}${fmtS(Math.abs(netActualBase))}</span>
     </div>
-    ${fyForecastTotal !== null ? (() => { const netWithForecast = totalProfit + fyForecastTotal - totalInitial; return `<div class="recovery-total-row" style="border-top:1px dashed #e0e0e0;padding-top:6px;margin-top:2px"><span style="color:#7b1fa2;font-weight:700">純損益（予測込み）</span><span style="font-weight:700;color:${netWithForecast>=0?'#1C9A52':'#E53935'}">${netWithForecast>=0?'':'▲'}${fmtS(Math.abs(netWithForecast))}</span></div>`; })() : ''}
+    <div class="recovery-total-row" style="border-top:1px dashed #e0e0e0;padding-top:6px;margin-top:2px"><span style="color:#7b1fa2;font-weight:700">純損益（予測込み）</span><span style="font-weight:700;color:${netWithForecast>=0?'#1C9A52':'#E53935'}">${netWithForecast>=0?'':'▲'}${fmtS(Math.abs(netWithForecast))}</span></div>
   </div>
   </div></div>`;
 
