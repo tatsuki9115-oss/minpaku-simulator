@@ -456,8 +456,8 @@
     .page {
       margin-left: auto;
       margin-right: auto;
-      max-width: 1200px;
-      padding: 80px 40px 60px;   /* 80px = 上部タブ52px + 余白28px */
+      max-width: 1040px;
+      padding: 80px 32px 60px;   /* 80px = 上部タブ52px + 余白28px */
     }
     .page#page-settings { padding-bottom: 100px; }
 
@@ -492,7 +492,15 @@
     }
     .pc-booking-grid > * { margin-bottom: 0 !important; }
     /* 保存バーもmax-width追従 */
-    .save-bar-inner { max-width: 1200px; margin: 0 auto; }
+    .save-bar-inner { max-width: 1040px; margin: 0 auto; }
+
+    /* ── ダッシュボード密度調整 ── */
+    /* 180日メーター・投資回収バーの右側に大きな余白できるのを防ぐ */
+    #page-bookings .card { padding: 14px 18px; }
+    /* アラートカードのボタンを右に張り付かせない（適度な右マージン） */
+    #page-bookings .card[style*="border:2px solid #E53935"] > div[style*="padding:11px 0"] > button { margin-right: 4px; }
+    /* KPIカードの値フォントを上げて隙間を減らす */
+    #page-bookings .kpi-grid-3 .kpi-value { font-size: 22px; }
 
     /* ── モーダル（カレンダー詳細） ── */
     .day-modal { max-width: 520px; border-radius: 16px; }
