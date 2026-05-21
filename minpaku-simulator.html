@@ -384,6 +384,28 @@
   }
   #logout-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
 
+  /* ===== ダッシュボード共通グリッド ===== */
+  .kpi-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .kpi-grid-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+  .kpi-grid-4-flat { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+  /* ===== スマホ調整（600px以下） ===== */
+  @media (max-width: 600px) {
+    /* KPI 3列 → 2列、3つ目（利益率）は全幅 */
+    .kpi-grid-3 { grid-template-columns: 1fr 1fr !important; }
+    .kpi-grid-3 > *:nth-child(3) { grid-column: 1 / -1; }
+    /* KPI 4列 → 2x2 */
+    .kpi-grid-4 { grid-template-columns: 1fr 1fr !important; }
+    .kpi-grid-4-flat { grid-template-columns: 1fr 1fr !important; }
+    .kpi-grid-4-flat > div:nth-child(2) { border-right: none !important; }
+    .kpi-grid-4-flat > div:nth-child(1), .kpi-grid-4-flat > div:nth-child(2) { border-bottom: 1px solid #F2F1EE; }
+    /* 日付＋次の予約バッジを縦並びに */
+    .dash-date-row { flex-direction: column; align-items: flex-start !important; gap: 12px; }
+    .dash-next-badges { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+    /* 予約カードのチェックボタン2x2グリッド維持・サイズ調整 */
+    .dash-chk-btns button, .dash-chk-btns a { min-width: 0 !important; font-size: 11px !important; padding: 6px 4px !important; }
+  }
+
   /* ===== PC レイアウト（900px以上） ===== */
   @media (min-width: 900px) {
 
@@ -434,7 +456,7 @@
     .page {
       margin-left: auto;
       margin-right: auto;
-      max-width: 980px;
+      max-width: 1200px;
       padding: 80px 40px 60px;   /* 80px = 上部タブ52px + 余白28px */
     }
     .page#page-settings { padding-bottom: 100px; }
@@ -465,10 +487,12 @@
     /* ── 予約タブ（ダッシュボード）── */
     .pc-booking-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1fr;
       gap: 12px;
     }
     .pc-booking-grid > * { margin-bottom: 0 !important; }
+    /* 保存バーもmax-width追従 */
+    .save-bar-inner { max-width: 1200px; margin: 0 auto; }
 
     /* ── モーダル（カレンダー詳細） ── */
     .day-modal { max-width: 520px; border-radius: 16px; }
@@ -3479,15 +3503,15 @@ function renderDashboard() {
       <div style="font-size:10px;color:#B0ADA8;margin-top:2px">${n.prop.name}</div>
     </div>`).join('');
   html += `<div class="card" style="margin-bottom:12px">
-    <div style="display:flex;align-items:center;justify-content:space-between">
+    <div class="dash-date-row" style="display:flex;align-items:center;justify-content:space-between">
       <div>
         <div style="font-size:24px;font-weight:900;color:#1C1C1E;line-height:1">${now.getMonth()+1}月${now.getDate()}日</div>
         <div style="font-size:13px;color:#B0ADA8;margin-top:3px">${now.getFullYear()}年（${dayNames[now.getDay()]}）</div>
       </div>
-      <div style="display:flex;gap:8px">${nextBadges}</div>
+      <div class="dash-next-badges" style="display:flex;gap:8px">${nextBadges}</div>
     </div>
     ${thisMonthBooks.length > 0 || prevMonthBooks.length > 0 ? `
-    <div style="margin-top:12px;padding-top:10px;border-top:1px solid #F2F1EE;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+    <div class="kpi-grid-3" style="margin-top:12px;padding-top:10px;border-top:1px solid #F2F1EE;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
       <div class="kpi-card" style="background:#F9F8F6;box-shadow:none">
         <div class="kpi-label">今月の売上</div>
         <div class="kpi-value">${fmtShort(thisMonthRev)}円</div>
@@ -3804,10 +3828,10 @@ function renderDashboard() {
         const checkinMsgBtn = (type === 'in' && b.code && _diffForCI >= 0 && _diffForCI <= 2)
           ? `<button onclick="toggleCheckForDash('${b.code}','checkinMsgDone')" style="font-size:12px;font-weight:800;padding:7px 10px;border-radius:10px;border:2px solid ${checkinMsgDone?'#1565C0':'#E53935'};cursor:pointer;background:${checkinMsgDone?'#E3F2FD':'#FFEBEE'};color:${checkinMsgDone?'#1565C0':'#D32F2F'};white-space:nowrap;min-width:76px;text-align:center">${checkinMsgDone?'📩 済':'📩 CI連絡'}</button>`
           : '';
-        const checkBtns = b.code ? `<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
-              <button onclick="toggleCheckForDash('${b.code}','formDone')" style="font-size:12px;font-weight:800;padding:7px 10px;border-radius:10px;border:2px solid ${formDone?'#16a34a':'#f97316'};cursor:pointer;background:${formDone?'#dcfce7':'#fff7ed'};color:${formDone?'#15803d':'#c2410c'};white-space:nowrap;min-width:76px;text-align:center">${formDone?'📋 済':'📋 名簿'}</button>
+        const checkBtns = b.code ? `<div class="dash-chk-btns" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;flex-shrink:0">
+              <button onclick="toggleCheckForDash('${b.code}','formDone')" style="font-size:12px;font-weight:800;padding:7px 10px;border-radius:10px;border:2px solid ${formDone?'#16a34a':'#f97316'};cursor:pointer;background:${formDone?'#dcfce7':'#fff7ed'};color:${formDone?'#15803d':'#c2410c'};white-space:nowrap;min-width:72px;text-align:center">${formDone?'📋 済':'📋 名簿'}</button>
               ${checkinMsgBtn}
-              <button onclick="toggleCheckForDash('${b.code}','cleaningDone')" style="font-size:12px;font-weight:800;padding:7px 10px;border-radius:10px;border:2px solid ${cleanDone?'#0284c7':'#a855f7'};cursor:pointer;background:${cleanDone?'#e0f2fe':'#faf5ff'};color:${cleanDone?'#0369a1':'#7e22ce'};white-space:nowrap;min-width:76px;text-align:center">${cleanDone?'🧹 済':'🧹 清掃'}</button>
+              <button onclick="toggleCheckForDash('${b.code}','cleaningDone')" style="font-size:12px;font-weight:800;padding:7px 10px;border-radius:10px;border:2px solid ${cleanDone?'#0284c7':'#a855f7'};cursor:pointer;background:${cleanDone?'#e0f2fe':'#faf5ff'};color:${cleanDone?'#0369a1':'#7e22ce'};white-space:nowrap;min-width:72px;text-align:center">${cleanDone?'🧹 済':'🧹 清掃'}</button>
               ${garbageBtn}
             </div>` : '';
 
@@ -3981,7 +4005,7 @@ function renderAnnual() {
           <div class="month-stat"><div class="month-stat-label">稼働率</div><div class="month-stat-value">${occRate}%</div><div class="occ-bar-wrap"><div class="occ-bar-fill" style="width:${occRate}%"></div></div></div>
           <div class="month-stat"><div class="month-stat-label">稼働日数</div><div class="month-stat-value">${ms.nights}/${maxNights}日</div></div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;padding-top:12px;border-top:1px solid #F2F1EE;margin-top:4px">
+        <div class="kpi-grid-4" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;padding-top:12px;border-top:1px solid #F2F1EE;margin-top:4px">
           <div style="background:#F9F8F6;border-radius:10px;padding:10px 12px">
             <div style="font-size:10px;font-weight:700;color:#C8C5C0;margin-bottom:4px">ゲスト支払</div>
             <div style="font-family:'Inter',sans-serif;font-size:15px;font-weight:800;color:#999">${fmtShort(getGuestPayment(ms.revenue))}円</div>
@@ -4055,7 +4079,7 @@ function renderAnnual() {
           const totalGP = getGuestPayment(ms.revenue);
           const isTP = ms.profit >= 0;
           const totalMargin = ms.revenue > 0 ? Math.round(ms.profit/ms.revenue*100) : null;
-          return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0;border-top:2px solid #F2F1EE;background:#FAFAF9">
+          return `<div class="kpi-grid-4-flat" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0;border-top:2px solid #F2F1EE;background:#FAFAF9">
             <div style="padding:10px 14px;border-right:1px solid #F2F1EE">
               <div style="font-size:9px;font-weight:700;color:#C8C5C0;margin-bottom:3px">合計 ゲスト支払</div>
               <div style="font-size:14px;font-weight:800;color:#aaa">¥${fmt(totalGP)}</div>
@@ -4148,7 +4172,7 @@ function renderAnnual() {
       <div style="font-size:11px;font-weight:700;color:#B0ADA8;letter-spacing:.06em">${currentAnnualYear}年度 収支サマリー</div>
       <div style="font-size:10px;color:#C8C5C0">${kpiPeriodLabel}</div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+    <div class="kpi-grid-4" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px">
       <div style="background:#F9F8F6;border-radius:10px;padding:10px 12px">
         <div style="font-size:10px;font-weight:700;color:#C8C5C0;margin-bottom:4px">ゲスト支払</div>
         <div style="font-family:'Inter',sans-serif;font-size:16px;font-weight:800;color:#999;line-height:1.1">${fmtShort(totalGuestPayment)}円</div>
