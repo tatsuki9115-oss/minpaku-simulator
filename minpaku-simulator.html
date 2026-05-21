@@ -2540,18 +2540,24 @@ function renderInvestmentRecovery() {
       }
     });
 
-    // 売上・変動費（実費 or per-booking）
+    // ===== Option A: 過去実績のみ（メイン表示用） =====
+    // 売上・変動費：チェックインが今日以前の予約のみ
+    const todayStart = new Date(nowY, nowM-1, new Date().getDate());
+    todayStart.setHours(0,0,0,0);
+    const pastBooks = books.filter(b => {
+      const [y,m,d] = b.checkin.split('/').map(Number);
+      return new Date(y, m-1, d) < todayStart;
+    });
     let totalRevenue = 0, totalVarCosts = 0;
-    books.forEach(b => {
+    pastBooks.forEach(b => {
       totalRevenue += b.revenue;
       const [by, bm] = b.checkin.split('/').map(Number);
       if (!hasActualCosts(p.id, by, bm)) {
         totalVarCosts += getPerBookingTotal(b, p);
       }
     });
-    // 実費保存済み月の変動費を月単位で加算（重複防止）
     { const _doneM = new Set();
-      books.forEach(b => {
+      pastBooks.forEach(b => {
         const [by, bm] = b.checkin.split('/').map(Number);
         const _mk = `${by}_${bm}`;
         if (hasActualCosts(p.id, by, bm) && !_doneM.has(_mk)) {
@@ -2560,8 +2566,24 @@ function renderInvestmentRecovery() {
         }
       });
     }
+    // 固定費：営業開始〜今月まで
+    const months = totalMonthsOperating(p);
+    let totalFixedCosts = 0;
+    if (p.operationStart) {
+      const [_sy, _sm] = p.operationStart.split('-').map(Number);
+      let _cy = _sy, _cm = _sm;
+      while (_cy < nowY || (_cy === nowY && _cm <= nowM)) {
+        totalFixedCosts += getPropMonthFixedCosts(p, _cy, _cm);
+        _cm++; if (_cm > 12) { _cm = 1; _cy++; }
+      }
+    } else {
+      totalFixedCosts = monthlyFixedTotal * months;
+    }
 
-    // 営業開始〜年度末まで固定費 + 未来空き月は PriceLabs 予測で補填（ダッシュボードと統一）
+    const cumulativeProfit = totalRevenue - totalFixedCosts - totalVarCosts;
+
+    // ===== Option C: 年度末見込み（サブ表示用） =====
+    let forecastRevenue = 0, forecastVarCosts = 0, forecastFixedCosts = 0;
     const bookedMonthKeys = new Set();
     books.forEach(b => {
       const [by, bm] = b.checkin.split('/').map(Number);
@@ -2578,8 +2600,6 @@ function renderInvestmentRecovery() {
     const perBookingLocal = (p.perBookingCosts||[]).reduce((s,c)=>s+c.amount,0);
     const estMonthBookings = pf ? Math.round((pf.occupancy / 100 * 365 / 12) / avgNightsLocal) : 0;
     const monthForecastVar = estMonthBookings * perBookingLocal;
-    const months = totalMonthsOperating(p);
-    let totalFixedCosts = 0;
     if (p.operationStart) {
       const [_sy, _sm] = p.operationStart.split('-').map(Number);
       let _cy = _sy, _cm = _sm;
@@ -2587,19 +2607,35 @@ function renderInvestmentRecovery() {
         const isFuture = _cy > nowY || (_cy === nowY && _cm > nowM);
         const hasBooking = bookedMonthKeys.has(`${_cy}_${_cm}`);
         if (!isFuture || hasBooking) {
-          totalFixedCosts += getPropMonthFixedCosts(p, _cy, _cm);
+          forecastFixedCosts += getPropMonthFixedCosts(p, _cy, _cm);
         } else if (pf) {
-          totalFixedCosts += getPropMonthFixedCosts(p, _cy, _cm);
-          totalRevenue += monthForecastRev;
-          totalVarCosts += monthForecastVar;
+          forecastFixedCosts += getPropMonthFixedCosts(p, _cy, _cm);
+          forecastRevenue += monthForecastRev;
+          forecastVarCosts += monthForecastVar;
         }
-        _cm++; if (_cm > 12) { _cm = 1; _cy++; }
+      _cm++; if (_cm > 12) { _cm = 1; _cy++; }
       }
-    } else {
-      totalFixedCosts = monthlyFixedTotal * months;
     }
-
-    const cumulativeProfit = totalRevenue - totalFixedCosts - totalVarCosts;
+    // 確定予約すべての売上・変動費を加算
+    books.forEach(b => {
+      forecastRevenue += b.revenue;
+      const [by, bm] = b.checkin.split('/').map(Number);
+      if (!hasActualCosts(p.id, by, bm)) {
+        forecastVarCosts += getPerBookingTotal(b, p);
+      }
+    });
+    { const _doneM = new Set();
+      books.forEach(b => {
+        const [by, bm] = b.checkin.split('/').map(Number);
+        const _mk = `${by}_${bm}`;
+        if (hasActualCosts(p.id, by, bm) && !_doneM.has(_mk)) {
+          _doneM.add(_mk);
+          forecastVarCosts += getPropMonthActualVarCosts(p, by, bm);
+        }
+      });
+    }
+    const yearEndProfit = forecastRevenue - forecastFixedCosts - forecastVarCosts;
+    const yearEndPct = initialTotal > 0 ? Math.round(yearEndProfit / initialTotal * 100) : 0;
 
     // 月別の純利益（直近3ヶ月平均 → 回収予想）
     const monthRevMap = {}, monthVarMap = {};
@@ -2643,7 +2679,7 @@ function renderInvestmentRecovery() {
     const pct = initialTotal > 0 ? Math.min(Math.round(cumulativeProfit / initialTotal * 100), 100) : 0;
     const monthsNeeded = avgMonthlyProfit > 0 && remaining > 0 ? Math.ceil(remaining / avgMonthlyProfit) : null;
 
-    return { prop: p, initialTotal, cumulativeProfit, totalFixedCosts, totalRevenue, months, remaining, pct, avgMonthlyProfit, monthsNeeded, futureBookedMonths };
+    return { prop: p, initialTotal, cumulativeProfit, totalFixedCosts, totalRevenue, months, remaining, pct, avgMonthlyProfit, monthsNeeded, futureBookedMonths, yearEndProfit, yearEndPct };
   });
 
   const totalInitial = propStats.reduce((s, x) => s + x.initialTotal, 0);
@@ -3697,10 +3733,15 @@ function renderDashboard() {
       if (!initialTotal) return null;
       const books = _allBooks.filter(b => getBookingPropId(b) === p.id);
       const perBooking = (p.perBookingCosts || []).reduce((s, c) => s + c.amount, 0);
-      // 収益・変動費（実費入力がある月は実費を使う）
+
+      // ===== Option A: 過去実績のみ（メイン表示） =====
+      const pastBooks = books.filter(b => {
+        const [y,m,d] = b.checkin.split('/').map(Number);
+        return new Date(y, m-1, d) < now;
+      });
       let totalRev = 0, totalVar = 0;
       const doneM = new Set();
-      books.forEach(b => {
+      pastBooks.forEach(b => {
         totalRev += b.revenue || 0;
         const [by, bm] = b.checkin.split('/').map(Number);
         const mk = `${by}_${bm}`;
@@ -3710,52 +3751,65 @@ function renderDashboard() {
           totalVar += getPerBookingTotal(b, p);
         }
       });
-      // 集計範囲：営業開始〜年度末（または最終予約月のうち後の方）
-      // 未来の空き月はPriceLabs予測で売上・変動費を補填
-      let maxBookY = thisYear, maxBookM = nowM2;
-      const bookedMonthSet = new Set();
-      books.forEach(b => {
-        const [by, bm] = b.checkin.split('/').map(Number);
-        bookedMonthSet.add(`${by}_${bm}`);
-        if (by > maxBookY || (by === maxBookY && bm > maxBookM)) { maxBookY = by; maxBookM = bm; }
-      });
-      // 年度末（FYは4月開始3月終わり）
-      let fyEndY = nowM2 >= 4 ? thisYear + 1 : thisYear;
-      let fyEndM = 3;
-      let endY = fyEndY, endM = fyEndM;
-      if (maxBookY > endY || (maxBookY === endY && maxBookM > endM)) {
-        endY = maxBookY; endM = maxBookM;
-      }
-      // PriceLabs予測データ
-      const fyKey = String(thisYear);
-      const pf = pricelabsForecast[fyKey] && pricelabsForecast[fyKey][p.id];
-      const monthForecastRev = pf ? ((pf.revenue || pf.shortTermRevenue || 0) / 12) : 0;
-      const propBooks = books.filter(b => b.nights > 0);
-      const avgNights = propBooks.length > 0 ? propBooks.reduce((s,b)=>s+b.nights,0)/propBooks.length : 3;
-      const estMonthBookings = pf ? Math.round((pf.occupancy / 100 * 365 / 12) / avgNights) : 0;
-      const monthForecastVar = estMonthBookings * perBooking;
       let totalFixed = 0;
       if (p.operationStart) {
         const [sy, sm] = p.operationStart.split('-').map(Number);
         let cy = sy, cm = sm;
-        while (cy < endY || (cy === endY && cm <= endM)) {
-          const isFuture = cy > thisYear || (cy === thisYear && cm > nowM2);
-          const hasBooking = bookedMonthSet.has(`${cy}_${cm}`);
-          // 過去月・予約あり月：実費固定費を加算
-          // 未来空き月で予測あり：固定費＋予測売上＋予測変動費を加算
-          if (!isFuture || hasBooking) {
-            totalFixed += getPropMonthFixedCosts(p, cy, cm);
-          } else if (pf) {
-            totalFixed += getPropMonthFixedCosts(p, cy, cm);
-            totalRev += monthForecastRev;
-            totalVar += monthForecastVar;
-          }
+        while (cy < thisYear || (cy === thisYear && cm <= nowM2)) {
+          totalFixed += getPropMonthFixedCosts(p, cy, cm);
           cm++; if (cm > 12) { cm = 1; cy++; }
         }
       }
       const cumProfit = totalRev - totalFixed - totalVar;
       const remaining = Math.max(initialTotal - cumProfit, 0);
       const pct = initialTotal > 0 ? Math.min(Math.round(cumProfit / initialTotal * 100), 100) : 0;
+
+      // ===== Option C: 年度末見込み（サブ表示） =====
+      let yeRev = 0, yeVar = 0, yeFix = 0;
+      const bookedMonthSet = new Set();
+      let maxBookY = thisYear, maxBookM = nowM2;
+      books.forEach(b => {
+        const [by, bm] = b.checkin.split('/').map(Number);
+        bookedMonthSet.add(`${by}_${bm}`);
+        if (by > maxBookY || (by === maxBookY && bm > maxBookM)) { maxBookY = by; maxBookM = bm; }
+      });
+      let fyEndY = nowM2 >= 4 ? thisYear + 1 : thisYear;
+      let endY = fyEndY, endM = 3;
+      if (maxBookY > endY || (maxBookY === endY && maxBookM > endM)) { endY = maxBookY; endM = maxBookM; }
+      const pf = pricelabsForecast[String(thisYear)] && pricelabsForecast[String(thisYear)][p.id];
+      const monthForecastRev = pf ? ((pf.revenue || pf.shortTermRevenue || 0) / 12) : 0;
+      const pBks = books.filter(b => b.nights > 0);
+      const avgN = pBks.length > 0 ? pBks.reduce((s,b)=>s+b.nights,0)/pBks.length : 3;
+      const estMonthBkgs = pf ? Math.round((pf.occupancy / 100 * 365 / 12) / avgN) : 0;
+      const monthForecastVar = estMonthBkgs * perBooking;
+      if (p.operationStart) {
+        const [sy, sm] = p.operationStart.split('-').map(Number);
+        let cy = sy, cm = sm;
+        while (cy < endY || (cy === endY && cm <= endM)) {
+          const isFuture = cy > thisYear || (cy === thisYear && cm > nowM2);
+          const hasBooking = bookedMonthSet.has(`${cy}_${cm}`);
+          if (!isFuture || hasBooking) {
+            yeFix += getPropMonthFixedCosts(p, cy, cm);
+          } else if (pf) {
+            yeFix += getPropMonthFixedCosts(p, cy, cm);
+            yeRev += monthForecastRev;
+            yeVar += monthForecastVar;
+          }
+          cm++; if (cm > 12) { cm = 1; cy++; }
+        }
+      }
+      books.forEach(b => {
+        yeRev += b.revenue || 0;
+        const [by, bm] = b.checkin.split('/').map(Number);
+        const mk = `${by}_${bm}`;
+        if (hasActualCosts(p.id, by, bm)) {
+          if (!doneM.has(`ye_${mk}`)) { doneM.add(`ye_${mk}`); yeVar += getPropMonthActualVarCosts(p, by, bm); }
+        } else {
+          yeVar += getPerBookingTotal(b, p);
+        }
+      });
+      const yeProfit = yeRev - yeFix - yeVar;
+      const yePct = initialTotal > 0 ? Math.round(yeProfit / initialTotal * 100) : 0;
       // 直近3ヶ月の月別純利益平均
       const recent3Profits = [];
       for (let i = 2; i >= 0; i--) {
@@ -3767,7 +3821,7 @@ function renderDashboard() {
       }
       const avgMonthly = recent3Profits.reduce((a,b)=>a+b,0) / recent3Profits.length;
       const monthsNeeded = avgMonthly > 500 && remaining > 0 ? Math.ceil(remaining / avgMonthly) : null;
-      return { prop: p, initialTotal, cumProfit, remaining, pct, monthsNeeded };
+      return { prop: p, initialTotal, cumProfit, remaining, pct, monthsNeeded, yeProfit, yePct };
     }).filter(Boolean);
 
     if (recovStats.length > 0) {
@@ -3776,18 +3830,24 @@ function renderDashboard() {
         const monthsLabel = r.pct >= 100 ? `<span style="color:#1C9A52;font-weight:800">回収完了！</span>`
           : r.monthsNeeded !== null ? `<span style="color:#E65100">あと約${r.monthsNeeded}ヶ月</span>`
           : `<span style="color:#B0ADA8">データ蓄積中</span>`;
-        return `<div style="margin-bottom:8px">
+        const yeColor = r.yePct >= 100 ? '#1C9A52' : r.yePct >= 60 ? '#7c3aed' : '#B0ADA8';
+        return `<div style="margin-bottom:10px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
             <span style="font-size:12px;font-weight:800;color:#1C1C1E">${r.prop.name}</span>
-            <span style="font-size:11px;font-weight:700;color:#888">${r.pct}% 回収　${monthsLabel}</span>
+            <span style="font-size:11px;font-weight:700;color:#888"><strong style="color:#1C1C1E">${r.pct}%</strong> 実績　${monthsLabel}</span>
           </div>
-          <div style="height:6px;background:#F2F1EE;border-radius:3px;overflow:hidden">
-            <div style="height:100%;width:${r.pct}%;background:${barColor};border-radius:3px"></div>
+          <div style="height:6px;background:#F2F1EE;border-radius:3px;overflow:hidden;position:relative">
+            <div style="height:100%;width:${Math.min(r.yePct,100)}%;background:#E8DCFB;border-radius:3px;position:absolute;left:0;top:0"></div>
+            <div style="height:100%;width:${r.pct}%;background:${barColor};border-radius:3px;position:absolute;left:0;top:0"></div>
           </div>
+          <div style="font-size:10px;color:#7c3aed;text-align:right;margin-top:2px">年度末見込み <strong style="color:${yeColor}">${r.yePct}%</strong></div>
         </div>`;
       }).join('');
       html += `<div class="card" style="margin-bottom:12px">
-        <div style="font-size:11px;font-weight:800;color:#B0ADA8;letter-spacing:.5px;margin-bottom:10px">💰 投資回収進捗</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="font-size:11px;font-weight:800;color:#B0ADA8;letter-spacing:.5px">💰 投資回収進捗</div>
+          <div style="font-size:9px;color:#aaa">バー=実績 / 薄紫=年度末見込み</div>
+        </div>
         ${recRows}
         <div style="font-size:10px;color:#C0BDBA;text-align:right;margin-top:2px">詳細は実績タブで確認</div>
       </div>`;
