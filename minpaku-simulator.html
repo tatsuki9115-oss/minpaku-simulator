@@ -3952,7 +3952,7 @@ function renderAnnual() {
           <div class="month-stat"><div class="month-stat-label">稼働率</div><div class="month-stat-value">${occRate}%</div><div class="occ-bar-wrap"><div class="occ-bar-fill" style="width:${occRate}%"></div></div></div>
           <div class="month-stat"><div class="month-stat-label">稼働日数</div><div class="month-stat-value">${ms.nights}/${maxNights}日</div></div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding-top:12px;border-top:1px solid #F2F1EE;margin-top:4px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;padding-top:12px;border-top:1px solid #F2F1EE;margin-top:4px">
           <div style="background:#F9F8F6;border-radius:10px;padding:10px 12px">
             <div style="font-size:10px;font-weight:700;color:#C8C5C0;margin-bottom:4px">ゲスト支払</div>
             <div style="font-family:'Inter',sans-serif;font-size:15px;font-weight:800;color:#999">${fmtShort(getGuestPayment(ms.revenue))}円</div>
@@ -3967,6 +3967,11 @@ function renderAnnual() {
             <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:4px">利益</div>
             <div style="font-family:'Inter',sans-serif;font-size:15px;font-weight:800;color:${isMP?'#1C9A52':'#E53935'}">${isMP?'':'▲'}${fmtShort(Math.abs(ms.profit))}円</div>
             <div style="font-size:9px;color:#C8C5C0;margin-top:2px">費用差引後</div>
+          </div>
+          <div style="background:${isMP?'#F0FBF5':'#FFF5F5'};border-radius:10px;padding:10px 12px">
+            <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:4px">利益率</div>
+            <div style="font-family:'Inter',sans-serif;font-size:15px;font-weight:800;color:${isMP?'#1C9A52':'#E53935'}">${ms.revenue>0?(isMP?'':'▲')+Math.abs(Math.round(ms.profit/ms.revenue*100))+'%':'—'}</div>
+            <div style="font-size:9px;color:#C8C5C0;margin-top:2px">利益÷受取</div>
           </div>
         </div>
         <div style="display:flex;gap:12px;padding-top:8px;font-size:11px;color:#C8C5C0">
@@ -4020,7 +4025,8 @@ function renderAnnual() {
         ${ms ? (() => {
           const totalGP = getGuestPayment(ms.revenue);
           const isTP = ms.profit >= 0;
-          return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border-top:2px solid #F2F1EE;background:#FAFAF9">
+          const totalMargin = ms.revenue > 0 ? Math.round(ms.profit/ms.revenue*100) : null;
+          return `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0;border-top:2px solid #F2F1EE;background:#FAFAF9">
             <div style="padding:10px 14px;border-right:1px solid #F2F1EE">
               <div style="font-size:9px;font-weight:700;color:#C8C5C0;margin-bottom:3px">合計 ゲスト支払</div>
               <div style="font-size:14px;font-weight:800;color:#aaa">¥${fmt(totalGP)}</div>
@@ -4029,9 +4035,13 @@ function renderAnnual() {
               <div style="font-size:9px;font-weight:700;color:#B0ADA8;margin-bottom:3px">合計 ホスト受取</div>
               <div style="font-size:14px;font-weight:800;color:#1C1C1E">¥${fmt(ms.revenue)}</div>
             </div>
-            <div style="padding:10px 14px;background:${isTP?'#F0FBF5':'#FFF5F5'}">
+            <div style="padding:10px 14px;border-right:1px solid #F2F1EE;background:${isTP?'#F0FBF5':'#FFF5F5'}">
               <div style="font-size:9px;font-weight:700;color:#B0ADA8;margin-bottom:3px">合計 利益</div>
               <div style="font-size:14px;font-weight:800;color:${isTP?'#1C9A52':'#E53935'}">${isTP?'':'▲'}¥${fmt(Math.abs(ms.profit))}</div>
+            </div>
+            <div style="padding:10px 14px;background:${isTP?'#F0FBF5':'#FFF5F5'}">
+              <div style="font-size:9px;font-weight:700;color:#B0ADA8;margin-bottom:3px">合計 利益率</div>
+              <div style="font-size:14px;font-weight:800;color:${isTP?'#1C9A52':'#E53935'}">${totalMargin!==null?(isTP?'':'▲')+Math.abs(totalMargin)+'%':'—'}</div>
             </div>
           </div>`;
         })() : ''}
@@ -4109,7 +4119,7 @@ function renderAnnual() {
       <div style="font-size:11px;font-weight:700;color:#B0ADA8;letter-spacing:.06em">${currentAnnualYear}年度 収支サマリー</div>
       <div style="font-size:10px;color:#C8C5C0">${kpiPeriodLabel}</div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px">
       <div style="background:#F9F8F6;border-radius:10px;padding:10px 12px">
         <div style="font-size:10px;font-weight:700;color:#C8C5C0;margin-bottom:4px">ゲスト支払</div>
         <div style="font-family:'Inter',sans-serif;font-size:16px;font-weight:800;color:#999;line-height:1.1">${fmtShort(totalGuestPayment)}円</div>
@@ -4123,7 +4133,12 @@ function renderAnnual() {
       <div style="background:${isAP?'#F0FBF5':'#FFF5F5'};border-radius:10px;padding:10px 12px">
         <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:4px">利益</div>
         <div style="font-family:'Inter',sans-serif;font-size:18px;font-weight:900;color:${isAP?'#1C9A52':'#E53935'};line-height:1.1">${isAP?'':'▲'}${fmtShort(Math.abs(totalProfit))}円</div>
-        <div style="font-size:9px;color:#C8C5C0;margin-top:2px">利益率 <span style="font-weight:800;color:${isAP?'#1C9A52':'#E53935'}">${totalRevenue>0 ? (isAP?'':'▲')+Math.abs(Math.round(totalProfit/totalRevenue*100))+'%' : '—'}</span></div>
+        <div style="font-size:9px;color:#C8C5C0;margin-top:2px">費用差引後</div>
+      </div>
+      <div style="background:${isAP?'#F0FBF5':'#FFF5F5'};border-radius:10px;padding:10px 12px">
+        <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:4px">利益率</div>
+        <div style="font-family:'Inter',sans-serif;font-size:18px;font-weight:900;color:${isAP?'#1C9A52':'#E53935'};line-height:1.1">${totalRevenue>0?(isAP?'':'▲')+Math.abs(Math.round(totalProfit/totalRevenue*100))+'%':'—'}</div>
+        <div style="font-size:9px;color:#C8C5C0;margin-top:2px">利益÷受取</div>
       </div>
     </div>
     <div style="display:flex;gap:16px;padding-top:8px;border-top:1px solid #F2F1EE">
