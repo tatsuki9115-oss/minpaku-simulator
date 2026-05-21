@@ -5097,10 +5097,12 @@ function renderMessageTab() {
 
     <div class="card">
       <div class="card-title">予約選択</div>
+      <input type="text" id="msg-booking-search" placeholder="🔍 検索（ゲスト名 / 日付 / 物件名）" oninput="filterMsgBookingOptions()" style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:10px 12px;font-size:13px;background:#FAFAF9;box-sizing:border-box;margin-bottom:8px">
       <select class="prop-select" id="msg-booking-select" onchange="onMsgBookingSelect()">
         <option value="">-- 予約を選んでください --</option>
         ${bookingOptions}
       </select>
+      <div id="msg-booking-search-info" style="font-size:10px;color:#aaa;margin-top:4px;text-align:right">全${sorted.length}件</div>
     </div>
 
     <div id="msg-history-wrap" style="display:none">
@@ -5199,6 +5201,23 @@ function renderMessageTab() {
       </div>
     </div>
   `;
+}
+
+function filterMsgBookingOptions() {
+  const q = (document.getElementById('msg-booking-search')?.value || '').trim().toLowerCase();
+  const sel = document.getElementById('msg-booking-select');
+  const info = document.getElementById('msg-booking-search-info');
+  if (!sel) return;
+  let visible = 0, total = 0;
+  Array.from(sel.options).forEach(opt => {
+    if (!opt.value) { opt.style.display = ''; return; } // プレースホルダ
+    total++;
+    const text = opt.textContent.toLowerCase();
+    const match = !q || text.includes(q);
+    opt.style.display = match ? '' : 'none';
+    if (match) visible++;
+  });
+  if (info) info.textContent = q ? `${visible}件 / 全${total}件` : `全${total}件`;
 }
 
 function onMsgBookingSelect() {
