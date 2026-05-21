@@ -4466,17 +4466,16 @@ function generateBookingLineMsg(code) {
   const greeting = hour >= 5 && hour < 10 ? 'おはようございます！☀️'
                  : hour >= 10 && hour < 18 ? 'こんにちは！😊'
                  : 'こんばんは！🌙';
+  // staffNameに既に「さん」が含まれている場合は重複しないように除去
+  const cleanStaffName = staffName.replace(/さん$/, '').trim();
   const lines = [];
-  if (staffName) lines.push(`${staffName}さん、${greeting}`);
+  if (cleanStaffName) lines.push(`${cleanStaffName}さん、${greeting}`);
   else lines.push(greeting);
   lines.push('清掃スケジュールのご確認をお願いします🙏');
   lines.push('');
   lines.push(`🏠✨ ${propName}`);
   lines.push('');
-  lines.push(`🚪【チェックアウト 10:00】`);
-  lines.push(`📅 ${_lineFmtDate(coStr)}`);
-  lines.push(`👥 ${_lineGuestStr(b)}`);
-  lines.push('');
+  // 清掃依頼ではチェックアウト情報は不要（次のチェックインのみ）
   if (nextEntry) {
     lines.push(`🔑【次のチェックイン 15:00】`);
     lines.push(`📅 ${_lineFmtDate(nextEntry.x.checkin)}`);
@@ -4612,8 +4611,10 @@ function generateCleaningReminderMsg(code) {
                  : hour >= 10 && hour < 18 ? 'こんにちは！😊'
                  : 'こんばんは！🌙';
 
+  // staffNameに既に「さん」が含まれている場合は重複しないように除去
+  const cleanStaffName2 = staffName2.replace(/さん$/, '').trim();
   const lines = [];
-  if (staffName2) lines.push(`${staffName2}さん、${greeting}`);
+  if (cleanStaffName2) lines.push(`${cleanStaffName2}さん、${greeting}`);
   else lines.push(greeting);
   lines.push('本日の清掃についてご確認ください🙏');
   lines.push('');
