@@ -1685,6 +1685,15 @@ function initCalendarTab() {
   renderCalendarTab();
 }
 
+// アラートカードからカレンダーへジャンプ（指定日の月を表示）
+function gotoCalendarFromAlert(dateStr) {
+  if (dateStr) {
+    const [y, m] = dateStr.split('/').map(Number);
+    if (y && m) { calendarYear = y; calendarMonth = m; }
+  }
+  showTab('calendar');
+}
+
 function calendarMove(delta) {
   calendarMonth += delta;
   if (calendarMonth > 12) { calendarMonth = 1; calendarYear++; }
@@ -3531,7 +3540,7 @@ function renderDashboard() {
       const coStr = getCheckout(b) || '';
       const fmtD = s => { const p = s.split('/'); return p.length >= 3 ? `${parseInt(p[1])}/${parseInt(p[2])}` : s; };
       const dateLabel = ciStr ? `🔑 ${fmtD(ciStr)}　→　🚪 ${fmtD(coStr)}` : '';
-      return `<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid rgba(0,0,0,.06)">
+      return `<div onclick="gotoCalendarFromAlert('${ciStr}')" style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid rgba(0,0,0,.06);cursor:pointer;transition:background .15s" onmouseover="this.style.background='#FAFAF9'" onmouseout="this.style.background='transparent'">
         <div style="flex-shrink:0;width:36px;height:36px;border-radius:10px;background:${isOver?'#FFEBEE':isUrgent?'#FFF3E0':'#FFFDE7'};display:flex;align-items:center;justify-content:center;font-size:18px">${icon}</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:700;color:#1C1C1E;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(b.guestName||'ゲスト')}</div>
@@ -3542,7 +3551,7 @@ function renderDashboard() {
             <span style="font-size:11px;font-weight:800;color:${urgentColor}">${label} ${diffLabel}</span>
           </div>
         </div>
-        <button onclick="toggleCheckForDash('${b.code}','${checkField}')" style="font-size:11px;font-weight:700;padding:8px 10px;border-radius:10px;border:none;cursor:pointer;background:#1C1C1E;color:white;flex-shrink:0;white-space:nowrap;line-height:1.2;text-align:center">${btnLabel}</button>
+        <button onclick="event.stopPropagation();toggleCheckForDash('${b.code}','${checkField}')" style="font-size:11px;font-weight:700;padding:8px 10px;border-radius:10px;border:none;cursor:pointer;background:#1C1C1E;color:white;flex-shrink:0;white-space:nowrap;line-height:1.2;text-align:center">${btnLabel}</button>
       </div>`;
     };
     let alertRows = '';
