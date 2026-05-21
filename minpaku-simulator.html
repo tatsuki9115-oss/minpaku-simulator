@@ -391,9 +391,11 @@
 
   /* ===== スマホ調整（600px以下） ===== */
   @media (max-width: 600px) {
-    /* KPI 3列 → 2列、3つ目（利益率）は全幅 */
-    .kpi-grid-3 { grid-template-columns: 1fr 1fr !important; }
-    .kpi-grid-3 > *:nth-child(3) { grid-column: 1 / -1; }
+    /* KPI 3列はそのまま横並び維持（フォント縮小で対応） */
+    .kpi-grid-3 .kpi-value { font-size: 17px !important; }
+    .kpi-grid-3 .kpi-label { font-size: 10px !important; }
+    .kpi-grid-3 .kpi-sub { font-size: 10px !important; }
+    .kpi-grid-3 .kpi-card { padding: 10px 8px !important; }
     /* KPI 4列 → 2x2 */
     .kpi-grid-4 { grid-template-columns: 1fr 1fr !important; }
     .kpi-grid-4-flat { grid-template-columns: 1fr 1fr !important; }
