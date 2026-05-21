@@ -385,17 +385,18 @@
   #logout-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
 
   /* ===== ダッシュボード共通グリッド ===== */
-  .kpi-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
-  .kpi-grid-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
-  .kpi-grid-4-flat { grid-template-columns: 1fr 1fr 1fr 1fr; }
+  .kpi-grid-3 { display: grid !important; grid-template-columns: 1fr 1fr 1fr !important; gap: 8px; }
+  .kpi-grid-4 { display: grid !important; grid-template-columns: 1fr 1fr 1fr 1fr !important; gap: 8px; }
+  .kpi-grid-4-flat { display: grid !important; grid-template-columns: 1fr 1fr 1fr 1fr !important; }
 
   /* ===== スマホ調整（600px以下） ===== */
   @media (max-width: 600px) {
     /* KPI 3列はそのまま横並び維持（フォント縮小で対応） */
-    .kpi-grid-3 .kpi-value { font-size: 17px !important; }
-    .kpi-grid-3 .kpi-label { font-size: 10px !important; }
-    .kpi-grid-3 .kpi-sub { font-size: 10px !important; }
-    .kpi-grid-3 .kpi-card { padding: 10px 8px !important; }
+    .kpi-grid-3 { gap: 6px !important; }
+    .kpi-grid-3 .kpi-value { font-size: 16px !important; }
+    .kpi-grid-3 .kpi-label { font-size: 9px !important; }
+    .kpi-grid-3 .kpi-sub { font-size: 9px !important; }
+    .kpi-grid-3 .kpi-card { padding: 8px 6px !important; }
     /* KPI 4列 → 2x2 */
     .kpi-grid-4 { grid-template-columns: 1fr 1fr !important; }
     .kpi-grid-4-flat { grid-template-columns: 1fr 1fr !important; }
@@ -404,7 +405,7 @@
     /* 日付＋次の予約バッジを縦並びに */
     .dash-date-row { flex-direction: column; align-items: flex-start !important; gap: 12px; }
     .dash-next-badges { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
-    /* 予約カードのチェックボタン2x2グリッド維持・サイズ調整 */
+    /* 予約カードのチェックボタンサイズ調整 */
     .dash-chk-btns button, .dash-chk-btns a { min-width: 0 !important; font-size: 11px !important; padding: 6px 4px !important; }
   }
 
@@ -489,10 +490,13 @@
     /* ── 予約タブ（ダッシュボード）── */
     .pc-booking-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-columns: 1fr 1fr;
       gap: 12px;
+      width: 100%;
+      box-sizing: border-box;
     }
-    .pc-booking-grid > * { margin-bottom: 0 !important; }
+    .pc-booking-grid > * { margin-bottom: 0 !important; min-width: 0; }
+    .pc-booking-grid > .card { overflow: hidden; }
     /* 保存バーもmax-width追従 */
     .save-bar-inner { max-width: 1040px; margin: 0 auto; }
 
