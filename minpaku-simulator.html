@@ -2317,18 +2317,19 @@ function renderProfitChart(monthlyStats, monthlyTarget) {
     const y = p >= 0 ? baseline - bh : baseline;
     const fill = p >= 0 ? '#4caf50' : '#ef5350';
     svgBars += '<rect x="'+(cx - barW/2).toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+bh.toFixed(1)+'" fill="'+fill+'" rx="2"/>';
-    // 金額ラベル（常時表示・端の棒ははみ出さないようanchor調整）
+    // 金額＋利益率ラベル
+    const ms = monthlyStats[i];
+    const margin = (ms && ms.revenue > 0) ? Math.round(p / ms.revenue * 100) : null;
+    const marginText = margin !== null ? ' ('+(p<0?'▲':'')+Math.abs(margin)+'%)' : '';
     const anchor = cx < 30 ? 'start' : cx > W - 30 ? 'end' : 'middle';
     const lx = anchor === 'start' ? (cx - barW/2).toFixed(1) : anchor === 'end' ? (cx + barW/2).toFixed(1) : cx.toFixed(1);
     const labelText = fmtBar(p);
     if (p >= 0) {
-      // 黒字：棒の上に表示
       const ly = (baseline - bh - 4).toFixed(1);
-      svgBars += '<text x="'+lx+'" y="'+ly+'" text-anchor="'+anchor+'" font-size="9" font-weight="800" fill="#2e7d32" stroke="white" stroke-width="2.5" paint-order="stroke">'+labelText+'</text>';
+      svgBars += '<text x="'+lx+'" y="'+ly+'" text-anchor="'+anchor+'" font-size="9" font-weight="800" fill="#2e7d32" stroke="white" stroke-width="2.5" paint-order="stroke">'+labelText+marginText+'</text>';
     } else {
-      // 赤字：棒の下に表示
       const ly = (baseline + Math.max(bh, 4) + 10).toFixed(1);
-      svgBars += '<text x="'+lx+'" y="'+ly+'" text-anchor="'+anchor+'" font-size="9" font-weight="800" fill="#c62828" stroke="white" stroke-width="2.5" paint-order="stroke">'+labelText+'</text>';
+      svgBars += '<text x="'+lx+'" y="'+ly+'" text-anchor="'+anchor+'" font-size="9" font-weight="800" fill="#c62828" stroke="white" stroke-width="2.5" paint-order="stroke">'+labelText+marginText+'</text>';
     }
   });
 
@@ -4017,7 +4018,7 @@ function renderAnnual() {
             <div class="booking-amounts" style="text-align:right;min-width:90px">
               <div style="font-size:10px;color:#C8C5C0">ゲスト <span style="font-weight:700;color:#aaa">¥${fmt(getGuestPayment(b.revenue))}</span></div>
               <div style="font-size:13px;font-weight:800;color:#1C1C1E;margin-top:1px">¥${fmt(b.revenue)}</div>
-              <div style="font-size:11px;font-weight:700;color:${bIsP?'#1C9A52':'#E53935'};margin-top:2px">${bIsP?'':'▲'}¥${fmt(Math.abs(bProfit))}<span style="font-size:9px;font-weight:400;color:#C8C5C0;margin-left:2px">変動費後</span></div>
+              <div style="font-size:11px;font-weight:700;color:${bIsP?'#1C9A52':'#E53935'};margin-top:2px">${bIsP?'':'▲'}¥${fmt(Math.abs(bProfit))}<span style="font-size:9px;font-weight:400;color:#C8C5C0;margin-left:2px">変動費後</span>${b.revenue>0?'<span style="font-size:10px;font-weight:800;margin-left:4px;color:'+(bIsP?'#1C9A52':'#E53935')+'">('+(bIsP?'':'▲')+Math.abs(Math.round(bProfit/b.revenue*100))+'%)</span>':''}</div>
               ${varBreakdown ? `<div style="font-size:9px;color:#C8C5C0;margin-top:1px">${varBreakdown}</div>` : ''}
             </div>
           </div>`;
@@ -4158,19 +4159,21 @@ function renderAnnual() {
       ${renderProfitChart(monthlyStats, monthlyTarget)}
       <div style="height:1px;background:#f0f0f0;margin:14px 0 12px"></div>
       <table class="month-table">
-        <thead><tr><th>月</th><th>件</th><th style="color:#C8C5C0">ゲスト</th><th>受取</th><th>利益</th><th>稼働</th></tr></thead>
+        <thead><tr><th>月</th><th>件</th><th style="color:#C8C5C0">ゲスト</th><th>受取</th><th>利益</th><th>利益率</th><th>稼働</th></tr></thead>
         <tbody>
           ${monthlyStats.map((ms, i) => {
             const mo = fyMonthOrder[i];
-            if (!ms) return `<tr><td style="color:#ddd">${mo}月</td><td colspan="5" style="color:#eee;text-align:center">−</td></tr>`;
+            if (!ms) return `<tr><td style="color:#ddd">${mo}月</td><td colspan="6" style="color:#eee;text-align:center">−</td></tr>`;
             const isMP = ms.profit >= 0;
             const gp = getGuestPayment(ms.revenue);
+            const mMargin = ms.revenue > 0 ? Math.round(ms.profit/ms.revenue*100) : null;
             return `<tr style="cursor:pointer" onclick="document.getElementById('mcard-${ms.month}').scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>{var body=document.getElementById('mcard-${ms.month}').querySelector('.month-detail-body');if(!body.classList.contains('open')){body.classList.add('open');var ch=document.getElementById('mcard-${ms.month}').querySelector('.mchev');if(ch)ch.style.transform='rotate(180deg)';}},300)">
               <td>${ms.month}月</td>
               <td>${ms.bookings}</td>
               <td style="color:#C8C5C0;font-size:11px">${fmtShort(gp)}</td>
               <td>${fmtShort(ms.revenue)}</td>
               <td class="td-profit ${isMP?'profit':'loss'}">${isMP?'':'▲'}${fmtShort(Math.abs(ms.profit))}</td>
+              <td class="td-profit ${isMP?'profit':'loss'}">${mMargin!==null?(isMP?'':'▲')+Math.abs(mMargin)+'%':'—'}</td>
               <td>${ms.occRate}%</td>
             </tr>`;
           }).join('')}
@@ -4178,7 +4181,9 @@ function renderAnnual() {
             <td>合計</td><td>${totalBookings}件</td>
             <td style="color:#C8C5C0;font-size:11px">${fmtShort(totalGuestPayment)}</td>
             <td>${fmtShort(totalRevenue)}</td>
-            <td class="td-profit ${isAP?'profit':'loss'}">${isAP?'':'▲'}${fmtShort(Math.abs(totalProfit))}</td><td>−</td>
+            <td class="td-profit ${isAP?'profit':'loss'}">${isAP?'':'▲'}${fmtShort(Math.abs(totalProfit))}</td>
+            <td class="td-profit ${isAP?'profit':'loss'}">${totalRevenue>0?(isAP?'':'▲')+Math.abs(Math.round(totalProfit/totalRevenue*100))+'%':'—'}</td>
+            <td>−</td>
           </tr>
         </tbody>
       </table>
