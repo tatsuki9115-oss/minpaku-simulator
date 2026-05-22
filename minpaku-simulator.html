@@ -3498,30 +3498,39 @@ function renderDashboard() {
   const fyMargin = fyRevenue > 0 ? Math.round(fyProfit / fyRevenue * 100) : null;
   const fyIsP = fyProfit >= 0;
 
-  // 稼働率：予約が入っている月のみが対象。28泊以上の長期予約は除外（括弧書きで含めた数字も表示）
+  // 稼働率：物件×月単位で集計。28泊以上長期予約がある月は短期稼働率の分母から除外（括弧書きで含めた数字も表示）
   const monthsWithBookings = new Set();
   fyBooks.forEach(b => {
     const [by, bm] = b.checkin.split('/').map(Number);
     monthsWithBookings.add(`${by}_${bm}`);
   });
-  let occBookedShort = 0, occBookedAll = 0, occAvailable = 0;
-  monthsWithBookings.forEach(mk => {
-    const [yr, mo] = mk.split('_').map(Number);
-    const dim = getDaysInMonth(yr, mo);
-    properties.forEach(p => {
-      if (isPropertyOperating(p, yr, mo)) {
-        occAvailable += dim;
+  let occBookedShort = 0, occBookedAll = 0;
+  let occAvailShort = 0, occAvailAll = 0;
+  properties.forEach(p => {
+    monthsWithBookings.forEach(mk => {
+      const [yr, mo] = mk.split('_').map(Number);
+      if (!isPropertyOperating(p, yr, mo)) return;
+      const propMonthBooks = fyBooks.filter(b => {
+        const [by, bm] = b.checkin.split('/').map(Number);
+        return getBookingPropId(b) === p.id && by === yr && bm === mo;
+      });
+      if (propMonthBooks.length === 0) return; // この物件のこの月は予約なし → スキップ
+      const dim = getDaysInMonth(yr, mo);
+      const propAllNights = propMonthBooks.reduce((s,b) => s + b.nights, 0);
+      const propShortNights = propMonthBooks.filter(b => !isLongStayListing(b)).reduce((s,b) => s + b.nights, 0);
+      const hasLong = propMonthBooks.some(b => isLongStayListing(b));
+      // 含む長期：常にカウント
+      occAvailAll += dim;
+      occBookedAll += propAllNights;
+      // 短期のみ：長期予約のある物件×月は除外
+      if (!hasLong) {
+        occAvailShort += dim;
+        occBookedShort += propShortNights;
       }
     });
-    fyBooks.forEach(b => {
-      const [by, bm] = b.checkin.split('/').map(Number);
-      if (by !== yr || bm !== mo) return;
-      occBookedAll += b.nights;
-      if (!isLongStayListing(b)) occBookedShort += b.nights;
-    });
   });
-  const occRateShort = occAvailable > 0 ? Math.min(Math.round(occBookedShort / occAvailable * 100), 100) : null;
-  const occRateAll = occAvailable > 0 ? Math.min(Math.round(occBookedAll / occAvailable * 100), 100) : null;
+  const occRateShort = occAvailShort > 0 ? Math.min(Math.round(occBookedShort / occAvailShort * 100), 100) : null;
+  const occRateAll = occAvailAll > 0 ? Math.min(Math.round(occBookedAll / occAvailAll * 100), 100) : null;
 
   // ヘッダーカード（物件ごとの次の予約）
   const nextPerProp = properties.map(p => {
