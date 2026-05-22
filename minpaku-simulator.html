@@ -639,7 +639,7 @@
 </div>
 
 <!-- 予約一覧 -->
-<div class="page" id="page-bookings">
+<div class="page active" id="page-bookings">
   <div id="bookings-content"></div>
 </div>
 
@@ -649,7 +649,7 @@
 </div>
 
 <!-- メッセージ -->
-<div class="page active" id="page-message">
+<div class="page" id="page-message">
   <div id="message-content"></div>
 </div>
 
@@ -4391,9 +4391,9 @@ renderSimPropertySelect();
 renderHistory();
 updateHeaderTimestamp();
 renderDashboard();
-// ボトムナビの初期アクティブ状態
-document.getElementById('nav-message').classList.add('active');
-// renderMessageTab はmsgUsageLog初期化後に呼ぶ必要があるためsetTimeoutで遅延
+// ボトムナビの初期アクティブ状態：ホーム（予約タブ）
+document.getElementById('nav-bookings').classList.add('active');
+// メッセージタブも事前レンダリング（msgUsageLog初期化後に呼ぶためsetTimeoutで遅延）
 setTimeout(() => renderMessageTab(), 0);
 // initFirebaseSync() はログイン後に fbauth.onAuthStateChanged 内で呼ぶ
 
