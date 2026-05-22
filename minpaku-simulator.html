@@ -3458,24 +3458,37 @@ function renderDashboard() {
   const prevMonthNights = prevMonthBooks.reduce((s, b) => s + (isLongStayListing(b) ? 0 : b.nights), 0);
   const nightsDiff = thisMonthNights - prevMonthNights;
 
-  // 月別利益率を計算（売上 − 固定費 − 変動費）
-  const calcMonthProfit = (books, y, m) => {
-    let rev = 0, varCosts = 0;
-    books.forEach(b => {
-      rev += b.revenue;
-      const prop = properties.find(p => p.id === getBookingPropId(b));
-      if (prop && !hasActualCosts(getBookingPropId(b), y, m)) varCosts += getPerBookingTotal(b, prop);
+  // 今年度（4月開始3月終わり）の集計
+  const fyStartYear = thisMonth >= 4 ? thisYear : thisYear - 1;
+  const fyBooks = _allBooks.filter(b => {
+    if (!b.checkin || !b.revenue || b.revenue === 0) return false;
+    const [by, bm] = b.checkin.split('/').map(Number);
+    return (by === fyStartYear && bm >= 4) || (by === fyStartYear + 1 && bm <= 3);
+  });
+  const fyRevenue = fyBooks.reduce((s, b) => s + b.revenue, 0);
+  const fyGuestPayment = getGuestPayment(fyRevenue);
+  // 固定費＋変動費（営業中の物件・該当年度の全月）
+  let fyFixed = 0, fyVar = 0;
+  for (let i = 0; i < 12; i++) {
+    const mo = ((4 - 1 + i) % 12) + 1;
+    const yr = mo >= 4 ? fyStartYear : fyStartYear + 1;
+    properties.forEach(p => {
+      if (isPropertyOperating(p, yr, mo)) {
+        fyFixed += getPropMonthFixedCosts(p, yr, mo);
+        fyVar += getPropMonthActualVarCosts(p, yr, mo);
+      }
     });
-    const opProps = properties.filter(p => isPropertyOperating(p, y, m));
-    opProps.forEach(p => { varCosts += getPropMonthActualVarCosts(p, y, m); });
-    const fixed = getMonthFixedCosts(y, m, 'all');
-    return { rev, profit: rev - fixed - varCosts };
-  };
-  const thisProfitObj = calcMonthProfit(thisMonthBooks, thisYear, thisMonth);
-  const prevProfitObj = calcMonthProfit(prevMonthBooks, prevYear, prevMonth);
-  const thisMargin = thisProfitObj.rev > 0 ? Math.round(thisProfitObj.profit / thisProfitObj.rev * 100) : null;
-  const prevMargin = prevProfitObj.rev > 0 ? Math.round(prevProfitObj.profit / prevProfitObj.rev * 100) : null;
-  const marginDiff = (thisMargin !== null && prevMargin !== null) ? thisMargin - prevMargin : null;
+  }
+  fyBooks.forEach(b => {
+    const prop = properties.find(p => p.id === getBookingPropId(b));
+    const [by, bm] = b.checkin.split('/').map(Number);
+    if (prop && !hasActualCosts(getBookingPropId(b), by, bm)) {
+      fyVar += getPerBookingTotal(b, prop);
+    }
+  });
+  const fyProfit = fyRevenue - fyFixed - fyVar;
+  const fyMargin = fyRevenue > 0 ? Math.round(fyProfit / fyRevenue * 100) : null;
+  const fyIsP = fyProfit >= 0;
 
   // ヘッダーカード（物件ごとの次の予約）
   const nextPerProp = properties.map(p => {
@@ -3499,22 +3512,28 @@ function renderDashboard() {
       </div>
       <div class="dash-next-badges" style="display:flex;gap:8px">${nextBadges}</div>
     </div>
-    ${thisMonthBooks.length > 0 || prevMonthBooks.length > 0 ? `
-    <div class="kpi-grid-3" style="margin-top:12px;padding-top:10px;border-top:1px solid #F2F1EE;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-      <div class="kpi-card" style="background:#F9F8F6;box-shadow:none">
-        <div class="kpi-label">今月の売上</div>
-        <div class="kpi-value">${fmtShort(thisMonthRev)}円</div>
-        ${prevMonthRev > 0 ? `<div class="kpi-sub" style="color:${revDiff>=0?'#1C9A52':'#E53935'}">${revDiff>=0?'↑':'↓'} ${fmtShort(Math.abs(revDiff))}円 前月比</div>` : ''}
+    ${fyBooks.length > 0 ? `
+    <div style="font-size:10px;color:#C8C5C0;margin-top:12px;padding-top:10px;border-top:1px solid #F2F1EE;margin-bottom:6px">${fyStartYear}年度（${fyStartYear}/4〜${fyStartYear+1}/3）</div>
+    <div class="kpi-grid-4" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
+      <div class="kpi-card" style="background:#F9F8F6;box-shadow:none;padding:10px 12px">
+        <div class="kpi-label">ゲスト支払</div>
+        <div class="kpi-value" style="color:#999">${fmtShort(fyGuestPayment)}円</div>
+        <div class="kpi-sub" style="color:#D0CCC8">手数料込</div>
       </div>
-      <div class="kpi-card" style="background:#F9F8F6;box-shadow:none">
-        <div class="kpi-label">今月の稼働日数</div>
-        <div class="kpi-value">${thisMonthNights}泊</div>
-        ${prevMonthNights > 0 ? `<div class="kpi-sub" style="color:${nightsDiff>=0?'#1C9A52':'#E53935'}">${nightsDiff>=0?'↑':'↓'} ${Math.abs(nightsDiff)}泊 前月比</div>` : ''}
+      <div class="kpi-card" style="background:#F9F8F6;box-shadow:none;padding:10px 12px">
+        <div class="kpi-label">ホスト受取</div>
+        <div class="kpi-value">${fmtShort(fyRevenue)}円</div>
+        <div class="kpi-sub" style="color:#C8C5C0">入金額</div>
       </div>
-      <div class="kpi-card" style="background:#F9F8F6;box-shadow:none">
-        <div class="kpi-label">今月の利益率</div>
-        <div class="kpi-value" style="color:${thisMargin===null?'#B0ADA8':thisMargin>=0?'#1C9A52':'#E53935'}">${thisMargin===null?'—':thisMargin+'%'}</div>
-        ${marginDiff !== null ? `<div class="kpi-sub" style="color:${marginDiff>=0?'#1C9A52':'#E53935'}">${marginDiff>=0?'↑':'↓'} ${Math.abs(marginDiff)}pt 前月比</div>` : ''}
+      <div class="kpi-card" style="background:${fyIsP?'#F0FBF5':'#FFF5F5'};box-shadow:none;padding:10px 12px">
+        <div class="kpi-label">利益</div>
+        <div class="kpi-value" style="color:${fyIsP?'#1C9A52':'#E53935'}">${fyIsP?'':'▲'}${fmtShort(Math.abs(fyProfit))}円</div>
+        <div class="kpi-sub" style="color:#C8C5C0">費用差引後</div>
+      </div>
+      <div class="kpi-card" style="background:${fyIsP?'#F0FBF5':'#FFF5F5'};box-shadow:none;padding:10px 12px">
+        <div class="kpi-label">利益率</div>
+        <div class="kpi-value" style="color:${fyMargin===null?'#B0ADA8':fyIsP?'#1C9A52':'#E53935'}">${fyMargin===null?'—':(fyIsP?'':'▲')+Math.abs(fyMargin)+'%'}</div>
+        <div class="kpi-sub" style="color:#C8C5C0">利益÷受取</div>
       </div>
     </div>` : ''}
   </div>`;
