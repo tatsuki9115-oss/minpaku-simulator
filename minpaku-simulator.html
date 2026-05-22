@@ -4475,15 +4475,10 @@ function generateBookingLineMsg(code) {
   lines.push('');
   lines.push(`🏠✨ ${propName}`);
   lines.push('');
-  // 清掃依頼ではチェックアウト情報は不要（次のチェックインのみ）
-  if (nextEntry) {
-    lines.push(`🔑【次のチェックイン 15:00】`);
-    lines.push(`📅 ${_lineFmtDate(nextEntry.x.checkin)}`);
-    lines.push(`👥 ${_lineGuestStr(nextEntry.x)}`);
-  } else {
-    lines.push('🔑【次のチェックイン】');
-    lines.push('　現時点で予約なし');
-  }
+  // 清掃依頼はチェックアウト情報のみ（次のチェックインは不要）
+  lines.push(`🚪【チェックアウト 10:00】`);
+  lines.push(`📅 ${_lineFmtDate(coStr)}`);
+  lines.push(`👥 ${_lineGuestStr(b)}`);
   lines.push('');
   lines.push('ご都合いかがでしょうか？😊');
   lines.push('お返事お待ちしています！');
