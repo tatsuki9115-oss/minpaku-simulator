@@ -1783,7 +1783,10 @@ function renderCalendarTab() {
           : (prop ? (prop.perBookingCosts.find(c => c.name === '清掃費')?.amount || 0) : 0);
         const dispCleaning = chk.cleaningFee != null ? chk.cleaningFee : _defCleaning;
         const dispLaundry  = chk.laundryFee  != null ? chk.laundryFee  : 1400;
-        const dispSupplies = chk.suppliesFee != null ? chk.suppliesFee : 0;
+        // 「0」が初期値の項目はプレースホルダ表示にして編集しやすく
+        const dispSupplies = (chk.suppliesFee != null && chk.suppliesFee !== 0 && chk.suppliesFee !== '0') ? chk.suppliesFee : '';
+        const dispOtherFee = (chk.otherFee != null && chk.otherFee !== 0 && chk.otherFee !== '0') ? chk.otherFee : '';
+        const dispOtherFeeOff = (chk.otherFeeOff != null && chk.otherFeeOff !== 0 && chk.otherFeeOff !== '0') ? chk.otherFeeOff : '';
 
         // アラート状態判定
         const formAlert = b.code && !chk.formDone && daysToCI <= 7 && daysToCI >= -3;
@@ -1859,14 +1862,14 @@ function renderCalendarTab() {
                 <input type="text" inputmode="numeric" pattern="[0-9]*" value="${dispLaundry}" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','laundryFee',this.value)" onblur="saveBookingChecks()">
                 <span style="font-size:11px;color:#999">円</span>
                 <span style="font-size:11px;color:#555">🛒 消耗品</span>
-                <input type="text" inputmode="numeric" pattern="[0-9]*" value="${dispSupplies}" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','suppliesFee',this.value)" onblur="saveBookingChecks()">
+                <input type="text" inputmode="numeric" pattern="[0-9]*" value="${dispSupplies}" placeholder="0" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','suppliesFee',this.value)" onblur="saveBookingChecks()">
                 <span style="font-size:11px;color:#999">円</span>
                 <span style="font-size:11px;color:#555">💡 その他（明細あり）</span>
-                <input type="text" inputmode="numeric" pattern="[0-9]*" value="${chk.otherFee != null ? chk.otherFee : 0}" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','otherFee',this.value)" onblur="saveBookingChecks()">
+                <input type="text" inputmode="numeric" pattern="[0-9]*" value="${dispOtherFee}" placeholder="0" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','otherFee',this.value)" onblur="saveBookingChecks()">
                 <span style="font-size:11px;color:#999">円</span>
                 <input type="text" value="${escHtml(String(chk.otherMemo||''))}" placeholder="内容メモ（支払明細に記載）" style="grid-column:1/4;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;color:#333;box-sizing:border-box;width:100%;margin-top:1px" oninput="updateBookingCost('${b.code}','otherMemo',this.value)" onblur="saveBookingChecks()">
                 <span style="font-size:11px;color:#888">🔒 その他（明細なし）</span>
-                <input type="text" inputmode="numeric" pattern="[0-9]*" value="${chk.otherFeeOff != null ? chk.otherFeeOff : 0}" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','otherFeeOff',this.value)" onblur="saveBookingChecks()">
+                <input type="text" inputmode="numeric" pattern="[0-9]*" value="${dispOtherFeeOff}" placeholder="0" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','otherFeeOff',this.value)" onblur="saveBookingChecks()">
                 <span style="font-size:11px;color:#999">円</span>
                 <input type="text" value="${escHtml(String(chk.otherMemoOff||''))}" placeholder="内容メモ（支払明細には載せない）" style="grid-column:1/4;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;color:#333;box-sizing:border-box;width:100%;margin-top:1px" oninput="updateBookingCost('${b.code}','otherMemoOff',this.value)" onblur="saveBookingChecks()">
               </div>
