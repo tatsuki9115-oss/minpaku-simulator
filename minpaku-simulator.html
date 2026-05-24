@@ -3354,11 +3354,18 @@ function getPerBookingTotal(booking, prop) {
 function calcAirbnbProfit(b) {
   const propId = getBookingPropId(b);
   const prop = properties.find(p => p.id === propId);
-  if (!prop) return null;
-  const monthlyTotal = prop.monthlyFixedCosts.reduce((s, c) => s + c.amount, 0);
-  const fixed = Math.round(monthlyTotal / 18 * b.nights);
+  if (!prop || !b.checkin) return null;
+  const [by, bm] = b.checkin.split('/').map(Number);
+  // この物件・この月の合計宿泊日数で固定費を按分（実績タブと同じロジック）
+  const monthNights = getAllBookings().filter(x => {
+    if (getBookingPropId(x) !== propId || !x.checkin) return false;
+    const [y, m] = x.checkin.split('/').map(Number);
+    return y === by && m === bm;
+  }).reduce((s, x) => s + (x.nights || 0), 0);
+  const monthFixed = getPropMonthFixedCosts(prop, by, bm);
+  const allocatedFixed = monthNights > 0 ? Math.round(monthFixed / monthNights * b.nights) : 0;
   const perBooking = getPerBookingTotal(b, prop);
-  return b.revenue - fixed - perBooking;
+  return b.revenue - allocatedFixed - perBooking;
 }
 
 // ==================== 運営ダッシュボード ====================
