@@ -1793,12 +1793,13 @@ function renderCalendarTab() {
         const cleanAlert = b.code && !chk.cleaningDone && daysToCI <= 14 && daysToCI >= -3;
         const checkinMsgAlert = b.code && !chk.checkinMsgDone && daysToCI >= 0 && daysToCI <= 2;
         const welcomeMsgAlert = b.code && !chk.welcomeMsgDone && daysToCI >= 0 && daysToCI <= 2;
+        const cleaningReminderAlert = b.code && !chk.cleaningReminderDone && daysToCI >= 0 && daysToCI <= 2;
         // ゴミ回収依頼アラート：フィオーレ新子安(propId=2)のみ・チェックアウト3日前〜当日
         const coParts = coStr ? coStr.split('/').map(Number) : null;
         const coDate = coParts ? new Date(coParts[0], coParts[1]-1, coParts[2]) : null;
         const daysToCO = coDate ? Math.round((coDate - nowForCal) / 86400000) : 999;
         const garbageAlert = b.code && !chk.garbageDone && getBookingPropId(b) === 2 && daysToCO >= 0 && daysToCO <= 3;
-        const hasAlert = formAlert || cleanAlert || garbageAlert || checkinMsgAlert || welcomeMsgAlert;
+        const hasAlert = formAlert || cleanAlert || garbageAlert || checkinMsgAlert || welcomeMsgAlert || cleaningReminderAlert;
         const borderStyle = hasAlert ? 'border:2px solid #E53935' : 'border:1px solid #f0f0f0';
 
         const formBg = chk.formDone ? '#dcfce7' : formAlert ? '#FFEBEE' : '#f5f5f5';
@@ -1846,7 +1847,7 @@ function renderCalendarTab() {
           <!-- 下段: 清掃連絡 | 清掃直前連絡 | LINE生成 | 支払通知 -->
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px">
             <button onclick="generateBookingLineMsg('${b.code}')" style="padding:7px 4px;font-size:11px;font-weight:800;border-radius:9px;border:2px solid #00B900;background:#f0fff0;color:#007a00;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;box-sizing:border-box"><span>🗓️</span><span>清掃連絡</span></button>
-            <button onclick="showCleaningReminderForm('${b.code}')" style="padding:7px 4px;font-size:11px;font-weight:800;border-radius:9px;border:2px solid #FF6D00;background:#fff8f0;color:#b34400;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;box-sizing:border-box"><span>🧹</span><span>清掃直前連絡</span></button>
+            <button onclick="showCleaningReminderForm('${b.code}')" style="padding:7px 4px;font-size:11px;font-weight:800;border-radius:9px;border:2px solid ${chk.cleaningReminderDone?'#92400e':cleaningReminderAlert?'#E53935':'#FF6D00'};background:${chk.cleaningReminderDone?'#fef3c7':cleaningReminderAlert?'#FFEBEE':'#fff8f0'};color:${chk.cleaningReminderDone?'#78350f':cleaningReminderAlert?'#D32F2F':'#b34400'};cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;box-sizing:border-box"><span>🧹</span><span>${chk.cleaningReminderDone?'直前✓済':'清掃直前連絡'}</span></button>
             <button onclick="showLineTypeModal('${b.code}')" style="padding:7px 4px;font-size:11px;font-weight:800;border-radius:9px;border:2px solid #00B900;background:white;color:#00B900;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;box-sizing:border-box"><span>📱</span><span>LINE生成</span></button>
             <button onclick="showPaymentStatementModal('${b.code}')" ${!chk.cleaningStaffName?'disabled':''} style="padding:7px 4px;font-size:11px;font-weight:800;border-radius:9px;border:1.5px solid ${chk.cleaningStaffName?'#4a7fc1':'#ddd'};background:${chk.cleaningStaffName?'white':'#f5f5f5'};color:${chk.cleaningStaffName?'#4a7fc1':'#bbb'};cursor:${chk.cleaningStaffName?'pointer':'not-allowed'};display:flex;align-items:center;justify-content:center;gap:3px;box-sizing:border-box"><span>📄</span><span>支払通知</span></button>
           </div>
@@ -3453,6 +3454,12 @@ function renderDashboard() {
     const diff = Math.round((getCI(b) - now) / 86400000);
     return diff >= 0 && diff <= 2;
   }).sort((a,b2) => getCI(a) - getCI(b2));
+  // 清掃直前連絡アラート（チェックイン2日前〜当日）
+  const alertCleaningReminder = _allBooks.filter(b => {
+    if (!b.code || bookingChecks[b.code]?.cleaningReminderDone) return false;
+    const diff = Math.round((getCI(b) - now) / 86400000);
+    return diff >= 0 && diff <= 2;
+  }).sort((a,b2) => getCI(a) - getCI(b2));
 
   let html = '';
 
@@ -3598,7 +3605,7 @@ function renderDashboard() {
   </div>`;
 
   // ========== アラートカード ==========
-  const hasAlerts = alertForm.length > 0 || alertClean.length > 0 || alertGarbage.length > 0 || alertCheckinMsg.length > 0 || alertWelcomeMsg.length > 0;
+  const hasAlerts = alertForm.length > 0 || alertClean.length > 0 || alertGarbage.length > 0 || alertCheckinMsg.length > 0 || alertWelcomeMsg.length > 0 || alertCleaningReminder.length > 0;
   if (hasAlerts) {
     const renderAlertRow = (b, type) => {
       const pid = getBookingPropId(b);
@@ -3610,10 +3617,10 @@ function renderDashboard() {
       const isOver = diff < 0;
       const isUrgent = diff <= 1;
       const urgentColor = isOver ? '#D32F2F' : isUrgent ? '#E65100' : '#F59E0B';
-      const checkField = type === 'form' ? 'formDone' : type === 'garbage' ? 'garbageDone' : type === 'checkinMsg' ? 'checkinMsgDone' : type === 'welcomeMsg' ? 'welcomeMsgDone' : 'cleaningDone';
-      const icon = type === 'form' ? '📋' : type === 'garbage' ? '🗑️' : type === 'checkinMsg' ? '📩' : type === 'welcomeMsg' ? '👋' : '🧹';
-      const label = type === 'form' ? '宿泊者名簿' : type === 'garbage' ? 'ゴミ回収依頼' : type === 'checkinMsg' ? 'チェックイン情報送付' : type === 'welcomeMsg' ? 'ウェルカムメッセージ送付' : '清掃手配';
-      const btnLabel = type === 'form' ? '✅ 提出済みにする' : type === 'garbage' ? '✅ 依頼済みにする' : type === 'checkinMsg' ? '✅ 送付済みにする' : type === 'welcomeMsg' ? '✅ 送付済みにする' : '✅ 手配済みにする';
+      const checkField = type === 'form' ? 'formDone' : type === 'garbage' ? 'garbageDone' : type === 'checkinMsg' ? 'checkinMsgDone' : type === 'welcomeMsg' ? 'welcomeMsgDone' : type === 'cleaningReminder' ? 'cleaningReminderDone' : 'cleaningDone';
+      const icon = type === 'form' ? '📋' : type === 'garbage' ? '🗑️' : type === 'checkinMsg' ? '📩' : type === 'welcomeMsg' ? '👋' : type === 'cleaningReminder' ? '🧹' : '🧹';
+      const label = type === 'form' ? '宿泊者名簿' : type === 'garbage' ? 'ゴミ回収依頼' : type === 'checkinMsg' ? 'チェックイン情報送付' : type === 'welcomeMsg' ? 'ウェルカムメッセージ送付' : type === 'cleaningReminder' ? '清掃直前連絡' : '清掃手配';
+      const btnLabel = type === 'form' ? '✅ 提出済みにする' : type === 'garbage' ? '✅ 依頼済みにする' : type === 'checkinMsg' ? '✅ 送付済みにする' : type === 'welcomeMsg' ? '✅ 送付済みにする' : type === 'cleaningReminder' ? '✅ 連絡済みにする' : '✅ 手配済みにする';
       const ciStr = b.checkin || '';
       const coStr = getCheckout(b) || '';
       const fmtD = s => { const p = s.split('/'); return p.length >= 3 ? `${parseInt(p[1])}/${parseInt(p[2])}` : s; };
@@ -3642,6 +3649,11 @@ function renderDashboard() {
       alertRows += `<div style="font-size:10px;font-weight:800;color:#1565C0;letter-spacing:.5px;margin:4px 0 2px">👋 ウェルカムメッセージ送付（チェックイン2日前までに）</div>`;
       alertRows += alertWelcomeMsg.map(b => renderAlertRow(b, 'welcomeMsg')).join('');
     }
+    if (alertCleaningReminder.length > 0) {
+      if (alertCheckinMsg.length > 0 || alertWelcomeMsg.length > 0) alertRows += `<div style="height:8px"></div>`;
+      alertRows += `<div style="font-size:10px;font-weight:800;color:#FF6D00;letter-spacing:.5px;margin:4px 0 2px">🧹 清掃直前連絡（チェックイン2日前までに）</div>`;
+      alertRows += alertCleaningReminder.map(b => renderAlertRow(b, 'cleaningReminder')).join('');
+    }
     if (alertForm.length > 0) {
       if (alertCheckinMsg.length > 0) alertRows += `<div style="height:8px"></div>`;
       alertRows += `<div style="font-size:10px;font-weight:800;color:#E65100;letter-spacing:.5px;margin:4px 0 2px">📋 宿泊者名簿（チェックイン1週間前までに）</div>`;
@@ -3660,7 +3672,7 @@ function renderDashboard() {
     html += `<div class="card" style="margin-bottom:12px;border:2px solid #E53935;border-radius:14px;padding:12px 14px">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
         <span style="font-size:16px">🚨</span>
-        <span style="font-size:13px;font-weight:800;color:#D32F2F">要対応 ${alertForm.length + alertClean.length + alertGarbage.length + alertCheckinMsg.length + alertWelcomeMsg.length}件</span>
+        <span style="font-size:13px;font-weight:800;color:#D32F2F">要対応 ${alertForm.length + alertClean.length + alertGarbage.length + alertCheckinMsg.length + alertWelcomeMsg.length + alertCleaningReminder.length}件</span>
       </div>
       ${alertRows}
     </div>`;
@@ -4729,6 +4741,15 @@ function generateCleaningReminderMsg(code) {
   lines.push('よろしくお願いします！🙌');
 
   showLineMessageModal('🧹 清掃直前指示', lines.join('\n'));
+
+  // LINE生成時に「直前連絡済み」フラグを自動で立てる
+  if (b.code) {
+    if (!bookingChecks[b.code]) bookingChecks[b.code] = {};
+    bookingChecks[b.code].cleaningReminderDone = true;
+    saveBookingChecks();
+    if (typeof renderCalendarTab === 'function') renderCalendarTab();
+    if (typeof renderDashboard === 'function') renderDashboard();
+  }
 }
 
 // ==================== LINEメッセージ表示モーダル ====================
