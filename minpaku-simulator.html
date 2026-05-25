@@ -1797,8 +1797,8 @@ function renderCalendarTab() {
         const cleanAlert = b.code && !chk.cleaningDone && daysToCI <= 14 && daysToCI >= -3;
         const checkinMsgAlert = b.code && !chk.checkinMsgDone && daysToCI >= 0 && daysToCI <= 2;
         const welcomeMsgAlert = b.code && !chk.welcomeMsgDone && daysToCI >= 0 && daysToCI <= 2;
-        // 清掃直前連絡：チェックアウト2日前〜当日
-        const cleaningReminderAlert = b.code && !chk.cleaningReminderDone && daysToCO >= 0 && daysToCO <= 2;
+        // 清掃直前連絡：チェックアウト3日前〜当日
+        const cleaningReminderAlert = b.code && !chk.cleaningReminderDone && daysToCO >= 0 && daysToCO <= 3;
         // ゴミ回収依頼アラート：フィオーレ新子安(propId=2)のみ・チェックアウト3日前〜当日
         const garbageAlert = b.code && !chk.garbageDone && getBookingPropId(b) === 2 && daysToCO >= 0 && daysToCO <= 3;
         const hasAlert = formAlert || cleanAlert || garbageAlert || checkinMsgAlert || welcomeMsgAlert || cleaningReminderAlert;
@@ -3456,13 +3456,13 @@ function renderDashboard() {
     const diff = Math.round((getCI(b) - now) / 86400000);
     return diff >= 0 && diff <= 2;
   }).sort((a,b2) => getCI(a) - getCI(b2));
-  // 清掃直前連絡アラート（チェックアウト2日前〜当日）
+  // 清掃直前連絡アラート（チェックアウト3日前〜当日）
   const alertCleaningReminder = _allBooks.filter(b => {
     if (!b.code || bookingChecks[b.code]?.cleaningReminderDone) return false;
     const co = getCO(b);
     if (!co) return false;
     const diff = Math.round((co - now) / 86400000);
-    return diff >= 0 && diff <= 2;
+    return diff >= 0 && diff <= 3;
   }).sort((a,b2) => (getCO(a)||now) - (getCO(b2)||now));
 
   let html = '';
@@ -3655,7 +3655,7 @@ function renderDashboard() {
     }
     if (alertCleaningReminder.length > 0) {
       if (alertCheckinMsg.length > 0 || alertWelcomeMsg.length > 0) alertRows += `<div style="height:8px"></div>`;
-      alertRows += `<div style="font-size:10px;font-weight:800;color:#FF6D00;letter-spacing:.5px;margin:4px 0 2px">🧹 清掃直前連絡（チェックアウト2日前までに）</div>`;
+      alertRows += `<div style="font-size:10px;font-weight:800;color:#FF6D00;letter-spacing:.5px;margin:4px 0 2px">🧹 清掃直前連絡（チェックアウト3日前までに）</div>`;
       alertRows += alertCleaningReminder.map(b => renderAlertRow(b, 'cleaningReminder')).join('');
     }
     if (alertForm.length > 0) {
