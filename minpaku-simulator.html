@@ -4753,15 +4753,17 @@ function generateCleaningReminderMsg(code) {
   lines.push('');
   lines.push('━━━━━━ 当日の指示 ━━━━━━');
   lines.push('');
+  // 買い出し（清掃前に必要なため一番上に強調表示）
+  if (st.shop === 'yes') {
+    lines.push(`▶▶ 🛒 買い出し：【あり】 ◀◀`);
+    if (shopNote) lines.push(`　→ ${shopNote}`);
+    lines.push('　※清掃前にお買い物をお願いします');
+  } else {
+    lines.push(`▶▶ 🛒 買い出し：【不要】 ◀◀`);
+  }
+  lines.push('');
   // ゴミ袋
   lines.push(`🗑️ ゴミ袋：${st.trash === 'biz' ? '事業用' : '透明'}`);
-  // 買い出し
-  if (st.shop === 'yes') {
-    lines.push(`🛒 買い出し：あり`);
-    if (shopNote) lines.push(`　→ ${shopNote}`);
-  } else {
-    lines.push(`🛒 買い出し：不要`);
-  }
   // キーボックス
   if (keybox) lines.push(`🔐 キーボックス：${keybox}`);
   // メッセージカード
