@@ -4760,7 +4760,7 @@ function generateCleaningReminderMsg(code) {
   const lines = [];
   if (cleanStaffName2) lines.push(`${cleanStaffName2}さん、${greeting}`);
   else lines.push(greeting);
-  lines.push('本日の清掃についてご確認ください🙏');
+  lines.push(`${_lineFmtDate(coStr)}チェックアウト分の清掃についてご確認ください🙏`);
   lines.push('');
   lines.push(`🏠✨ ${propName}`);
   lines.push('');
