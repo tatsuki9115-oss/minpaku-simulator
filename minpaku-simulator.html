@@ -3497,25 +3497,33 @@ function renderDashboard() {
   });
   const fyRevenue = fyBooks.reduce((s, b) => s + b.revenue, 0);
   const fyGuestPayment = getGuestPayment(fyRevenue);
-  // 固定費＋変動費（営業中の物件・該当年度の全月）
+  // 固定費＋変動費（実績タブと同じロジック：未来の予約なし月はスキップ）
+  const _todayY = now.getFullYear();
+  const _todayM = now.getMonth() + 1;
   let fyFixed = 0, fyVar = 0;
   for (let i = 0; i < 12; i++) {
     const mo = ((4 - 1 + i) % 12) + 1;
     const yr = mo >= 4 ? fyStartYear : fyStartYear + 1;
+    const monthBooks = fyBooks.filter(b => {
+      const [by, bm] = b.checkin.split('/').map(Number);
+      return by === yr && bm === mo;
+    });
+    const isFutureMonth = (yr > _todayY) || (yr === _todayY && mo > _todayM);
+    if (isFutureMonth && monthBooks.length === 0) continue;
     properties.forEach(p => {
       if (isPropertyOperating(p, yr, mo)) {
         fyFixed += getPropMonthFixedCosts(p, yr, mo);
         fyVar += getPropMonthActualVarCosts(p, yr, mo);
       }
     });
+    monthBooks.forEach(b => {
+      const pid = getBookingPropId(b);
+      const prop = properties.find(p => p.id === pid);
+      if (prop && !hasActualCosts(pid, yr, mo)) {
+        fyVar += getPerBookingTotal(b, prop);
+      }
+    });
   }
-  fyBooks.forEach(b => {
-    const prop = properties.find(p => p.id === getBookingPropId(b));
-    const [by, bm] = b.checkin.split('/').map(Number);
-    if (prop && !hasActualCosts(getBookingPropId(b), by, bm)) {
-      fyVar += getPerBookingTotal(b, prop);
-    }
-  });
   const fyProfit = fyRevenue - fyFixed - fyVar;
   const fyMargin = fyRevenue > 0 ? Math.round(fyProfit / fyRevenue * 100) : null;
   const fyIsP = fyProfit >= 0;
