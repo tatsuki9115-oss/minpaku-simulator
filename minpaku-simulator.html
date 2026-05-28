@@ -2908,15 +2908,8 @@ function showActualCostModal(year, month, propId) {
     { name: 'その他（明細なし）', autoKey: 'その他（明細なし）', sub: 'オーナーが購入した消耗品・リネン等' },
   ];
 
-  // 変動費初期値：既存データがあればそれを使用、なければカレンダー集計＋skipBudget
-  const extraAmounts = EXTRA_DEFS.map(item => {
-    if (existing) {
-      const found = existing.find(e => e.name === item.name);
-      return found ? found.amount : 0;
-    }
-    if (item.name === 'その他（明細あり）') return (calSum[item.autoKey] || 0) + skipBudget;
-    return calSum[item.autoKey] || 0;
-  });
+  // 変動費はカレンダー実費の合計のみ（モーダルでは編集不可）
+  const extraAmounts = EXTRA_DEFS.map(item => calSum[item.autoKey] || 0);
 
   // 固定費の初期値（既存データがあればそれを、なければ概算値）
   const fixedInitAmounts = displayFixed.map(c => {
@@ -2969,13 +2962,13 @@ function showActualCostModal(year, month, propId) {
   const extraRows = EXTRA_DEFS.map((item, ei) => `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
       <div style="flex:1;min-width:0">
-        <div style="font-size:13px;color:#555">${item.name}${item.autoKey ? '<span style="font-size:9px;color:#1C9A52;margin-left:4px;background:#F0FBF5;padding:1px 5px;border-radius:4px">📅集計</span>' : ''}</div>
-        ${item.sub ? `<div style="font-size:10px;color:#aaa;margin-top:1px">${item.sub}</div>` : ''}
+        <div style="font-size:13px;color:#bbb">${item.name}${item.autoKey ? '<span style="font-size:9px;color:#1C9A52;margin-left:4px;background:#F0FBF5;padding:1px 5px;border-radius:4px">📅集計</span>' : ''}</div>
+        ${item.sub ? `<div style="font-size:10px;color:#ccc;margin-top:1px">${item.sub}</div>` : ''}
       </div>
       <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
-        <span style="font-size:11px;color:#aaa">¥</span>
-        <input type="number" id="ac-extra-${ei}" value="${extraAmounts[ei]}" min="0" step="100"
-          style="width:90px;padding:6px 8px;border:1.5px solid #eee;border-radius:8px;font-size:13px;font-weight:600;text-align:right;color:#333">
+        <span style="font-size:11px;color:#ccc">¥</span>
+        <input type="number" id="ac-extra-${ei}" value="${extraAmounts[ei]}" readonly tabindex="-1"
+          style="width:90px;padding:6px 8px;border:1.5px solid #eee;border-radius:8px;font-size:13px;font-weight:600;text-align:right;color:#bbb;background:#fafafa;pointer-events:none">
       </div>
     </div>`).join('');
 
@@ -3001,7 +2994,7 @@ function showActualCostModal(year, month, propId) {
           <div style="font-size:10px;font-weight:700;color:#B0ADA8">変動費（月合計）</div>
           <div style="font-size:9px;color:#1C9A52;background:#F0FBF5;padding:2px 6px;border-radius:4px">📅集計 = カレンダー入力から自動合算</div>
         </div>
-        <div style="font-size:10px;color:#E65100;background:#FFF8EC;border-radius:6px;padding:5px 8px;margin-bottom:8px">⚠️ 入力すると概算の変動費（清掃費・コインランドリー）は加算されません</div>
+        <div style="font-size:10px;color:#888;background:#F9F8F6;border-radius:6px;padding:5px 8px;margin-bottom:8px">ℹ️ この欄はカレンダータブで入力した実費の合計です（編集はカレンダー側で）</div>
         ${extraRows}
       </div>
       ${memoSection}
