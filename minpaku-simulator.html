@@ -3086,9 +3086,10 @@ function parseCSV(text) {
       checkout: row['終了日'] || '',
       listing: row['リスティング'] || '',
       revenue,
-      adults:   (row['大人']   !== undefined && row['大人']   !== '') ? (parseInt(row['大人'])   || null) : null,
-      children: (row['子ども'] !== undefined && row['子ども'] !== '') ? (parseInt(row['子ども']) || null) : null,
-      infants:  (row['乳幼児'] !== undefined && row['乳幼児'] !== '') ? (parseInt(row['乳幼児']) || null) : null,
+      // Airbnb CSVは「大人の人数」「子どもの人数」「乳幼児の人数」（旧「大人」等にもフォールバック）
+      adults:   (function(){ const v = row['大人の人数']   ?? row['大人'];   return (v !== undefined && v !== '') ? (parseInt(v) || null) : null; })(),
+      children: (function(){ const v = row['子どもの人数'] ?? row['子ども']; return (v !== undefined && v !== '') ? (parseInt(v) || null) : null; })(),
+      infants:  (function(){ const v = row['乳幼児の人数'] ?? row['乳幼児']; return (v !== undefined && v !== '') ? (parseInt(v) || null) : null; })(),
     });
   }
   return bookings;
