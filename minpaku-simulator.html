@@ -4597,7 +4597,7 @@ function generateBookingLineMsg(code) {
   const lines = [];
   if (cleanStaffName) lines.push(`${cleanStaffName}さん、${greeting}`);
   else lines.push(greeting);
-  lines.push('清掃スケジュールのご確認をお願いします🙏');
+  lines.push('別日でこちらの清掃スケジュールのご確認をお願いします🙏');
   lines.push('');
   lines.push(`🏠✨ ${propName}`);
   lines.push('');
@@ -4606,7 +4606,13 @@ function generateBookingLineMsg(code) {
   lines.push(`📅 ${_lineFmtDate(coStr)}`);
   lines.push(`👥 ${_lineGuestStr(b)}`);
   lines.push('');
-  lines.push('ご都合いかがでしょうか？😊');
+  // チェックアウト翌日14時までに清掃できるか確認
+  const coParts = coStr.split('/').map(Number);
+  const coDate = new Date(coParts[0], coParts[1]-1, coParts[2]);
+  coDate.setDate(coDate.getDate() + 1);
+  const nextDay = coDate.getDate();
+  lines.push(`${nextDay}日14時までに清掃入れますか？`);
+  lines.push('もし難しい場合は入れるタイミングを教えてください😊');
   lines.push('お返事お待ちしています！');
 
   showLineMessageModal('🗓️ 清掃依頼', lines.join('\n'));
