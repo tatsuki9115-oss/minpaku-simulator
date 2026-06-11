@@ -2261,6 +2261,7 @@ function downloadBackup() {
   const backup = {
     exportedAt: now.toISOString(),
     airbnbBookings,
+    bookingComBookings: (typeof bookingComBookings !== 'undefined' ? bookingComBookings : []),
     properties,
     bookingChecks,
     listingMap,
@@ -2268,7 +2269,8 @@ function downloadBackup() {
     pricelabsForecast,
     history,
     monthlyData,
-    dataUpdatedAt
+    dataUpdatedAt,
+    msgUsageLog: (typeof msgUsageLog !== 'undefined' ? msgUsageLog : {})
   };
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -2279,6 +2281,24 @@ function downloadBackup() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+  localStorage.setItem('minpaku_last_backup_v1', String(Date.now()));
+}
+
+// 前回バックアップからの経過日数（null=未取得）
+function daysSinceBackup() {
+  const t = parseInt(localStorage.getItem('minpaku_last_backup_v1') || '0');
+  if (!t) return null;
+  return Math.floor((Date.now() - t) / 86400000);
+}
+
+// 自動バックアップ：開いたとき前回から7日以上たっていたら自動保存（Firebase同期完了を待って実行）
+function autoBackupCheck() {
+  const days = daysSinceBackup();
+  if (days !== null && days < 7) return;
+  try {
+    downloadBackup();
+    showToast('💾 自動バックアップを保存しました（ダウンロードフォルダ）', 'success');
+  } catch(e) { console.warn('auto backup failed:', e); }
 }
 function escHtml(str) {
   return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -3704,6 +3724,11 @@ function renderDashboard() {
       </div>
       <span style="font-size:11px;font-weight:700;color:#F07C3F;white-space:nowrap;flex-shrink:0">詳細 ›</span>
     </div>` : ''}
+    ${(() => {
+      const bd = daysSinceBackup();
+      const warn = bd === null || bd >= 7;
+      return `<div style="font-size:10px;color:${warn?'#E65100':'#C8C5C0'};margin-top:8px;text-align:right">💾 前回バックアップ：${bd===null?'未取得':bd===0?'今日':bd+'日前'}${warn?'（次回起動時に自動保存されます）':''}</div>`;
+    })()}
   </div>`;
 
   // ========== アラートカード ==========
@@ -4645,6 +4670,8 @@ renderDashboard();
 document.getElementById('nav-bookings').classList.add('active');
 // メッセージタブも事前レンダリング（msgUsageLog初期化後に呼ぶためsetTimeoutで遅延）
 setTimeout(() => renderMessageTab(), 0);
+// 自動バックアップ判定（Firebase同期が落ち着くのを待ってから）
+setTimeout(() => autoBackupCheck(), 8000);
 // initFirebaseSync() はログイン後に fbauth.onAuthStateChanged 内で呼ぶ
 
 // ==================== LINE文生成 共通ヘルパー ====================
