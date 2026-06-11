@@ -4116,18 +4116,21 @@ function renderAnnual() {
     const monthFixedCosts = operatingProps.reduce((s, p) => s + getPropMonthFixedCosts(p, mYear, m), 0);
     const isActual = operatingProps.some(p => hasActualCosts(p.id, mYear, m));
 
-    let rev = 0, varCosts = 0, nights = 0, adrRev = 0, adrBookings = 0, leadSum = 0, leadCnt = 0, revAirbnb = 0, revBooking = 0;
+    let rev = 0, varCosts = 0, nights = 0, adrRev = 0, adrBookings = 0, leadSum = 0, leadCnt = 0, leadSumL = 0, leadCntL = 0, revAirbnb = 0, revBooking = 0;
     mBooks.forEach(b => {
       if (!b.revenue || b.revenue === 0) return; // ¥0予約はスキップ
       rev += b.revenue;
       // チャネル別売上
       if (b.source === 'booking') revBooking += b.revenue; else revAirbnb += b.revenue;
-      // リードタイム（予約日→チェックインの日数）
+      // リードタイム（予約日→チェックインの日数）：短期と長期(28泊以上)で分けて集計
       if (b.bookingTime) {
         const bt = new Date(String(b.bookingTime).split('T')[0]);
         const cp = b.checkin.split('/').map(Number);
         const ld = Math.round((new Date(cp[0], cp[1]-1, cp[2]) - bt) / 86400000);
-        if (!isNaN(ld) && ld >= 0 && ld < 730) { leadSum += ld; leadCnt++; }
+        if (!isNaN(ld) && ld >= 0 && ld < 730) {
+          if (isLongStayListing(b)) { leadSumL += ld; leadCntL++; }
+          else { leadSum += ld; leadCnt++; }
+        }
       }
       const pid = getBookingPropId(b);
       const prop = properties.find(p => p.id === pid);
@@ -4145,7 +4148,7 @@ function renderAnnual() {
     const dim = getDaysInMonth(mYear, m);
     const activePropCount = Math.max(operatingProps.length, 1);
     const maxNights = dim * activePropCount;
-    return { month: m, year: mYear, revenue: rev, profit, nights, adrRev, adrBookings, leadSum, leadCnt, revAirbnb, revBooking, bookings: mBooks.length, daysInMonth: dim, maxNights, occRate: Math.min(Math.round(nights / maxNights * 100), 100), monthFixedCosts, varCosts, isActual, operatingProps };
+    return { month: m, year: mYear, revenue: rev, profit, nights, adrRev, adrBookings, leadSum, leadCnt, leadSumL, leadCntL, revAirbnb, revBooking, bookings: mBooks.length, daysInMonth: dim, maxNights, occRate: Math.min(Math.round(nights / maxNights * 100), 100), monthFixedCosts, varCosts, isActual, operatingProps };
   });
 
   const validMonths = monthlyStats.filter(Boolean);
@@ -4220,7 +4223,7 @@ function renderAnnual() {
           ${(() => { const a = adrPair(ms.adrRev, ms.nights); return a.host>0 ? `<span>ADR 受取¥${fmt(a.host)} / ゲスト¥${fmt(a.guest)}（/泊）</span>` : ''; })()}
           ${ms.maxNights>0&&ms.adrRev>0 ? `<span>RevPAR ¥${fmt(Math.round(ms.adrRev/ms.maxNights))}</span>` : ''}
           ${ms.adrBookings>0 ? `<span>平均滞在 ${(ms.nights/ms.adrBookings).toFixed(1)}泊</span>` : ''}
-          ${ms.leadCnt>0 ? `<span>リードタイム 平均${Math.round(ms.leadSum/ms.leadCnt)}日</span>` : ''}
+          ${(ms.leadCnt>0||ms.leadCntL>0) ? `<span>リードタイム ${ms.leadCnt>0?'短期'+Math.round(ms.leadSum/ms.leadCnt)+'日':''}${ms.leadCnt>0&&ms.leadCntL>0?' / ':''}${ms.leadCntL>0?'長期'+Math.round(ms.leadSumL/ms.leadCntL)+'日':''}</span>` : ''}
           ${(ms.revAirbnb+ms.revBooking)>0 ? `<span>Airbnb ${Math.round(ms.revAirbnb/(ms.revAirbnb+ms.revBooking)*100)}% / B.com ${100-Math.round(ms.revAirbnb/(ms.revAirbnb+ms.revBooking)*100)}%</span>` : ''}
         </div>
       </div>`;
@@ -4314,6 +4317,9 @@ function renderAnnual() {
   const totalLeadSum = validMonths.reduce((s, m) => s + (m.leadSum || 0), 0);
   const totalLeadCnt = validMonths.reduce((s, m) => s + (m.leadCnt || 0), 0);
   const avgLead = totalLeadCnt > 0 ? Math.round(totalLeadSum / totalLeadCnt) : null;
+  const totalLeadSumL = validMonths.reduce((s, m) => s + (m.leadSumL || 0), 0);
+  const totalLeadCntL = validMonths.reduce((s, m) => s + (m.leadCntL || 0), 0);
+  const avgLeadL = totalLeadCntL > 0 ? Math.round(totalLeadSumL / totalLeadCntL) : null;
   const totalRevAirbnb = validMonths.reduce((s, m) => s + (m.revAirbnb || 0), 0);
   const totalRevBooking = validMonths.reduce((s, m) => s + (m.revBooking || 0), 0);
   const chRevTotal = totalRevAirbnb + totalRevBooking;
@@ -4410,7 +4416,7 @@ function renderAnnual() {
     <div style="display:flex;gap:16px;padding-top:6px;flex-wrap:wrap">
       <div style="font-size:11px;color:#B0ADA8">RevPAR <span style="font-weight:700;color:#666">¥${fmt(totalRevPAR)}</span> <span style="font-size:10px;color:#C8C5C0">(受取/営業日)</span></div>
       <div style="font-size:11px;color:#B0ADA8">平均滞在 <span style="font-weight:700;color:#666">${totalLOS>0?totalLOS.toFixed(1):'—'}泊</span></div>
-      <div style="font-size:11px;color:#B0ADA8">リードタイム <span style="font-weight:700;color:#666">${avgLead!==null?'平均'+avgLead+'日':'—'}</span></div>
+      <div style="font-size:11px;color:#B0ADA8">リードタイム <span style="font-weight:700;color:#666">${avgLead!==null?'短期'+avgLead+'日':'短期—'}</span>${avgLeadL!==null?` <span style="color:#C8C5C0">/</span> <span style="font-weight:700;color:#7c3aed">長期${avgLeadL}日</span>`:''}</div>
       <div style="font-size:11px;color:#B0ADA8">チャネル <span style="font-weight:700;color:#FF5A5F">Airbnb ${chAirbnbPct}%</span><span style="color:#C8C5C0"> / </span><span style="font-weight:700;color:#003580">B.com ${100-chAirbnbPct}%</span> <span style="font-size:10px;color:#C8C5C0">(売上比)</span></div>
     </div>
   </div>`;
@@ -4554,7 +4560,7 @@ function renderAnnual() {
             ${!isFutureMonth ? (ms.isActual
               ? `<span style="font-size:10px;font-weight:700;color:#1C9A52;background:#F0FBF5;border-radius:6px;padding:2px 7px">✅ 実費</span>`
               : `<span style="font-size:10px;font-weight:600;color:#B0ADA8;background:#F2F1EE;border-radius:6px;padding:2px 7px">〜 概算</span>`) : ''}
-            <div style="font-size:11px;color:#aaa">${ms.bookings}件・${ms.nights}泊${ms.adrBookings>0?'・平均'+(ms.nights/ms.adrBookings).toFixed(1)+'泊':''}${ms.leadCnt>0?'・リード'+Math.round(ms.leadSum/ms.leadCnt)+'日':''}</div>
+            <div style="font-size:11px;color:#aaa">${ms.bookings}件・${ms.nights}泊${ms.adrBookings>0?'・平均'+(ms.nights/ms.adrBookings).toFixed(1)+'泊':''}${ms.leadCnt>0?'・リード'+Math.round(ms.leadSum/ms.leadCnt)+'日':''}${ms.leadCntL>0?'・長期リード'+Math.round(ms.leadSumL/ms.leadCntL)+'日':''}</div>
             ${!isFutureMonth ? `<div style="display:flex;gap:4px;flex-wrap:wrap">${actBtns}</div>` : ''}
           </div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:3px">
