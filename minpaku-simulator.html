@@ -2428,6 +2428,64 @@ function renderProfitChart(monthlyStats, monthlyTarget) {
     + '</svg>';
 }
 
+// ADR月別推移グラフ（受取ADR=実線オレンジ / ゲスト支払ADR=破線グレー）
+function renderADRChart(monthlyStats) {
+  const fyOrder = [4,5,6,7,8,9,10,11,12,1,2,3];
+  const pts = monthlyStats.map(m => {
+    if (!m || !m.nights || m.nights <= 0) return null;
+    return {
+      host:  Math.round((m.adrRev || 0) / m.nights),
+      guest: Math.round(getGuestPayment(m.adrRev || 0) / m.nights),
+      revpar: m.maxNights > 0 ? Math.round((m.adrRev || 0) / m.maxNights) : 0,
+    };
+  });
+  const valid = pts.filter(Boolean);
+  if (valid.length === 0) return '<div style="text-align:center;color:#ccc;padding:16px;font-size:12px">ADRデータなし</div>';
+  const maxV = Math.max(...valid.map(p => p.guest), 1);
+  const W = 300, H = 150, topPad = 16, botPad = 16, leftPad = 2, rightPad = 2;
+  const chartH = H - topPad - botPad;
+  const xAt = i => leftPad + (W - leftPad - rightPad) * (i + 0.5) / 12;
+  const yAt = v => topPad + chartH * (1 - v / maxV);
+  const buildLine = (key) => {
+    let d = '', dots = '';
+    pts.forEach((p, i) => {
+      if (!p) return;
+      const x = xAt(i).toFixed(1), y = yAt(p[key]).toFixed(1);
+      d += (d ? ' L' : 'M') + x + ' ' + y;
+      const color = key === 'host' ? '#F07C3F' : key === 'revpar' ? '#1C9A52' : '#B0ADA8';
+      dots += '<circle cx="'+x+'" cy="'+y+'" r="2.2" fill="'+color+'"/>';
+    });
+    return { d, dots };
+  };
+  const hostL = buildLine('host');
+  const guestL = buildLine('guest');
+  const revparL = buildLine('revpar');
+  // 受取ADRの値ラベル（各点の上）
+  let hostLabels = '';
+  pts.forEach((p, i) => {
+    if (!p) return;
+    const x = xAt(i), y = yAt(p.host);
+    hostLabels += '<text x="'+x.toFixed(1)+'" y="'+(y-5).toFixed(1)+'" text-anchor="middle" font-size="7.5" font-weight="800" fill="#E0662B" stroke="white" stroke-width="2" paint-order="stroke">'+(p.host/1000).toFixed(1)+'k</text>';
+  });
+  const labels = monthlyStats.map((m, i) => {
+    const x = xAt(i).toFixed(1);
+    const label = m ? m.month : fyOrder[i];
+    return '<text x="'+x+'" y="'+(H-3)+'" text-anchor="middle" font-size="8" fill="#bbb">'+label+'</text>';
+  }).join('');
+  return '<div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;font-size:10px;color:#888;flex-wrap:wrap">'
+    + '<span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:12px;height:2px;background:#F07C3F"></span>受取ADR</span>'
+    + '<span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:12px;height:2px;background:#B0ADA8;border-top:1px dashed #B0ADA8"></span>ゲスト支払ADR</span>'
+    + '<span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:12px;height:2px;background:#1C9A52"></span>RevPAR</span>'
+    + '<span style="color:#C8C5C0">（円/泊・28泊以上除く）</span>'
+    + '</div>'
+    + '<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="display:block">'
+    + '<path d="'+guestL.d+'" fill="none" stroke="#B0ADA8" stroke-width="1.5" stroke-dasharray="4 3"/>'
+    + '<path d="'+revparL.d+'" fill="none" stroke="#1C9A52" stroke-width="1.5"/>'
+    + '<path d="'+hostL.d+'" fill="none" stroke="#F07C3F" stroke-width="2"/>'
+    + guestL.dots + revparL.dots + hostL.dots + hostLabels + labels
+    + '</svg>';
+}
+
 // チェックアウト日を取得（旧データ対応：なければcheckin+nightsで計算）
 function getCheckout(b) {
   if (b.checkout) return b.checkout;
@@ -3944,6 +4002,11 @@ function toggleCheckForDash(code, field) {
 function renderAnnual() {
   const content = document.getElementById('annual-content');
   const fmt = n => n.toLocaleString('ja-JP');
+  // ADR（1泊あたり単価）：長期予約(28泊以上)を除いた収入÷稼働日数。host=受取/泊, guest=ゲスト支払/泊
+  const adrPair = (adrRev, nights) => ({
+    host:  nights > 0 ? Math.round(adrRev / nights) : 0,
+    guest: nights > 0 ? Math.round(getGuestPayment(adrRev) / nights) : 0,
+  });
 
   if (airbnbBookings.length === 0 && bookingComBookings.length === 0) {
     content.innerHTML = `
@@ -4015,18 +4078,27 @@ function renderAnnual() {
     const monthFixedCosts = operatingProps.reduce((s, p) => s + getPropMonthFixedCosts(p, mYear, m), 0);
     const isActual = operatingProps.some(p => hasActualCosts(p.id, mYear, m));
 
-    let rev = 0, varCosts = 0, nights = 0;
+    let rev = 0, varCosts = 0, nights = 0, adrRev = 0, adrBookings = 0, leadSum = 0, leadCnt = 0, revAirbnb = 0, revBooking = 0;
     mBooks.forEach(b => {
       if (!b.revenue || b.revenue === 0) return; // ¥0予約はスキップ
       rev += b.revenue;
+      // チャネル別売上
+      if (b.source === 'booking') revBooking += b.revenue; else revAirbnb += b.revenue;
+      // リードタイム（予約日→チェックインの日数）
+      if (b.bookingTime) {
+        const bt = new Date(String(b.bookingTime).split('T')[0]);
+        const cp = b.checkin.split('/').map(Number);
+        const ld = Math.round((new Date(cp[0], cp[1]-1, cp[2]) - bt) / 86400000);
+        if (!isNaN(ld) && ld >= 0 && ld < 730) { leadSum += ld; leadCnt++; }
+      }
       const pid = getBookingPropId(b);
       const prop = properties.find(p => p.id === pid);
       // 実費保存済みの月は per-booking 変動費を加算しない（後で実費変動費を加算）
       if (prop && !hasActualCosts(pid, mYear, m)) {
         varCosts += getPerBookingTotal(b, prop);
       }
-      // 【28泊以上】リスティング（定期借家契約）は稼働日数にカウントしない
-      if (!isLongStayListing(b)) nights += b.nights;
+      // 【28泊以上】リスティング（定期借家契約）は稼働日数・ADRにカウントしない
+      if (!isLongStayListing(b)) { nights += b.nights; adrRev += b.revenue; adrBookings++; }
     });
     // 実費保存済み物件の変動費を月単位で加算
     operatingProps.forEach(p => { varCosts += getPropMonthActualVarCosts(p, mYear, m); });
@@ -4035,7 +4107,7 @@ function renderAnnual() {
     const dim = getDaysInMonth(mYear, m);
     const activePropCount = Math.max(operatingProps.length, 1);
     const maxNights = dim * activePropCount;
-    return { month: m, year: mYear, revenue: rev, profit, nights, bookings: mBooks.length, daysInMonth: dim, maxNights, occRate: Math.min(Math.round(nights / maxNights * 100), 100), monthFixedCosts, varCosts, isActual, operatingProps };
+    return { month: m, year: mYear, revenue: rev, profit, nights, adrRev, adrBookings, leadSum, leadCnt, revAirbnb, revBooking, bookings: mBooks.length, daysInMonth: dim, maxNights, occRate: Math.min(Math.round(nights / maxNights * 100), 100), monthFixedCosts, varCosts, isActual, operatingProps };
   });
 
   const validMonths = monthlyStats.filter(Boolean);
@@ -4104,9 +4176,14 @@ function renderAnnual() {
             <div style="font-size:9px;color:#C8C5C0;margin-top:2px">利益÷受取</div>
           </div>
         </div>
-        <div style="display:flex;gap:12px;padding-top:8px;font-size:11px;color:#C8C5C0">
+        <div style="display:flex;gap:12px;padding-top:8px;font-size:11px;color:#C8C5C0;flex-wrap:wrap">
           <span>固定費 ${fmtShort(ms.monthFixedCosts)}円${ms.isActual?' <span style="color:#1C9A52;font-weight:700">[実費]</span>':''}</span>
           <span>変動費 ${fmtShort(ms.varCosts)}円</span>
+          ${(() => { const a = adrPair(ms.adrRev, ms.nights); return a.host>0 ? `<span>ADR 受取¥${fmt(a.host)} / ゲスト¥${fmt(a.guest)}（/泊）</span>` : ''; })()}
+          ${ms.maxNights>0&&ms.adrRev>0 ? `<span>RevPAR ¥${fmt(Math.round(ms.adrRev/ms.maxNights))}</span>` : ''}
+          ${ms.adrBookings>0 ? `<span>平均滞在 ${(ms.nights/ms.adrBookings).toFixed(1)}泊</span>` : ''}
+          ${ms.leadCnt>0 ? `<span>リードタイム 平均${Math.round(ms.leadSum/ms.leadCnt)}日</span>` : ''}
+          ${(ms.revAirbnb+ms.revBooking)>0 ? `<span>Airbnb ${Math.round(ms.revAirbnb/(ms.revAirbnb+ms.revBooking)*100)}% / B.com ${100-Math.round(ms.revAirbnb/(ms.revAirbnb+ms.revBooking)*100)}%</span>` : ''}
         </div>
       </div>`;
     }
@@ -4188,7 +4265,21 @@ function renderAnnual() {
   const totalProfit = validMonths.reduce((s, m) => s + m.profit, 0);
   const totalNights = validMonths.reduce((s, m) => s + m.nights, 0);
   const totalBookings = validMonths.reduce((s, m) => s + m.bookings, 0);
+  const totalAdrRev = validMonths.reduce((s, m) => s + (m.adrRev || 0), 0);
+  const totalADR = adrPair(totalAdrRev, totalNights);
   const avgPerNight = totalNights > 0 ? Math.round(totalRevenue / totalNights) : 0;
+  // 追加KPI：RevPAR・平均滞在日数(LOS)・リードタイム・チャネル構成比
+  const totalMaxNights = validMonths.reduce((s, m) => s + (m.maxNights || 0), 0);
+  const totalRevPAR = totalMaxNights > 0 ? Math.round(totalAdrRev / totalMaxNights) : 0;
+  const totalAdrBookings = validMonths.reduce((s, m) => s + (m.adrBookings || 0), 0);
+  const totalLOS = totalAdrBookings > 0 ? (totalNights / totalAdrBookings) : 0;
+  const totalLeadSum = validMonths.reduce((s, m) => s + (m.leadSum || 0), 0);
+  const totalLeadCnt = validMonths.reduce((s, m) => s + (m.leadCnt || 0), 0);
+  const avgLead = totalLeadCnt > 0 ? Math.round(totalLeadSum / totalLeadCnt) : null;
+  const totalRevAirbnb = validMonths.reduce((s, m) => s + (m.revAirbnb || 0), 0);
+  const totalRevBooking = validMonths.reduce((s, m) => s + (m.revBooking || 0), 0);
+  const chRevTotal = totalRevAirbnb + totalRevBooking;
+  const chAirbnbPct = chRevTotal > 0 ? Math.round(totalRevAirbnb / chRevTotal * 100) : 0;
   const bestMonth = validMonths.length > 0 ? validMonths.reduce((a, b) => b.profit > a.profit ? b : a) : null;
   const isAP = totalProfit >= 0;
 
@@ -4273,10 +4364,16 @@ function renderAnnual() {
         <div style="font-size:9px;color:#C8C5C0;margin-top:2px">利益÷受取</div>
       </div>
     </div>
-    <div style="display:flex;gap:16px;padding-top:8px;border-top:1px solid #F2F1EE">
+    <div style="display:flex;gap:16px;padding-top:8px;border-top:1px solid #F2F1EE;flex-wrap:wrap">
       <div style="font-size:11px;color:#B0ADA8">${totalBookings}件・${totalNights}泊</div>
-      <div style="font-size:11px;color:#B0ADA8">平均 <span style="font-weight:700;color:#666">${fmt(avgPerNight)}円/泊</span></div>
+      <div style="font-size:11px;color:#B0ADA8">ADR <span style="font-weight:700;color:#666">受取¥${fmt(totalADR.host)}</span> <span style="color:#C8C5C0">/ ゲスト¥${fmt(totalADR.guest)}</span> <span style="font-size:9px;color:#C8C5C0">(/泊)</span></div>
       ${bestMonth ? `<div style="font-size:11px;color:#B0ADA8">最高 <span style="font-weight:700;color:${bestMonth.profit>=0?'#1C9A52':'#E53935'}">${bestMonth.month}月 ${bestMonth.profit<0?'▲':''}${fmtShort(Math.abs(bestMonth.profit))}円</span></div>` : ''}
+    </div>
+    <div style="display:flex;gap:16px;padding-top:6px;flex-wrap:wrap">
+      <div style="font-size:11px;color:#B0ADA8">RevPAR <span style="font-weight:700;color:#666">¥${fmt(totalRevPAR)}</span> <span style="font-size:9px;color:#C8C5C0">(受取/営業日)</span></div>
+      <div style="font-size:11px;color:#B0ADA8">平均滞在 <span style="font-weight:700;color:#666">${totalLOS>0?totalLOS.toFixed(1):'—'}泊</span></div>
+      <div style="font-size:11px;color:#B0ADA8">リードタイム <span style="font-weight:700;color:#666">${avgLead!==null?'平均'+avgLead+'日':'—'}</span></div>
+      <div style="font-size:11px;color:#B0ADA8">チャネル <span style="font-weight:700;color:#FF5A5F">Airbnb ${chAirbnbPct}%</span><span style="color:#C8C5C0"> / </span><span style="font-weight:700;color:#003580">B.com ${100-chAirbnbPct}%</span> <span style="font-size:9px;color:#C8C5C0">(売上比)</span></div>
     </div>
   </div>`;
 
@@ -4289,20 +4386,26 @@ function renderAnnual() {
       <div class="card-title" style="margin-bottom:10px">月別利益（緑＝黒字 / 赤＝赤字）</div>
       ${renderProfitChart(monthlyStats, monthlyTarget)}
       <div style="height:1px;background:#f0f0f0;margin:14px 0 12px"></div>
+      <div class="card-title" style="margin-bottom:10px">ADR・RevPAR月別推移（1泊あたり単価）</div>
+      ${renderADRChart(monthlyStats)}
+      <div style="height:1px;background:#f0f0f0;margin:14px 0 12px"></div>
       <table class="month-table">
-        <thead><tr><th>月</th><th>件</th><th style="color:#C8C5C0">ゲスト</th><th>受取</th><th>利益</th><th>利益率</th><th>稼働</th></tr></thead>
+        <thead><tr><th>月</th><th>件</th><th style="color:#C8C5C0">ゲスト</th><th>受取</th><th>ADR<br><span style="font-size:8px;font-weight:400;color:#C8C5C0">受取/ゲスト</span></th><th>RevPAR</th><th>利益</th><th>利益率</th><th>稼働</th></tr></thead>
         <tbody>
           ${monthlyStats.map((ms, i) => {
             const mo = fyMonthOrder[i];
-            if (!ms) return `<tr><td style="color:#ddd">${mo}月</td><td colspan="6" style="color:#eee;text-align:center">−</td></tr>`;
+            if (!ms) return `<tr><td style="color:#ddd">${mo}月</td><td colspan="8" style="color:#eee;text-align:center">−</td></tr>`;
             const isMP = ms.profit >= 0;
             const gp = getGuestPayment(ms.revenue);
             const mMargin = ms.revenue > 0 ? Math.round(ms.profit/ms.revenue*100) : null;
+            const adr = adrPair(ms.adrRev, ms.nights);
             return `<tr style="cursor:pointer" onclick="document.getElementById('mcard-${ms.month}').scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>{var body=document.getElementById('mcard-${ms.month}').querySelector('.month-detail-body');if(!body.classList.contains('open')){body.classList.add('open');var ch=document.getElementById('mcard-${ms.month}').querySelector('.mchev');if(ch)ch.style.transform='rotate(180deg)';}},300)">
               <td>${ms.month}月</td>
               <td>${ms.bookings}</td>
               <td style="color:#C8C5C0;font-size:11px">${fmtShort(gp)}</td>
               <td>${fmtShort(ms.revenue)}</td>
+              <td style="font-size:11px">${adr.host>0?fmtShort(adr.host):'—'}<br><span style="font-size:9px;color:#C8C5C0">${adr.guest>0?fmtShort(adr.guest):''}</span></td>
+              <td style="font-size:11px">${ms.maxNights>0&&ms.adrRev>0?fmtShort(Math.round(ms.adrRev/ms.maxNights)):'—'}</td>
               <td class="td-profit ${isMP?'profit':'loss'}">${isMP?'':'▲'}${fmtShort(Math.abs(ms.profit))}</td>
               <td class="td-profit ${isMP?'profit':'loss'}">${mMargin!==null?(isMP?'':'▲')+Math.abs(mMargin)+'%':'—'}</td>
               <td>${ms.occRate}%</td>
@@ -4312,6 +4415,8 @@ function renderAnnual() {
             <td>合計</td><td>${totalBookings}件</td>
             <td style="color:#C8C5C0;font-size:11px">${fmtShort(totalGuestPayment)}</td>
             <td>${fmtShort(totalRevenue)}</td>
+            <td style="font-size:11px">${totalADR.host>0?fmtShort(totalADR.host):'—'}<br><span style="font-size:9px;color:#C8C5C0">${totalADR.guest>0?fmtShort(totalADR.guest):''}</span></td>
+            <td style="font-size:11px">${totalRevPAR>0?fmtShort(totalRevPAR):'—'}</td>
             <td class="td-profit ${isAP?'profit':'loss'}">${isAP?'':'▲'}${fmtShort(Math.abs(totalProfit))}</td>
             <td class="td-profit ${isAP?'profit':'loss'}">${totalRevenue>0?(isAP?'':'▲')+Math.abs(Math.round(totalProfit/totalRevenue*100))+'%':'—'}</td>
             <td>−</td>
@@ -4409,7 +4514,7 @@ function renderAnnual() {
             ${!isFutureMonth ? (ms.isActual
               ? `<span style="font-size:10px;font-weight:700;color:#1C9A52;background:#F0FBF5;border-radius:6px;padding:2px 7px">✅ 実費</span>`
               : `<span style="font-size:10px;font-weight:600;color:#B0ADA8;background:#F2F1EE;border-radius:6px;padding:2px 7px">〜 概算</span>`) : ''}
-            <div style="font-size:11px;color:#aaa">${ms.bookings}件・${ms.nights}泊</div>
+            <div style="font-size:11px;color:#aaa">${ms.bookings}件・${ms.nights}泊${ms.adrBookings>0?'・平均'+(ms.nights/ms.adrBookings).toFixed(1)+'泊':''}${ms.leadCnt>0?'・リード'+Math.round(ms.leadSum/ms.leadCnt)+'日':''}</div>
             ${!isFutureMonth ? `<div style="display:flex;gap:4px;flex-wrap:wrap">${actBtns}</div>` : ''}
           </div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:3px">
@@ -4420,6 +4525,7 @@ function renderAnnual() {
         <div style="text-align:right;margin-left:8px;min-width:90px">
           <div style="font-size:10px;color:#C8C5C0">ゲスト <span style="font-weight:700;color:#999">${fmtShort(getGuestPayment(ms.revenue))}円</span></div>
           <div style="font-size:10px;color:#C8C5C0;margin-top:1px">受取 <span style="font-weight:700;color:#666">${fmtShort(ms.revenue)}円</span></div>
+          ${(() => { const a = adrPair(ms.adrRev, ms.nights); return a.host>0 ? `<div style="font-size:10px;color:#C8C5C0;margin-top:1px">ADR <span style="font-weight:700;color:#666">¥${fmt(a.host)}</span><span style="color:#C8C5C0">/¥${fmt(a.guest)}</span></div>` : ''; })()}
           <div style="font-size:14px;font-weight:800;color:${isMP?'#1C9A52':'#E53935'};margin-top:2px">${isMP?'':'▲'}${fmtShort(Math.abs(ms.profit))}円</div>
         </div>
         <span class="mchev" style="margin-left:6px">▼</span>
