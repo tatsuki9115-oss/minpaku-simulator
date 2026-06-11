@@ -5177,6 +5177,8 @@ let msgUsageLog = (function() {
 let msgMode = 'message'; // 'message' | 'review' | 'welcome'
 let welcomeWeatherData = null; // { area, days, fetchedAt }
 let welcomeEventData   = null; // { events, startDate, endDate, fetchedAt }
+let welcomeTyphoonData = null; // { approaching, name, number, closestDate, minKm, list }
+let welcomeTyphoonInclude = false; // ウェルカム文に台風情報を入れるか（チェックボックス連動）
 
 function saveMsgUsageLog() {
   localStorage.setItem(MSG_USAGE_KEY, JSON.stringify(msgUsageLog));
@@ -5262,10 +5264,11 @@ function renderMessageTab() {
   const mB = (m) => `padding:12px 4px;border-radius:12px;border:2px solid ${msgMode===m?'#F07C3F':'#E8E6E1'};background:${msgMode===m?'#FFF3ED':'#FAFAF9'};color:${msgMode===m?'#F07C3F':'#888'};font-size:12px;font-weight:800;cursor:pointer;transition:all .15s;width:100%`;
   el.innerHTML = `
     <div class="card" style="padding:10px">
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
         <button id="mode-btn-message" onclick="setMsgMode('message')" style="${mB('message')}">💬 メッセージ</button>
         <button id="mode-btn-review"  onclick="setMsgMode('review')"  style="${mB('review')}">⭐ レビュー</button>
         <button id="mode-btn-welcome" onclick="setMsgMode('welcome')" style="${mB('welcome')}">🌤️ ウェルカム</button>
+        <button id="mode-btn-emergency" onclick="setMsgMode('emergency')" style="${mB('emergency')}">🚨 地震・緊急</button>
       </div>
     </div>
 
@@ -5294,6 +5297,7 @@ function renderMessageTab() {
         🌤️ 天気予報を取得
       </button>
       <div id="welcome-weather-preview" style="margin-top:12px"></div>
+      <div id="welcome-typhoon-box"></div>
     </div>
     <div class="card" id="welcome-event-card" style="display:none">
       <div class="card-title">🎪 イベント情報取得</div>
@@ -5303,6 +5307,19 @@ function renderMessageTab() {
         🎪 イベント情報を取得
       </button>
       <div id="welcome-event-preview" style="margin-top:12px"></div>
+    </div>
+    ` : msgMode === 'emergency' ? `
+    <div class="card">
+      <div class="card-title">🚨 地震・緊急メッセージ</div>
+      <div id="emg-area-info" style="font-size:13px;color:#777;margin-bottom:12px;padding:8px 12px;background:#F5F5F4;border-radius:8px;line-height:1.6">↑ まず予約を選択してください</div>
+      <div style="font-size:12px;font-weight:700;color:#B0ADA8;margin-bottom:8px">含める内容（チェックを外すと省略）</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;color:#333;cursor:pointer"><input type="checkbox" id="emg-safety" checked style="width:18px;height:18px;cursor:pointer">安否確認（ご無事ですか？）</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;color:#333;cursor:pointer"><input type="checkbox" id="emg-bousai" checked style="width:18px;height:18px;cursor:pointer">避難・防災情報リンク</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;color:#333;cursor:pointer"><input type="checkbox" id="emg-transit" checked style="width:18px;height:18px;cursor:pointer">交通機関の遅延注意</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;color:#333;cursor:pointer"><input type="checkbox" id="emg-property" checked style="width:18px;height:18px;cursor:pointer">物件の安全案内</label>
+      </div>
+      <div style="font-size:12px;color:#888;margin-top:12px;padding:8px 10px;background:#FFF8E1;border-radius:8px;line-height:1.5">ℹ️ 緊急時にすぐ伝わるよう、日本語＋英語の併記で生成します。</div>
     </div>
     ` : `
     <div class="card">
@@ -5359,19 +5376,19 @@ function renderMessageTab() {
     `}
 
     <div class="card" style="background:#1C1C1E">
-      <button onclick="${msgMode === 'welcome' ? 'generateWelcomeMsg()' : 'generateMsgPrompt()'}" style="width:100%;padding:18px;background:#F07C3F;border:none;border-radius:12px;color:white;font-size:17px;font-weight:800;cursor:pointer;letter-spacing:.3px">
-        ${msgMode === 'welcome' ? '🌤️ ウェルカムメッセージを生成' : msgMode === 'review' ? '⭐ レビュープロンプトを生成' : '✨ メッセージプロンプトを生成'}
+      <button onclick="${msgMode === 'welcome' ? 'generateWelcomeMsg()' : msgMode === 'emergency' ? 'generateEmergencyMsg()' : 'generateMsgPrompt()'}" style="width:100%;padding:18px;background:#F07C3F;border:none;border-radius:12px;color:white;font-size:17px;font-weight:800;cursor:pointer;letter-spacing:.3px">
+        ${msgMode === 'welcome' ? '🌤️ ウェルカムメッセージを生成' : msgMode === 'emergency' ? '🚨 緊急時メッセージを生成' : msgMode === 'review' ? '⭐ レビュープロンプトを生成' : '✨ メッセージプロンプトを生成'}
       </button>
     </div>
 
     <div class="card" id="msg-output-card" style="display:none">
-      <div class="card-title">${msgMode === 'welcome' ? 'ウェルカムメッセージ' : '生成されたプロンプト'}</div>
+      <div class="card-title">${msgMode === 'welcome' ? 'ウェルカムメッセージ' : msgMode === 'emergency' ? '緊急時メッセージ' : '生成されたプロンプト'}</div>
       <textarea id="msg-prompt-area" readonly style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:12px;font-size:13px;line-height:1.7;min-height:300px;background:#F5F5F4;font-family:'Noto Sans JP',sans-serif;box-sizing:border-box;color:#333;resize:none"></textarea>
-      <div style="display:grid;grid-template-columns:${msgMode === 'welcome' ? '1fr' : '1fr 1fr'};gap:10px;margin-top:12px">
+      <div style="display:grid;grid-template-columns:${(msgMode === 'welcome' || msgMode === 'emergency') ? '1fr' : '1fr 1fr'};gap:10px;margin-top:12px">
         <button onclick="copyMsgPrompt()" style="padding:14px;background:#1C1C1E;border:none;border-radius:12px;color:white;font-size:14px;font-weight:800;cursor:pointer">
           📋 コピー
         </button>
-        ${msgMode !== 'welcome' ? `<a href="https://claude.ai/project/019d7f68-1586-74f9-881a-40589cd54489" target="_blank" style="padding:14px;background:#7c3aed;border:none;border-radius:12px;color:white;font-size:14px;font-weight:800;cursor:pointer;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:4px">🤖 民泊botを開く</a>` : ''}
+        ${(msgMode !== 'welcome' && msgMode !== 'emergency') ? `<a href="https://claude.ai/project/019d7f68-1586-74f9-881a-40589cd54489" target="_blank" style="padding:14px;background:#7c3aed;border:none;border-radius:12px;color:white;font-size:14px;font-weight:800;cursor:pointer;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:4px">🤖 民泊botを開く</a>` : ''}
       </div>
     </div>
   `;
@@ -5402,7 +5419,11 @@ function onMsgBookingSelect() {
   if (!b) return;
   const prop = properties.find(p => p.id === getBookingPropId(b));
 
-  if (msgMode !== 'welcome') {
+  if (msgMode === 'emergency') {
+    const area = getWelcomeArea(b);
+    const info = document.getElementById('emg-area-info');
+    if (info) info.innerHTML = `📍 ${escHtml(b.guestName || 'ゲスト')}／${prop ? escHtml(prop.name) : '?'}（${escHtml(area.label)}）`;
+  } else if (msgMode !== 'welcome') {
     document.getElementById('msg-guest-name').value = b.guestName || '';
     document.getElementById('msg-checkin').value    = b.checkin   || '';
     document.getElementById('msg-checkout').value   = getCheckout(b) || '';
@@ -5515,12 +5536,18 @@ function getWelcomeArea(b) {
   const pName = prop ? prop.name.toLowerCase() : '';
   if (/新子安|横浜|kanagawa|yokohama/.test(listing + pName)) {
     return { label: '新子安（横浜）', areaCode: '140000', areaName: '横浜', areaNameHint: '横浜',
+      lat: 35.4998, lon: 139.6556,
       jmaUrl: 'https://www.data.jma.go.jp/multi/yoho/yoho_detail.html?code=140010&lang=jp',
+      bousaiName: '横浜市防災情報', bousaiUrl: 'https://www.city.yokohama.lg.jp/kurashi/bousai_kyukyu/bousai/',
+      transitName: 'JR東日本 運行情報', transitUrl: 'https://traininfo.jreast.co.jp/train_info/kanto.aspx',
       eventBaseUrl: 'https://www.welcome.city.yokohama.jp/eventinfo/index.php',
       eventSiteName: '横浜市観光情報サイト' };
   }
   return { label: '高幡不動（多摩）', areaCode: '130000', areaName: '多摩地方', areaNameHint: '多摩',
+    lat: 35.6593, lon: 139.4113,
     jmaUrl: 'https://www.data.jma.go.jp/multi/yoho/yoho_detail.html?code=130010&lang=jp',
+    bousaiName: '東京都防災ホームページ', bousaiUrl: 'https://www.bousai.metro.tokyo.lg.jp/',
+    transitName: '京王電鉄 運行情報', transitUrl: 'https://www.keio.co.jp/unten/index.html',
     eventBaseUrl: null,
     eventApiUrl: 'https://imatama.jp/imatama/events/list',
     eventSiteName: 'いまたま（多摩エリア）' };
@@ -5901,11 +5928,101 @@ async function fetchWelcomeWeather() {
     }).join('');
     if (preview) preview.innerHTML = `<div style="font-size:11px;color:#aaa;margin-bottom:6px">✅ 取得完了（${area.label}）</div><table style="width:100%;border-collapse:collapse;background:#F5F5F4;border-radius:8px;overflow:hidden">${rows}</table>`;
     showToast('天気予報を取得しました', 'success');
+    // 天気取得に続けて台風接近もチェック
+    await checkTyphoonApproach(b, area);
   } catch(e) {
     if (preview) preview.innerHTML = `<div style="color:#e53e3e;font-size:13px;padding:8px">❌ 取得失敗：${e.message}</div>`;
     showToast('天気取得に失敗しました', 'error');
   }
   if (btn) { btn.disabled = false; btn.textContent = '🌤️ 天気予報を取得'; btn.style.opacity = '1'; }
+}
+
+// ---- 台風接近チェック（気象庁台風API） ----
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371, toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+async function checkTyphoonApproach(b, area) {
+  welcomeTyphoonData = null;
+  const box = document.getElementById('welcome-typhoon-box');
+  if (!area || area.lat == null || !b) { if (box) box.innerHTML = ''; return; }
+  // 滞在期間（±1日のウィンドウ）
+  const ci = parseDateStr(b.checkin), co = parseDateStr(getCheckout(b) || b.checkin);
+  if (!ci) return;
+  const winStart = new Date(ci); winStart.setDate(winStart.getDate() - 1); winStart.setHours(0,0,0,0);
+  const winEnd   = new Date(co || ci); winEnd.setDate(winEnd.getDate() + 1); winEnd.setHours(23,59,59,999);
+  const THRESHOLD_KM = 300;
+  try {
+    const tcRes = await fetch('https://www.jma.go.jp/bosai/typhoon/data/targetTc.json', { signal: AbortSignal.timeout(8000) });
+    if (!tcRes.ok) throw new Error('台風一覧取得失敗');
+    const tcList = await tcRes.json();
+    if (!Array.isArray(tcList) || tcList.length === 0) {
+      if (box) box.innerHTML = `<div style="font-size:12px;color:#888;padding:6px 0">✅ 現在、発生中の台風はありません</div>`;
+      return;
+    }
+    let best = null; // { name, number, minKm, closestDate }
+    for (const tc of tcList) {
+      const id = tc.tropicalCyclone;
+      if (!id) continue;
+      let fc;
+      try {
+        const r = await fetch(`https://www.jma.go.jp/bosai/typhoon/data/${id}/forecast.json`, { signal: AbortSignal.timeout(8000) });
+        if (!r.ok) continue;
+        fc = await r.json();
+      } catch { continue; }
+      if (!Array.isArray(fc)) continue;
+      let name = tc.typhoonNumber ? `台風${parseInt(String(tc.typhoonNumber).slice(-2),10)}号` : '台風';
+      const titleRec = fc.find(x => x.part === 'title');
+      if (titleRec?.name?.jp) name += `（${titleRec.name.jp}）`;
+      for (const rec of fc) {
+        const center = rec.center;
+        const vt = rec.validtime?.JST || rec.validtime;
+        if (!Array.isArray(center) || center.length < 2 || !vt) continue;
+        const vd = new Date(vt);
+        if (vd < winStart || vd > winEnd) continue;
+        const km = haversineKm(area.lat, area.lon, center[0], center[1]);
+        if (!best || km < best.minKm) best = { name, number: tc.typhoonNumber, minKm: Math.round(km), closestDate: vd };
+      }
+    }
+    if (best && best.minKm <= THRESHOLD_KM) {
+      welcomeTyphoonData = { approaching: true, ...best };
+      welcomeTyphoonInclude = true;
+    } else if (best) {
+      welcomeTyphoonData = { approaching: false, ...best };
+      welcomeTyphoonInclude = false;
+    } else {
+      welcomeTyphoonInclude = false;
+    }
+    renderTyphoonBox();
+  } catch(e) {
+    if (box) box.innerHTML = `<div style="font-size:12px;color:#e53e3e;padding:6px 0">⚠️ 台風情報の取得に失敗：${e.message}</div>`;
+  }
+}
+
+function renderTyphoonBox() {
+  const box = document.getElementById('welcome-typhoon-box');
+  if (!box) return;
+  const t = welcomeTyphoonData;
+  if (!t) { box.innerHTML = ''; return; }
+  const dow = ['日','月','火','水','木','金','土'];
+  const dstr = t.closestDate ? `${t.closestDate.getMonth()+1}/${t.closestDate.getDate()}(${dow[t.closestDate.getDay()]}) ${String(t.closestDate.getHours()).padStart(2,'0')}時頃` : '';
+  const checked = welcomeTyphoonInclude ? 'checked' : '';
+  const headColor = t.approaching ? '#c0392b' : '#888';
+  const headText = t.approaching
+    ? `🌀 ${t.name}が滞在期間中に接近する見込みです`
+    : `🌀 ${t.name}が発生中（${t.minKm}km・物件への接近は限定的）`;
+  box.innerHTML = `
+    <div style="margin-top:12px;padding:10px 12px;border-radius:8px;background:${t.approaching?'#FDECEA':'#F5F5F4'};border:1px solid ${t.approaching?'#f5c6c0':'#E8E6E1'}">
+      <div style="font-size:13px;font-weight:800;color:${headColor};line-height:1.5">${headText}</div>
+      ${dstr ? `<div style="font-size:12px;color:#777;margin-top:4px">最接近：${dstr}／物件まで約${t.minKm}km</div>` : ''}
+      <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;font-weight:700;color:#333;cursor:pointer">
+        <input type="checkbox" id="welcome-typhoon-check" ${checked} onchange="welcomeTyphoonInclude=this.checked" style="width:18px;height:18px;cursor:pointer">
+        ウェルカムメッセージに台風情報を入れる
+      </label>
+    </div>`;
 }
 
 function buildWeatherComment(days, areaName) {
@@ -5949,6 +6066,15 @@ function generateWelcomeMsg() {
     return `${d.date.getMonth()+1}月${d.date.getDate()}日(${dow[d.date.getDay()]})：${d.weather}${temp}`;
   }).join('\n');
   const comment = buildWeatherComment(days, area.areaName);
+  // 台風情報（チェックボックスON時のみ）
+  let typhoonBlock = '';
+  if (welcomeTyphoonInclude && welcomeTyphoonData) {
+    const t = welcomeTyphoonData;
+    const dow = ['日','月','火','水','木','金','土'];
+    const dstr = t.closestDate ? `${t.closestDate.getMonth()+1}月${t.closestDate.getDate()}日(${dow[t.closestDate.getDay()]})頃` : '';
+    const tyUrl = 'https://www.jma.go.jp/bosai/map.html#contents=typhoon&lang=jp';
+    typhoonBlock = `⚠️ 台風に関するお知らせ\n現在 ${t.name} が発生しており、${dstr ? `${dstr}にこのエリアへ最接近する見込みです。` : 'このエリアへの接近が予想されています。'}\nご滞在中は強い雨・風が予想されますので、外出時は傘や雨具をご用意いただき、無理のないご移動をおすすめします。交通機関に遅れが出る場合もありますので、最新の運行情報もあわせてご確認ください。\n▶ 気象庁 台風情報：${tyUrl}\n\n`;
+  }
   // イベント情報
   let eventLines = '';
   if (welcomeEventData && welcomeEventData.events.length > 0) {
@@ -5984,12 +6110,69 @@ function generateWelcomeMsg() {
     const evSiteUrl = area.eventBaseUrl || area.eventApiUrl ? 'https://imatama.jp/event-list/index/1' : '';
     eventLines = evSiteUrl ? `＜期間中のイベント情報＞\n${evSiteUrl}` : '';
   }
-  let msg = `${greeting}\n\n当施設をご予約いただき、ありがとうございます。\n快適に過ごしていただけるよう、天気予報と近隣のイベント情報をお知らせしますので、ぜひご参考にしてください。\n\n＜週間天気予報＞\n${weatherLines}\n\n${comment}\n▶ 最新の天気予報はこちら：${area.jmaUrl}\n\n${eventLines}\n\n※ 上記は参考情報です。開催日程・内容は予告なく変更になる場合がありますので、最新情報は各リンクよりご確認ください。有料施設のチケットはお客様ご自身でのご購入をお願いしております。\n\n何かご不明点やリクエストがありましたら、いつでもご連絡ください。素敵な滞在となりますよう願っております！\n\nTy`;
+  let msg = `${greeting}\n\n当施設をご予約いただき、ありがとうございます。\n快適に過ごしていただけるよう、天気予報と近隣のイベント情報をお知らせしますので、ぜひご参考にしてください。\n\n${typhoonBlock}＜週間天気予報＞\n${weatherLines}\n\n${comment}\n▶ 最新の天気予報はこちら：${area.jmaUrl}\n\n${eventLines}\n\n※ 上記は参考情報です。開催日程・内容は予告なく変更になる場合がありますので、最新情報は各リンクよりご確認ください。有料施設のチケットはお客様ご自身でのご購入をお願いしております。\n\n何かご不明点やリクエストがありましたら、いつでもご連絡ください。素敵な滞在となりますよう願っております！\n\nTy`;
   const ta = document.getElementById('msg-prompt-area');
   if (ta) { ta.value = msg; ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 800) + 'px'; }
   document.getElementById('msg-output-card').style.display = 'block';
   document.getElementById('msg-output-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
   showToast('ウェルカムメッセージを生成しました！', 'success');
+}
+
+function generateEmergencyMsg() {
+  const code = document.getElementById('msg-booking-select')?.value;
+  const b = code ? findBookingByCode(code) : null;
+  if (!b) { showToast('先に予約を選択してください', 'error'); return; }
+  const area = getWelcomeArea(b);
+  const guestFirst = (b.guestName || '').split(/[\s　]/)[0] || '';
+  const incSafety   = document.getElementById('emg-safety')?.checked   ?? true;
+  const incBousai   = document.getElementById('emg-bousai')?.checked   ?? true;
+  const incTransit  = document.getElementById('emg-transit')?.checked  ?? true;
+  const incProperty = document.getElementById('emg-property')?.checked ?? true;
+
+  const jmaQuakeJp = 'https://www.jma.go.jp/bosai/map.html#contents=earthquake_map&lang=jp';
+  const jmaQuakeEn = 'https://www.jma.go.jp/bosai/map.html#contents=earthquake_map&lang=en';
+  const jntoSafety = 'https://www.jnto.go.jp/safety-tips/eng/app.html';
+
+  // ---- 日本語 ----
+  const jp = [];
+  jp.push(guestFirst ? `${guestFirst}さん、` : 'こんにちは、');
+  if (incSafety) jp.push('先ほど地震がありましたが、ご無事でしょうか。お怪我などないか心配しております。');
+  if (incProperty) jp.push('お部屋の設備でガラスの破損・水漏れ・停電など気になる点があれば、すぐにご連絡ください。揺れが続く場合は、机の下など安全な場所で身を守り、慌てて外に出ないようお願いします。');
+  if (incBousai) {
+    jp.push('避難情報・地震の最新情報は下記でご確認いただけます。');
+    jp.push(`▶ 気象庁 地震情報：${jmaQuakeJp}`);
+    jp.push(`▶ ${area.bousaiName}：${area.bousaiUrl}`);
+    jp.push(`▶ Japan Safety Tips（訪日者向け公式・英語対応）：${jntoSafety}`);
+  }
+  if (incTransit) {
+    jp.push('電車などの交通機関に遅れや運転見合わせが出る場合があります。お出かけ前に運行情報をご確認ください。');
+    jp.push(`▶ ${area.transitName}：${area.transitUrl}`);
+  }
+  jp.push('どうぞご安全にお過ごしください。何かお困りのことがあれば、いつでもご連絡ください。');
+
+  // ---- English ----
+  const en = [];
+  en.push(guestFirst ? `Hi ${guestFirst},` : 'Hello,');
+  if (incSafety) en.push('There was just an earthquake. Are you safe? I wanted to check that you are okay and not hurt.');
+  if (incProperty) en.push('If you notice anything in the room such as broken glass, water leaks, or a power outage, please let me know right away. If shaking continues, please protect yourself under a sturdy table and avoid rushing outside.');
+  if (incBousai) {
+    en.push('You can check the latest earthquake and evacuation information here:');
+    en.push(`▶ JMA Earthquake Information: ${jmaQuakeEn}`);
+    en.push(`▶ ${area.bousaiName} (Japanese): ${area.bousaiUrl}`);
+    en.push(`▶ Japan Safety Tips (official, for visitors): ${jntoSafety}`);
+  }
+  if (incTransit) {
+    en.push('Trains and other transport may be delayed or suspended. Please check the latest service status before heading out.');
+    en.push(`▶ ${area.transitName} (Japanese): ${area.transitUrl}`);
+  }
+  en.push('Please stay safe. If you need any help, feel free to contact me anytime.');
+
+  const msg = jp.join('\n') + '\n\n----------\n\n' + en.join('\n') + '\n\nTy';
+  const ta = document.getElementById('msg-prompt-area');
+  if (ta) { ta.value = msg; ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 800) + 'px'; }
+  document.getElementById('msg-output-card').style.display = 'block';
+  document.getElementById('msg-output-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  showToast('緊急時メッセージを生成しました！', 'success');
 }
 
 function getMsgSeasonComment(checkinStr) {
