@@ -185,11 +185,14 @@
   .chart-title { font-size: 11px; font-weight: 700; color: #B0ADA8; letter-spacing: .06em; margin-bottom: 10px; }
 
   /* 月別テーブル */
-  .month-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .month-table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 480px; }
+  .month-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .month-table th { font-size: 10px; font-weight: 700; color: #B0ADA8; padding: 6px 4px; text-align: right; border-bottom: 1.5px solid #E8E6E1; }
   .month-table th:first-child { text-align: left; }
   .month-table td { padding: 8px 4px; border-bottom: 1px solid #F2F1EE; text-align: right; font-size: 12px; }
   .month-table td:first-child { text-align: left; font-weight: 700; color: #555; }
+  /* 月列を固定して横スクロール（モバイルで9列でも月が常に見える） */
+  .month-table th:first-child, .month-table td:first-child { position: sticky; left: 0; background: white; z-index: 1; }
   .month-table .total-row td { border-top: 1.5px solid #E8E6E1; border-bottom: none; font-weight: 800; }
   .td-profit.profit { color: #1C9A52; font-weight: 700; }
   .td-profit.loss { color: #E53935; font-weight: 700; }
@@ -590,6 +593,18 @@
     </select>
   </div>
 
+  <div class="card" id="sim-guide" style="display:none">
+    <div class="card-title" style="margin-bottom:12px">このタブでできること</div>
+    <div style="font-size:14px;color:#555;line-height:2">
+      予約1件ぶんの<strong style="color:#F07C3F">利益</strong>をその場で計算できます。<br>
+      <span style="display:inline-block;background:#FFF3ED;color:#F07C3F;font-weight:800;border-radius:50%;width:22px;height:22px;text-align:center;line-height:22px;margin-right:6px">1</span>上の「物件」を選ぶ<br>
+      <span style="display:inline-block;background:#FFF3ED;color:#F07C3F;font-weight:800;border-radius:50%;width:22px;height:22px;text-align:center;line-height:22px;margin-right:6px">2</span>泊数と受取金額（Airbnbの入金額）を入れる<br>
+      <span style="display:inline-block;background:#FFF3ED;color:#F07C3F;font-weight:800;border-radius:50%;width:22px;height:22px;text-align:center;line-height:22px;margin-right:6px">3</span>固定費・清掃費を差し引いた利益が表示される
+    </div>
+    <div style="font-size:12px;color:#aaa;margin-top:10px">💡 予約リクエストを受けるか迷ったときの判断に便利です</div>
+  </div>
+
+  <div id="sim-form-area">
   <div class="card">
     <div class="card-title">予約情報</div>
     <div class="input-grid">
@@ -623,6 +638,7 @@
       </div>
     </div>
     <button class="btn-reset" onclick="resetInputs()">↺ クリア</button>
+  </div>
   </div>
 
   <div id="result-area"></div>
@@ -897,7 +913,13 @@ function updateHeaderTimestamp() {
     .map(k => new Date(dataUpdatedAt[k]));
   if (times.length === 0) { el.textContent = ''; return; }
   const latest = new Date(Math.max(...times));
-  el.innerHTML = `更新<br>${latest.getMonth()+1}/${latest.getDate()} ${String(latest.getHours()).padStart(2,'0')}:${String(latest.getMinutes()).padStart(2,'0')}`;
+  // 更新からの経過日数で警告色（3日以上＝オレンジ、7日以上＝赤）
+  const ageDays = (Date.now() - latest.getTime()) / 86400000;
+  const ageColor = ageDays >= 7 ? '#E53935' : ageDays >= 3 ? '#E65100' : '';
+  const ageWarn = ageDays >= 7 ? '⚠️ ' : ageDays >= 3 ? '⏰ ' : '';
+  el.style.color = ageColor;
+  el.style.fontWeight = ageColor ? '800' : '';
+  el.innerHTML = `${ageWarn}更新<br>${latest.getMonth()+1}/${latest.getDate()} ${String(latest.getHours()).padStart(2,'0')}:${String(latest.getMinutes()).padStart(2,'0')}`;
 }
 function fmtUpdatedAt(key) {
   if (!dataUpdatedAt[key]) return '未更新';
@@ -1217,6 +1239,7 @@ function getPropColor(propId) {
 // ==================== タブ ====================
 function showTab(tab) {
   const tabs = ['sim','bookings','calendar','annual','settings','message','check'];
+  if (!tabs.includes(tab)) tab = 'bookings'; // 不正なタブ名はホームへフォールバック（画面消失防止）
   // ボトムナビのアクティブ状態
   tabs.forEach(id => {
     const navBtn = document.getElementById('nav-' + id);
@@ -1246,10 +1269,23 @@ function renderSimPropertySelect() {
     if (String(p.id) === current) opt.selected = true;
     sel.appendChild(opt);
   });
+  updateSimGuideVisibility();
   calcProfit();
 }
 
+// 物件未選択時は使い方ガイドを表示、選択時に入力フォームを表示
+function updateSimGuideVisibility() {
+  const sel = document.getElementById('sim-property');
+  const guide = document.getElementById('sim-guide');
+  const form = document.getElementById('sim-form-area');
+  if (!sel || !guide || !form) return;
+  const hasProp = !!sel.value;
+  guide.style.display = hasProp ? 'none' : 'block';
+  form.style.display = hasProp ? 'block' : 'none';
+}
+
 function onSimPropertyChange() {
+  updateSimGuideVisibility();
   document.getElementById('months').value = '1';
   const baseDaysEl = document.getElementById('base-days');
   baseDaysEl.value = '18';
@@ -1582,8 +1618,8 @@ function renderMonthly() {
           const bIsP = pf !== null && pf >= 0;
           const bColor = getPropColor(pid);
           const _bcBadge = b.source === 'booking'
-            ? `<span style="font-size:9px;font-weight:800;background:#003580;color:white;padding:1px 4px;border-radius:3px;margin-left:4px">📘</span>`
-            : `<span style="font-size:9px;font-weight:800;background:#FF5A5F;color:white;padding:1px 4px;border-radius:3px;margin-left:4px">🅐</span>`;
+            ? `<span style="font-size:10px;font-weight:800;background:#003580;color:white;padding:1px 4px;border-radius:3px;margin-left:4px">📘</span>`
+            : `<span style="font-size:10px;font-weight:800;background:#FF5A5F;color:white;padding:1px 4px;border-radius:3px;margin-left:4px">🅐</span>`;
           return `<div class="booking-row" style="--prop-color:${bColor}">
             <div class="booking-info">
               <div class="booking-prop">${prop ? prop.name : '⚠️ 物件未設定'}</div>
@@ -1591,7 +1627,7 @@ function renderMonthly() {
             </div>
             <div class="booking-amounts">
               <div class="booking-rev">${fmt(b.revenue)}円</div>
-              ${pf !== null ? `<div class="booking-profit" style="color:${bIsP?'#1C9A52':'#E53935'}">${bIsP?'':'▲'}${fmt(Math.abs(pf))}円<span style="font-size:9px;font-weight:400;color:#C8C5C0;margin-left:2px">概算</span></div>` : '<div style="font-size:11px;color:#ccc">-</div>'}
+              ${pf !== null ? `<div class="booking-profit" style="color:${bIsP?'#1C9A52':'#E53935'}">${bIsP?'':'▲'}${fmt(Math.abs(pf))}円<span style="font-size:10px;font-weight:400;color:#C8C5C0;margin-left:2px">概算</span></div>` : '<div style="font-size:11px;color:#ccc">-</div>'}
             </div>
           </div>`;
         }).join('');
@@ -1818,8 +1854,8 @@ function renderCalendarTab() {
 
         const _isBookingCom = b.source === 'booking';
         const _chBadge = _isBookingCom
-          ? `<span style="font-size:9px;font-weight:800;background:#003580;color:white;padding:1px 5px;border-radius:3px;margin-left:4px">📘 B.com</span>`
-          : `<span style="font-size:9px;font-weight:800;background:#FF5A5F;color:white;padding:1px 5px;border-radius:3px;margin-left:4px">🅐 Airbnb</span>`;
+          ? `<span style="font-size:10px;font-weight:800;background:#003580;color:white;padding:1px 5px;border-radius:3px;margin-left:4px">📘 B.com</span>`
+          : `<span style="font-size:10px;font-weight:800;background:#FF5A5F;color:white;padding:1px 5px;border-radius:3px;margin-left:4px">🅐 Airbnb</span>`;
         return `<div style="background:white;border-radius:14px;padding:10px 12px;margin-bottom:6px;${borderStyle}">
           <!-- ヘッダー：物件名・ゲスト名 左／日付 右 -->
           <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px">
@@ -1838,8 +1874,8 @@ function renderCalendarTab() {
           ${b.code ? `<!-- 上段（その他）: 名簿 | CI情報 | ウェルカム | 支払通知 | [ゴミ依頼] -->
           <div style="display:grid;grid-template-columns:${getBookingPropId(b)===2?'repeat(5, 1fr)':'repeat(4, 1fr)'};gap:4px;margin-bottom:4px;align-items:stretch">
             <button onclick="toggleCheckFromList('${b.code}','formDone')" style="font-size:11px;font-weight:800;padding:7px 4px;border-radius:9px;border:2px solid ${formBorder};cursor:pointer;background:${formBg};color:${formColor};line-height:1.3">📋 ${chk.formDone?'名簿✓済':'名簿'}</button>
-            <button onclick="toggleCheckFromList('${b.code}','checkinMsgDone')" style="font-size:9px;font-weight:800;padding:5px 2px;border-radius:9px;border:2px solid ${chk.checkinMsgDone?'#1565C0':daysToCI>=0&&daysToCI<=2?'#E53935':'#ddd'};cursor:pointer;background:${chk.checkinMsgDone?'#E3F2FD':daysToCI>=0&&daysToCI<=2?'#FFEBEE':'#f9f9f9'};color:${chk.checkinMsgDone?'#1565C0':daysToCI>=0&&daysToCI<=2?'#D32F2F':'#aaa'};line-height:1.3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;box-sizing:border-box"><span>📩</span><span>${chk.checkinMsgDone?'CI情報✓':'CI情報'}</span></button>
-            <button onclick="toggleCheckFromList('${b.code}','welcomeMsgDone')" style="font-size:9px;font-weight:800;padding:5px 2px;border-radius:9px;border:2px solid ${chk.welcomeMsgDone?'#1565C0':daysToCI>=0&&daysToCI<=2?'#E53935':'#ddd'};cursor:pointer;background:${chk.welcomeMsgDone?'#E3F2FD':daysToCI>=0&&daysToCI<=2?'#FFEBEE':'#f9f9f9'};color:${chk.welcomeMsgDone?'#1565C0':daysToCI>=0&&daysToCI<=2?'#D32F2F':'#aaa'};line-height:1.3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;box-sizing:border-box"><span>👋</span><span>${chk.welcomeMsgDone?'WL✓':'ウェルカム'}</span></button>
+            <button onclick="toggleCheckFromList('${b.code}','checkinMsgDone')" style="font-size:10px;font-weight:800;padding:5px 2px;border-radius:9px;border:2px solid ${chk.checkinMsgDone?'#1565C0':daysToCI>=0&&daysToCI<=2?'#E53935':'#ddd'};cursor:pointer;background:${chk.checkinMsgDone?'#E3F2FD':daysToCI>=0&&daysToCI<=2?'#FFEBEE':'#f9f9f9'};color:${chk.checkinMsgDone?'#1565C0':daysToCI>=0&&daysToCI<=2?'#D32F2F':'#aaa'};line-height:1.3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;box-sizing:border-box"><span>📩</span><span>${chk.checkinMsgDone?'CI情報✓':'CI情報'}</span></button>
+            <button onclick="toggleCheckFromList('${b.code}','welcomeMsgDone')" style="font-size:10px;font-weight:800;padding:5px 2px;border-radius:9px;border:2px solid ${chk.welcomeMsgDone?'#1565C0':daysToCI>=0&&daysToCI<=2?'#E53935':'#ddd'};cursor:pointer;background:${chk.welcomeMsgDone?'#E3F2FD':daysToCI>=0&&daysToCI<=2?'#FFEBEE':'#f9f9f9'};color:${chk.welcomeMsgDone?'#1565C0':daysToCI>=0&&daysToCI<=2?'#D32F2F':'#aaa'};line-height:1.3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;box-sizing:border-box"><span>👋</span><span>${chk.welcomeMsgDone?'WL✓':'ウェルカム'}</span></button>
             <button onclick="showPaymentStatementModal('${b.code}')" ${!chk.cleaningStaffName?'disabled':''} style="padding:7px 4px;font-size:11px;font-weight:800;border-radius:9px;border:1.5px solid ${chk.cleaningStaffName?'#4a7fc1':'#ddd'};background:${chk.cleaningStaffName?'white':'#f5f5f5'};color:${chk.cleaningStaffName?'#4a7fc1':'#bbb'};cursor:${chk.cleaningStaffName?'pointer':'not-allowed'};display:flex;align-items:center;justify-content:center;gap:3px;box-sizing:border-box"><span>📄</span><span>支払通知</span></button>
             ${getBookingPropId(b) === 2 ? `<button onclick="toggleCheckFromList('${b.code}','garbageDone')" style="padding:7px 4px;font-size:11px;font-weight:800;border-radius:9px;border:2px solid ${chk.garbageDone?'#92400e':garbageAlert?'#E53935':'#d97706'};cursor:pointer;background:${chk.garbageDone?'#fef3c7':garbageAlert?'#FFEBEE':'#fffbeb'};color:${chk.garbageDone?'#78350f':garbageAlert?'#D32F2F':'#b45309'};display:flex;align-items:center;justify-content:center;gap:2px;box-sizing:border-box">🗑️ ${chk.garbageDone?'依頼済':'ゴミ依頼'}</button>` : ''}
           </div>
@@ -1855,7 +1891,7 @@ function renderCalendarTab() {
           </div>
           <div style="margin-top:8px;border-top:1px solid #f0f0f0;padding-top:6px">
             <button onclick="(function(btn){var body=btn.nextElementSibling;var isOpen=body.style.display!=='none';body.style.display=isOpen?'none':'block';btn.querySelector('.acc-arrow').textContent=isOpen?'▶':'▼';})(this)" style="width:100%;display:flex;align-items:center;gap:5px;background:none;border:none;padding:2px 0;cursor:pointer;text-align:left">
-              <span class="acc-arrow" style="font-size:9px;color:#B0ADA8">▶</span>
+              <span class="acc-arrow" style="font-size:10px;color:#B0ADA8">▶</span>
               <span style="font-size:10px;font-weight:700;color:#B0ADA8;letter-spacing:.05em">💴 実費入力</span>
             </button>
             <div style="display:none;margin-top:6px">
@@ -1884,12 +1920,29 @@ function renderCalendarTab() {
       }).join('')}
     </div>`;
 
+  // 月サマリー（実績タブと同じチェックイン月基準・28泊以上はADR/稼働から除外）
+  const _sumBooks = getAllBookings().filter(b => {
+    if (!b.checkin || !b.revenue) return false;
+    if (calendarPropFilter !== 'all' && getBookingPropId(b) !== parseInt(calendarPropFilter)) return false;
+    const [by, bm] = b.checkin.split('/').map(Number);
+    return by === y && bm === m;
+  });
+  let _sumRev = 0, _sumNights = 0, _sumAdrRev = 0;
+  _sumBooks.forEach(b => { _sumRev += b.revenue; if (!isLongStayListing(b)) { _sumNights += b.nights; _sumAdrRev += b.revenue; } });
+  const _sumPropCount = Math.max(calendarPropFilter === 'all' ? properties.filter(p => isPropertyOperating(p, y, m)).length : 1, 1);
+  const _sumOcc = Math.min(Math.round(_sumNights / (daysInMonth * _sumPropCount) * 100), 100);
+  const _sumAdr = _sumNights > 0 ? Math.round(_sumAdrRev / _sumNights) : 0;
+  const monthSummaryLine = _sumBooks.length > 0
+    ? `<div style="font-size:10.5px;color:#888;margin-top:3px;font-weight:700">売上 ${fmtS(_sumRev)} ・ 稼働 ${_sumOcc}% ・ ADR ¥${fmt(_sumAdr)}</div>`
+    : '';
+
   document.getElementById('calendar-content').innerHTML = `
     <div class="card" style="padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between">
       <button onclick="calendarMove(-1)" style="background:none;border:none;font-size:22px;color:#F07C3F;cursor:pointer;padding:4px 10px;border-radius:8px;line-height:1">‹</button>
       <div style="text-align:center">
         <div style="font-size:17px;font-weight:800;color:#1a1a2e">${y}年${m}月</div>
         <div style="font-size:10px;color:#aaa;margin-top:1px">${totalBookings}件の予約</div>
+        ${monthSummaryLine}
       </div>
       <button onclick="calendarMove(1)" style="background:none;border:none;font-size:22px;color:#F07C3F;cursor:pointer;padding:4px 10px;border-radius:8px;line-height:1">›</button>
     </div>
@@ -2015,7 +2068,7 @@ function renderCalendar(year, month, propFilter) {
           + (isStart ? '<div style="width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,.25);color:white;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+initial+'</div>'
             + '<span style="font-size:11px;font-weight:700;color:white;overflow:hidden;text-overflow:ellipsis;flex:1">'+escHtml(b.guestName||'ゲスト')+(prop?' · '+prop.name:'')+'</span>'
             + statusDots
-            : '')
+            : '<span style="font-size:10px;font-weight:700;color:rgba(255,255,255,.85);overflow:hidden;text-overflow:ellipsis;flex:1">↩ '+escHtml(b.guestName||'ゲスト')+'</span>')
           + '</div>';
       });
       html += '</div>';
@@ -2117,15 +2170,19 @@ function renderSettings() {
       </div>
     </div>`).join('');
 
-  // Airbnb物件紐付け（データある場合のみ表示）
-  if (airbnbBookings.length > 0) {
-    const allListings = [...new Set(airbnbBookings.map(b => b.listing).filter(l => l))];
+  // Airbnb物件紐付け（リスティング名があるデータの場合のみ表示）
+  const _allListingsForMap = airbnbBookings.length > 0 ? [...new Set(airbnbBookings.map(b => b.listing).filter(l => l))] : [];
+  if (_allListingsForMap.length > 0) {
+    const allListings = _allListingsForMap;
+    const unmappedCount = allListings.filter(l => !listingMap[l]).length;
     settingsHTML += `<div class="property-item">
       <div class="property-header">
         <span style="font-size:14px;font-weight:700;flex:1;color:#1C1C1E">Airbnbリスティング → 物件の紐付け</span>
       </div>
       <div class="cost-section">
-        <div style="font-size:11px;color:#aaa;margin-bottom:12px">Airbnbのリスティング名と物件を対応付けてください</div>
+        ${unmappedCount === 0
+          ? `<div style="font-size:12px;font-weight:700;color:#1C9A52;background:#F0FBF5;border-radius:8px;padding:8px 12px;margin-bottom:12px">✅ ${allListings.length}件すべて紐付け済みです</div>`
+          : `<div style="font-size:12px;font-weight:700;color:#E65100;background:#FFF8E1;border-radius:8px;padding:8px 12px;margin-bottom:12px">⚠️ 未紐付けが${unmappedCount}件あります。Airbnbのリスティング名と物件を対応付けてください</div>`}
         ${allListings.map((l, i) => {
           const currentVal = listingMap[l] || '';
           return `<div class="map-row">
@@ -2995,17 +3052,17 @@ function showActualCostModal(year, month, propId) {
       // 毎月固定・変更不要 → グレーで目立たせない
       inputStyle = 'width:90px;padding:6px 8px;border:1.5px solid #eee;border-radius:8px;font-size:13px;font-weight:600;text-align:right;color:#bbb;background:#fafafa';
       labelStyle = 'flex:1;font-size:13px;color:#bbb';
-      badge = '<span style="font-size:9px;color:#ccc;margin-left:4px;background:#f5f5f5;padding:1px 5px;border-radius:4px">固定</span>';
+      badge = '<span style="font-size:10px;color:#ccc;margin-left:4px;background:#f5f5f5;padding:1px 5px;border-radius:4px">固定</span>';
     } else if (needsInput) {
       // 概算のまま未確定 → オレンジで要確定を強調
       inputStyle = 'width:90px;padding:6px 8px;border:1.5px solid #F07C3F;border-radius:8px;font-size:13px;font-weight:600;text-align:right;color:#333;background:#FFFAF7';
       labelStyle = 'flex:1;font-size:13px;color:#E65100;font-weight:600';
-      badge = '<span style="font-size:9px;color:#F07C3F;margin-left:4px;background:#FFF0E6;padding:1px 5px;border-radius:4px">要確定</span>';
+      badge = '<span style="font-size:10px;color:#F07C3F;margin-left:4px;background:#FFF0E6;padding:1px 5px;border-radius:4px">要確定</span>';
     } else {
       // 実費入力済み → 通常表示
       inputStyle = 'width:90px;padding:6px 8px;border:1.5px solid #eee;border-radius:8px;font-size:13px;font-weight:600;text-align:right;color:#333';
       labelStyle = 'flex:1;font-size:13px;color:#555';
-      badge = '<span style="font-size:9px;color:#1C9A52;margin-left:4px;background:#F0FBF5;padding:1px 5px;border-radius:4px">確定済</span>';
+      badge = '<span style="font-size:10px;color:#1C9A52;margin-left:4px;background:#F0FBF5;padding:1px 5px;border-radius:4px">確定済</span>';
     }
     return `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
@@ -3021,7 +3078,7 @@ function showActualCostModal(year, month, propId) {
   const extraRows = EXTRA_DEFS.map((item, ei) => `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
       <div style="flex:1;min-width:0">
-        <div style="font-size:13px;color:#bbb">${item.name}${item.autoKey ? '<span style="font-size:9px;color:#1C9A52;margin-left:4px;background:#F0FBF5;padding:1px 5px;border-radius:4px">📅集計</span>' : ''}</div>
+        <div style="font-size:13px;color:#bbb">${item.name}${item.autoKey ? '<span style="font-size:10px;color:#1C9A52;margin-left:4px;background:#F0FBF5;padding:1px 5px;border-radius:4px">📅集計</span>' : ''}</div>
         ${item.sub ? `<div style="font-size:10px;color:#ccc;margin-top:1px">${item.sub}</div>` : ''}
       </div>
       <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
@@ -3051,7 +3108,7 @@ function showActualCostModal(year, month, propId) {
       <div style="border-top:1px solid #f0f0f0;margin:10px 0 10px;padding-top:10px">
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
           <div style="font-size:10px;font-weight:700;color:#B0ADA8">変動費（月合計）</div>
-          <div style="font-size:9px;color:#1C9A52;background:#F0FBF5;padding:2px 6px;border-radius:4px">📅集計 = カレンダー入力から自動合算</div>
+          <div style="font-size:10px;color:#1C9A52;background:#F0FBF5;padding:2px 6px;border-radius:4px">📅集計 = カレンダー入力から自動合算</div>
         </div>
         <div style="font-size:10px;color:#888;background:#F9F8F6;border-radius:6px;padding:5px 8px;margin-bottom:8px">ℹ️ この欄はカレンダータブで入力した実費の合計です（編集はカレンダー側で）</div>
         ${extraRows}
@@ -3638,33 +3695,14 @@ function renderDashboard() {
       <div class="dash-next-badges" style="display:flex;gap:8px">${nextBadges}</div>
     </div>
     ${fyBooks.length > 0 ? `
-    <div style="font-size:10px;color:#C8C5C0;margin-top:12px;padding-top:10px;border-top:1px solid #F2F1EE;margin-bottom:6px">${fyStartYear}年度（${fyStartYear}/4〜${fyStartYear+1}/3）</div>
-    <div class="kpi-grid-5" style="display:grid;grid-template-columns:repeat(5, 1fr);gap:6px">
-      <div class="kpi-card" style="background:#F9F8F6;box-shadow:none;padding:9px 10px">
-        <div class="kpi-label">ゲスト支払</div>
-        <div class="kpi-value" style="color:#999;font-size:16px">${fmtShort(fyGuestPayment)}円</div>
-        <div class="kpi-sub" style="color:#D0CCC8">手数料込</div>
+    <div onclick="showTab('annual')" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding:10px 12px;border-top:1px solid #F2F1EE;background:#F9F8F6;border-radius:10px;cursor:pointer">
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:baseline;min-width:0">
+        <span style="font-size:10px;font-weight:700;color:#C8C5C0;white-space:nowrap">${fyStartYear}年度</span>
+        <span style="font-size:12px;color:#888;white-space:nowrap">受取 <strong style="color:#1C1C1E;font-size:14px">${fmtShort(fyRevenue)}円</strong></span>
+        <span style="font-size:12px;color:#888;white-space:nowrap">利益 <strong style="color:${fyIsP?'#1C9A52':'#E53935'};font-size:14px">${fyIsP?'':'▲'}${fmtShort(Math.abs(fyProfit))}円</strong>${fyMargin!==null?` <span style="font-size:11px;font-weight:700;color:${fyIsP?'#1C9A52':'#E53935'}">(${fyIsP?'':'▲'}${Math.abs(fyMargin)}%)</span>`:''}</span>
+        <span style="font-size:12px;color:#888;white-space:nowrap">稼働 <strong style="color:#1C1C1E;font-size:14px">${occRateShort===null?'—':occRateShort+'%'}</strong></span>
       </div>
-      <div class="kpi-card" style="background:#F9F8F6;box-shadow:none;padding:9px 10px">
-        <div class="kpi-label">ホスト受取</div>
-        <div class="kpi-value" style="font-size:16px">${fmtShort(fyRevenue)}円</div>
-        <div class="kpi-sub" style="color:#C8C5C0">入金額</div>
-      </div>
-      <div class="kpi-card" style="background:${fyIsP?'#F0FBF5':'#FFF5F5'};box-shadow:none;padding:9px 10px">
-        <div class="kpi-label">利益</div>
-        <div class="kpi-value" style="color:${fyIsP?'#1C9A52':'#E53935'};font-size:16px">${fyIsP?'':'▲'}${fmtShort(Math.abs(fyProfit))}円</div>
-        <div class="kpi-sub" style="color:#C8C5C0">費用差引後</div>
-      </div>
-      <div class="kpi-card" style="background:${fyIsP?'#F0FBF5':'#FFF5F5'};box-shadow:none;padding:9px 10px">
-        <div class="kpi-label">利益率</div>
-        <div class="kpi-value" style="color:${fyMargin===null?'#B0ADA8':fyIsP?'#1C9A52':'#E53935'};font-size:16px">${fyMargin===null?'—':(fyIsP?'':'▲')+Math.abs(fyMargin)+'%'}</div>
-        <div class="kpi-sub" style="color:#C8C5C0">利益÷受取</div>
-      </div>
-      <div class="kpi-card" style="background:#F9F8F6;box-shadow:none;padding:9px 10px">
-        <div class="kpi-label">稼働率</div>
-        <div class="kpi-value" style="color:#1C1C1E;font-size:16px">${occRateShort===null?'—':occRateShort+'%'}<span style="font-size:11px;color:#999;font-weight:700;margin-left:3px">${occRateAll!==null && occRateAll!==occRateShort?'('+occRateAll+'%)':''}</span></div>
-        <div class="kpi-sub" style="color:#C8C5C0">短期のみ（含む長期）</div>
-      </div>
+      <span style="font-size:11px;font-weight:700;color:#F07C3F;white-space:nowrap;flex-shrink:0">詳細 ›</span>
     </div>` : ''}
   </div>`;
 
@@ -3782,8 +3820,8 @@ function renderDashboard() {
       const remaining = Math.max(max - used, 0);
       const pct = Math.min(Math.round(used / max * 100), 100);
       const barColor = pct >= 90 ? '#E53935' : pct >= 70 ? '#F59E0B' : getPropColor(p.id);
-      const warnBadge = pct >= 90 ? `<span style="font-size:9px;background:#FFEBEE;color:#D32F2F;font-weight:800;border-radius:4px;padding:1px 4px;margin-left:4px">⚠️ 残りわずか</span>`
-        : pct >= 70 ? `<span style="font-size:9px;background:#FFF8E1;color:#F59E0B;font-weight:800;border-radius:4px;padding:1px 4px;margin-left:4px">要注意</span>` : '';
+      const warnBadge = pct >= 90 ? `<span style="font-size:10px;background:#FFEBEE;color:#D32F2F;font-weight:800;border-radius:4px;padding:1px 4px;margin-left:4px">⚠️ 残りわずか</span>`
+        : pct >= 70 ? `<span style="font-size:10px;background:#FFF8E1;color:#F59E0B;font-weight:800;border-radius:4px;padding:1px 4px;margin-left:4px">要注意</span>` : '';
       return `<div style="margin-bottom:9px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
           <div style="font-size:12px;font-weight:800;color:#1C1C1E">${p.name}${warnBadge}</div>
@@ -3897,7 +3935,7 @@ function renderDashboard() {
       html += `<div class="card" style="margin-bottom:12px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
           <div style="font-size:11px;font-weight:800;color:#B0ADA8;letter-spacing:.5px">💰 投資回収進捗</div>
-          <div style="font-size:9px;color:#aaa">実績＋予測（年度末まで）</div>
+          <div style="font-size:10px;color:#aaa">実績＋予測（年度末まで）</div>
         </div>
         ${recRows}
         <div style="font-size:10px;color:#C0BDBA;text-align:right;margin-top:2px">詳細は実績タブで確認</div>
@@ -3956,8 +3994,8 @@ function renderDashboard() {
 
         const isBookingCom = b.source === 'booking';
         const channelBadge = isBookingCom
-          ? `<span style="font-size:9px;font-weight:800;background:#003580;color:white;padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:middle">📘 B.com</span>`
-          : `<span style="font-size:9px;font-weight:800;background:#FF5A5F;color:white;padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:middle">🅐 Airbnb</span>`;
+          ? `<span style="font-size:10px;font-weight:800;background:#003580;color:white;padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:middle">📘 B.com</span>`
+          : `<span style="font-size:10px;font-weight:800;background:#FF5A5F;color:white;padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:middle">🅐 Airbnb</span>`;
         const checkinMsgDone = chk.checkinMsgDone;
         const _diffForCI = Math.round((getCI(b) - now) / 86400000);
         const checkinMsgBtn = (type === 'in' && b.code && _diffForCI >= 0 && _diffForCI <= 2)
@@ -4158,22 +4196,22 @@ function renderAnnual() {
           <div style="background:#F9F8F6;border-radius:10px;padding:10px 12px">
             <div style="font-size:10px;font-weight:700;color:#C8C5C0;margin-bottom:4px">ゲスト支払</div>
             <div style="font-family:'Inter',sans-serif;font-size:15px;font-weight:800;color:#999">${fmtShort(getGuestPayment(ms.revenue))}円</div>
-            <div style="font-size:9px;color:#D0CCC8;margin-top:2px">手数料込</div>
+            <div style="font-size:10px;color:#D0CCC8;margin-top:2px">手数料込</div>
           </div>
           <div style="background:#F9F8F6;border-radius:10px;padding:10px 12px">
             <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:4px">ホスト受取</div>
             <div style="font-family:'Inter',sans-serif;font-size:15px;font-weight:800;color:#1C1C1E">${fmtShort(ms.revenue)}円</div>
-            <div style="font-size:9px;color:#C8C5C0;margin-top:2px">入金額</div>
+            <div style="font-size:10px;color:#C8C5C0;margin-top:2px">入金額</div>
           </div>
           <div style="background:${isMP?'#F0FBF5':'#FFF5F5'};border-radius:10px;padding:10px 12px">
             <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:4px">利益</div>
             <div style="font-family:'Inter',sans-serif;font-size:15px;font-weight:800;color:${isMP?'#1C9A52':'#E53935'}">${isMP?'':'▲'}${fmtShort(Math.abs(ms.profit))}円</div>
-            <div style="font-size:9px;color:#C8C5C0;margin-top:2px">費用差引後</div>
+            <div style="font-size:10px;color:#C8C5C0;margin-top:2px">費用差引後</div>
           </div>
           <div style="background:${isMP?'#F0FBF5':'#FFF5F5'};border-radius:10px;padding:10px 12px">
             <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:4px">利益率</div>
             <div style="font-family:'Inter',sans-serif;font-size:15px;font-weight:800;color:${isMP?'#1C9A52':'#E53935'}">${ms.revenue>0?(isMP?'':'▲')+Math.abs(Math.round(ms.profit/ms.revenue*100))+'%':'—'}</div>
-            <div style="font-size:9px;color:#C8C5C0;margin-top:2px">利益÷受取</div>
+            <div style="font-size:10px;color:#C8C5C0;margin-top:2px">利益÷受取</div>
           </div>
         </div>
         <div style="display:flex;gap:12px;padding-top:8px;font-size:11px;color:#C8C5C0;flex-wrap:wrap">
@@ -4226,8 +4264,8 @@ function renderAnnual() {
             <div class="booking-amounts" style="text-align:right;min-width:90px">
               <div style="font-size:10px;color:#C8C5C0">ゲスト <span style="font-weight:700;color:#aaa">¥${fmt(getGuestPayment(b.revenue))}</span></div>
               <div style="font-size:13px;font-weight:800;color:#1C1C1E;margin-top:1px">¥${fmt(b.revenue)}</div>
-              <div style="font-size:11px;font-weight:700;color:${bIsP?'#1C9A52':'#E53935'};margin-top:2px">${bIsP?'':'▲'}¥${fmt(Math.abs(bProfit))}<span style="font-size:9px;font-weight:400;color:#C8C5C0;margin-left:2px">費用差引後</span>${b.revenue>0?'<span style="font-size:10px;font-weight:800;margin-left:4px;color:'+(bIsP?'#1C9A52':'#E53935')+'">('+(bIsP?'':'▲')+Math.abs(Math.round(bProfit/b.revenue*100))+'%)</span>':''}</div>
-              ${varBreakdown ? `<div style="font-size:9px;color:#C8C5C0;margin-top:1px">${varBreakdown}</div>` : ''}
+              <div style="font-size:11px;font-weight:700;color:${bIsP?'#1C9A52':'#E53935'};margin-top:2px">${bIsP?'':'▲'}¥${fmt(Math.abs(bProfit))}<span style="font-size:10px;font-weight:400;color:#C8C5C0;margin-left:2px">費用差引後</span>${b.revenue>0?'<span style="font-size:10px;font-weight:800;margin-left:4px;color:'+(bIsP?'#1C9A52':'#E53935')+'">('+(bIsP?'':'▲')+Math.abs(Math.round(bProfit/b.revenue*100))+'%)</span>':''}</div>
+              ${varBreakdown ? `<div style="font-size:10px;color:#C8C5C0;margin-top:1px">${varBreakdown}</div>` : ''}
             </div>
           </div>`;
         }).join('')}
@@ -4237,19 +4275,19 @@ function renderAnnual() {
           const totalMargin = ms.revenue > 0 ? Math.round(ms.profit/ms.revenue*100) : null;
           return `<div class="kpi-grid-4-flat" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0;border-top:2px solid #F2F1EE;background:#FAFAF9">
             <div style="padding:10px 14px;border-right:1px solid #F2F1EE">
-              <div style="font-size:9px;font-weight:700;color:#C8C5C0;margin-bottom:3px">合計 ゲスト支払</div>
+              <div style="font-size:10px;font-weight:700;color:#C8C5C0;margin-bottom:3px">合計 ゲスト支払</div>
               <div style="font-size:14px;font-weight:800;color:#aaa">¥${fmt(totalGP)}</div>
             </div>
             <div style="padding:10px 14px;border-right:1px solid #F2F1EE">
-              <div style="font-size:9px;font-weight:700;color:#B0ADA8;margin-bottom:3px">合計 ホスト受取</div>
+              <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:3px">合計 ホスト受取</div>
               <div style="font-size:14px;font-weight:800;color:#1C1C1E">¥${fmt(ms.revenue)}</div>
             </div>
             <div style="padding:10px 14px;border-right:1px solid #F2F1EE;background:${isTP?'#F0FBF5':'#FFF5F5'}">
-              <div style="font-size:9px;font-weight:700;color:#B0ADA8;margin-bottom:3px">合計 利益</div>
+              <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:3px">合計 利益</div>
               <div style="font-size:14px;font-weight:800;color:${isTP?'#1C9A52':'#E53935'}">${isTP?'':'▲'}¥${fmt(Math.abs(ms.profit))}</div>
             </div>
             <div style="padding:10px 14px;background:${isTP?'#F0FBF5':'#FFF5F5'}">
-              <div style="font-size:9px;font-weight:700;color:#B0ADA8;margin-bottom:3px">合計 利益率</div>
+              <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:3px">合計 利益率</div>
               <div style="font-size:14px;font-weight:800;color:${isTP?'#1C9A52':'#E53935'}">${totalMargin!==null?(isTP?'':'▲')+Math.abs(totalMargin)+'%':'—'}</div>
             </div>
           </div>`;
@@ -4346,34 +4384,34 @@ function renderAnnual() {
       <div style="background:#F9F8F6;border-radius:10px;padding:10px 12px">
         <div style="font-size:10px;font-weight:700;color:#C8C5C0;margin-bottom:4px">ゲスト支払</div>
         <div style="font-family:'Inter',sans-serif;font-size:16px;font-weight:800;color:#999;line-height:1.1">${fmtShort(totalGuestPayment)}円</div>
-        <div style="font-size:9px;color:#D0CCC8;margin-top:2px">手数料込</div>
+        <div style="font-size:10px;color:#D0CCC8;margin-top:2px">手数料込</div>
       </div>
       <div style="background:#F9F8F6;border-radius:10px;padding:10px 12px">
         <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:4px">ホスト受取</div>
         <div style="font-family:'Inter',sans-serif;font-size:18px;font-weight:900;color:#1C1C1E;line-height:1.1">${fmtShort(totalRevenue)}円</div>
-        <div style="font-size:9px;color:#C8C5C0;margin-top:2px">入金額</div>
+        <div style="font-size:10px;color:#C8C5C0;margin-top:2px">入金額</div>
       </div>
       <div style="background:${isAP?'#F0FBF5':'#FFF5F5'};border-radius:10px;padding:10px 12px">
         <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:4px">利益</div>
         <div style="font-family:'Inter',sans-serif;font-size:18px;font-weight:900;color:${isAP?'#1C9A52':'#E53935'};line-height:1.1">${isAP?'':'▲'}${fmtShort(Math.abs(totalProfit))}円</div>
-        <div style="font-size:9px;color:#C8C5C0;margin-top:2px">費用差引後</div>
+        <div style="font-size:10px;color:#C8C5C0;margin-top:2px">費用差引後</div>
       </div>
       <div style="background:${isAP?'#F0FBF5':'#FFF5F5'};border-radius:10px;padding:10px 12px">
         <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:4px">利益率</div>
         <div style="font-family:'Inter',sans-serif;font-size:18px;font-weight:900;color:${isAP?'#1C9A52':'#E53935'};line-height:1.1">${totalRevenue>0?(isAP?'':'▲')+Math.abs(Math.round(totalProfit/totalRevenue*100))+'%':'—'}</div>
-        <div style="font-size:9px;color:#C8C5C0;margin-top:2px">利益÷受取</div>
+        <div style="font-size:10px;color:#C8C5C0;margin-top:2px">利益÷受取</div>
       </div>
     </div>
     <div style="display:flex;gap:16px;padding-top:8px;border-top:1px solid #F2F1EE;flex-wrap:wrap">
       <div style="font-size:11px;color:#B0ADA8">${totalBookings}件・${totalNights}泊</div>
-      <div style="font-size:11px;color:#B0ADA8">ADR <span style="font-weight:700;color:#666">受取¥${fmt(totalADR.host)}</span> <span style="color:#C8C5C0">/ ゲスト¥${fmt(totalADR.guest)}</span> <span style="font-size:9px;color:#C8C5C0">(/泊)</span></div>
+      <div style="font-size:11px;color:#B0ADA8">ADR <span style="font-weight:700;color:#666">受取¥${fmt(totalADR.host)}</span> <span style="color:#C8C5C0">/ ゲスト¥${fmt(totalADR.guest)}</span> <span style="font-size:10px;color:#C8C5C0">(/泊)</span></div>
       ${bestMonth ? `<div style="font-size:11px;color:#B0ADA8">最高 <span style="font-weight:700;color:${bestMonth.profit>=0?'#1C9A52':'#E53935'}">${bestMonth.month}月 ${bestMonth.profit<0?'▲':''}${fmtShort(Math.abs(bestMonth.profit))}円</span></div>` : ''}
     </div>
     <div style="display:flex;gap:16px;padding-top:6px;flex-wrap:wrap">
-      <div style="font-size:11px;color:#B0ADA8">RevPAR <span style="font-weight:700;color:#666">¥${fmt(totalRevPAR)}</span> <span style="font-size:9px;color:#C8C5C0">(受取/営業日)</span></div>
+      <div style="font-size:11px;color:#B0ADA8">RevPAR <span style="font-weight:700;color:#666">¥${fmt(totalRevPAR)}</span> <span style="font-size:10px;color:#C8C5C0">(受取/営業日)</span></div>
       <div style="font-size:11px;color:#B0ADA8">平均滞在 <span style="font-weight:700;color:#666">${totalLOS>0?totalLOS.toFixed(1):'—'}泊</span></div>
       <div style="font-size:11px;color:#B0ADA8">リードタイム <span style="font-weight:700;color:#666">${avgLead!==null?'平均'+avgLead+'日':'—'}</span></div>
-      <div style="font-size:11px;color:#B0ADA8">チャネル <span style="font-weight:700;color:#FF5A5F">Airbnb ${chAirbnbPct}%</span><span style="color:#C8C5C0"> / </span><span style="font-weight:700;color:#003580">B.com ${100-chAirbnbPct}%</span> <span style="font-size:9px;color:#C8C5C0">(売上比)</span></div>
+      <div style="font-size:11px;color:#B0ADA8">チャネル <span style="font-weight:700;color:#FF5A5F">Airbnb ${chAirbnbPct}%</span><span style="color:#C8C5C0"> / </span><span style="font-weight:700;color:#003580">B.com ${100-chAirbnbPct}%</span> <span style="font-size:10px;color:#C8C5C0">(売上比)</span></div>
     </div>
   </div>`;
 
@@ -4389,8 +4427,9 @@ function renderAnnual() {
       <div class="card-title" style="margin-bottom:10px">ADR・RevPAR月別推移（1泊あたり単価）</div>
       ${renderADRChart(monthlyStats)}
       <div style="height:1px;background:#f0f0f0;margin:14px 0 12px"></div>
+      <div class="month-table-wrap">
       <table class="month-table">
-        <thead><tr><th>月</th><th>件</th><th style="color:#C8C5C0">ゲスト</th><th>受取</th><th>ADR<br><span style="font-size:8px;font-weight:400;color:#C8C5C0">受取/ゲスト</span></th><th>RevPAR</th><th>利益</th><th>利益率</th><th>稼働</th></tr></thead>
+        <thead><tr><th>月</th><th>件</th><th style="color:#C8C5C0">ゲスト</th><th>受取</th><th>ADR<br><span style="font-size:9px;font-weight:400;color:#C8C5C0">受取/ゲスト</span></th><th>RevPAR</th><th>利益</th><th>利益率</th><th>稼働</th></tr></thead>
         <tbody>
           ${monthlyStats.map((ms, i) => {
             const mo = fyMonthOrder[i];
@@ -4404,7 +4443,7 @@ function renderAnnual() {
               <td>${ms.bookings}</td>
               <td style="color:#C8C5C0;font-size:11px">${fmtShort(gp)}</td>
               <td>${fmtShort(ms.revenue)}</td>
-              <td style="font-size:11px">${adr.host>0?fmtShort(adr.host):'—'}<br><span style="font-size:9px;color:#C8C5C0">${adr.guest>0?fmtShort(adr.guest):''}</span></td>
+              <td style="font-size:11px">${adr.host>0?fmtShort(adr.host):'—'}<br><span style="font-size:10px;color:#C8C5C0">${adr.guest>0?fmtShort(adr.guest):''}</span></td>
               <td style="font-size:11px">${ms.maxNights>0&&ms.adrRev>0?fmtShort(Math.round(ms.adrRev/ms.maxNights)):'—'}</td>
               <td class="td-profit ${isMP?'profit':'loss'}">${isMP?'':'▲'}${fmtShort(Math.abs(ms.profit))}</td>
               <td class="td-profit ${isMP?'profit':'loss'}">${mMargin!==null?(isMP?'':'▲')+Math.abs(mMargin)+'%':'—'}</td>
@@ -4415,7 +4454,7 @@ function renderAnnual() {
             <td>合計</td><td>${totalBookings}件</td>
             <td style="color:#C8C5C0;font-size:11px">${fmtShort(totalGuestPayment)}</td>
             <td>${fmtShort(totalRevenue)}</td>
-            <td style="font-size:11px">${totalADR.host>0?fmtShort(totalADR.host):'—'}<br><span style="font-size:9px;color:#C8C5C0">${totalADR.guest>0?fmtShort(totalADR.guest):''}</span></td>
+            <td style="font-size:11px">${totalADR.host>0?fmtShort(totalADR.host):'—'}<br><span style="font-size:10px;color:#C8C5C0">${totalADR.guest>0?fmtShort(totalADR.guest):''}</span></td>
             <td style="font-size:11px">${totalRevPAR>0?fmtShort(totalRevPAR):'—'}</td>
             <td class="td-profit ${isAP?'profit':'loss'}">${isAP?'':'▲'}${fmtShort(Math.abs(totalProfit))}</td>
             <td class="td-profit ${isAP?'profit':'loss'}">${totalRevenue>0?(isAP?'':'▲')+Math.abs(Math.round(totalProfit/totalRevenue*100))+'%':'—'}</td>
@@ -4423,6 +4462,7 @@ function renderAnnual() {
           </tr>
         </tbody>
       </table>
+      </div>
     </div>`;
   }
 
@@ -5356,9 +5396,15 @@ function renderMessageTab() {
   cleanupMsgUsageLog();
   const el = document.getElementById('message-content');
 
+  // 今日に近い予約から順に表示（滞在中・直近チェックインが最上位、遠い未来や昔の予約は下へ）
+  const _msgToday = new Date(); _msgToday.setHours(0,0,0,0);
   const sorted = [...getAllBookings()]
     .filter(b => b.checkin)
-    .sort((a, b) => { const da = parseDateStr(a.checkin), db = parseDateStr(b.checkin); return db - da; });
+    .sort((a, b) => {
+      const da = Math.abs(parseDateStr(a.checkin) - _msgToday);
+      const db = Math.abs(parseDateStr(b.checkin) - _msgToday);
+      return da - db;
+    });
 
   const bookingOptions = sorted.map(b => {
     const prop = properties.find(p => p.id === getBookingPropId(b));
