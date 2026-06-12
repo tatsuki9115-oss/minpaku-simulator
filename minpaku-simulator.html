@@ -5331,7 +5331,7 @@ function generatePaymentStatement(code) {
       .memo-box{border:1px solid #ddd;border-radius:6px;padding:10px 14px;font-size:12px;color:#555;margin-bottom:28px}
       .memo-box strong{color:#333}
       .print-btn{display:block;margin:0 auto;padding:12px 40px;font-size:15px;font-weight:700;background:#1a365d;color:white;border:none;border-radius:10px;cursor:pointer}
-      @media print{.no-print{display:none}body{padding:20px 28px}}
+      @media print{.no-print{display:none !important}body{padding:20px 28px}}
     </style></head><body>
     <h2>支払明細書（清掃費用・税込表記）</h2>
     <table class="meta">
@@ -5352,8 +5352,8 @@ function generatePaymentStatement(code) {
       </tbody>
     </table>
     ${memo ? `<div class="memo-box"><strong>メモ</strong>　${escHtml(memo).replace(/\n/g,'<br>')}</div>` : ''}
-    <div class="no-print" style="text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center">
-      <button class="print-btn" onclick="window.print()">🖨️ 印刷 / PDF保存</button>
+    <div class="no-print" id="ps-actions" style="text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center">
+      <button class="print-btn" onclick="var a=document.getElementById('ps-actions');a.style.display='none';window.print();setTimeout(function(){a.style.display=''},300)">🖨️ 印刷 / PDF保存</button>
       <button onclick="window.close()" style="padding:10px 32px;font-size:13px;font-weight:700;background:white;color:#555;border:1.5px solid #ccc;border-radius:10px;cursor:pointer">← 閉じてカレンダーへ戻る</button>
     </div>
   </body></html>`;
