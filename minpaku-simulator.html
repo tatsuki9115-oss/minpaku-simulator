@@ -6078,7 +6078,7 @@ async function fetchYokohamaEvents() {
       const rows = events.map(ev => `
         <div style="padding:7px 0;border-bottom:1px solid #E8E6E1">
           <div style="font-size:13px;font-weight:700;color:#333;line-height:1.4">${ev.title}</div>
-          ${ev.dates  ? `<div style="font-size:11px;color:#888;margin-top:2px">📅 ${(() => { let d=(ev.dates).replace(/\s*※.*/s,'').trim(); if(d.startsWith('【')){d=d.replace(/【[^】]*】\s*/g,'').replace(/\s*《[^》]*》/g,'').trim();d=(d.split(/[\r\n]/)[0]||d).trim();if(d.length>60){const c=d.substring(0,60);const lb=Math.max(c.lastIndexOf('、'),c.lastIndexOf('。'),c.lastIndexOf(' '),c.lastIndexOf('）'));d=(lb>20?c.substring(0,lb):c)+'…';}} return d; })()}</div>` : ''}
+          ${ev.dates  ? `<div style="font-size:11px;color:#888;margin-top:2px">📅 ${formatEventDatesForStay(ev.dates, startDate, endDate)}</div>` : ''}
           ${(ev.venue||ev.area) ? `<div style="font-size:11px;color:#888;margin-top:1px">📍 ${ev.venue||ev.area}</div>` : ''}
         </div>`).join('');
       if (preview) preview.innerHTML = `
@@ -6299,6 +6299,42 @@ function buildWeatherComment(days, areaName) {
   return c;
 }
 
+// イベント日程を「滞在期間に該当する日付だけ」に整形する（長い羅列・途切れを防ぐ）
+// 範囲表記（〜）は範囲のまま、個別日付リストは滞在内の日だけを抽出して返す
+function formatEventDatesForStay(datesStr, stayStartStr, stayEndStr) {
+  if (!datesStr) return '';
+  const stayS = new Date(stayStartStr); stayS.setHours(0,0,0,0);
+  const stayE = new Date(stayEndStr);   stayE.setHours(23,59,59,999);
+  const dow = ['日','月','火','水','木','金','土'];
+  const fmtD = d => `${d.getMonth()+1}月${d.getDate()}日(${dow[d.getDay()]})`;
+  // ※注記・【ラベル】・《先着》等を除去
+  let s = datesStr.replace(/\s*※.*/s, '').replace(/【[^】]*】/g, '').replace(/《[^》]*》/g, '').trim();
+  const hasRange = /[〜～~]/.test(s);
+  // 年月日（年は省略あり）を全抽出
+  const re = /(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日/g;
+  const dates = []; let m; let lastYear = stayS.getFullYear();
+  while ((m = re.exec(s)) !== null) {
+    const y = m[1] ? parseInt(m[1]) : lastYear; lastYear = y;
+    dates.push(new Date(y, parseInt(m[2]) - 1, parseInt(m[3])));
+  }
+  // 個別日付が無い（例：「6月の金・土・日に開催」）→ 最初の行をそのまま（40字上限）
+  if (dates.length === 0) {
+    const firstLine = s.split(/[\r\n]/)[0].trim();
+    return firstLine.length > 40 ? firstLine.slice(0, 40) : firstLine;
+  }
+  // 範囲表記：開始〜終了が滞在と重なれば範囲のまま表示
+  if (hasRange && dates.length >= 2) {
+    const start = dates[0], end = dates[dates.length - 1];
+    if (end >= stayS && start <= stayE) return `${fmtD(start)}〜${fmtD(end)}`;
+  }
+  // 個別日付リスト：滞在期間に該当する日だけ
+  const inStay = dates.filter(d => d >= stayS && d <= stayE);
+  if (inStay.length > 0) return inStay.map(fmtD).join('、');
+  // 該当日が抽出できなかった場合は説明文（最初の行）にフォールバック
+  const firstLine = s.split(/[\r\n]/)[0].trim();
+  return firstLine.length > 40 ? firstLine.slice(0, 40) : firstLine;
+}
+
 function generateWelcomeMsg() {
   if (!welcomeWeatherData) { showToast('先に天気予報を取得してください', 'error'); return; }
   const { area, days } = welcomeWeatherData;
@@ -6331,23 +6367,8 @@ function generateWelcomeMsg() {
   if (welcomeEventData && welcomeEventData.events.length > 0) {
     const evList = welcomeEventData.events.slice(0, 5).map(ev => {
       const loc    = ev.area  ? `（${ev.area}）` : '';
-      // 日程：※以降の注記を除去。【で始まる場合は最初の【〜】ラベルを除いて日付部分を抽出
-      let rawDates = (ev.dates || '').replace(/\s*※.*/s, '').trim();
-      if (rawDates.startsWith('【')) {
-        // 【ラベル】 日付 の形式からラベルを除去
-        rawDates = rawDates.replace(/【[^】]*】\s*/g, '').trim();
-        // チケット販売日（《先着》などを含む部分）を除去し、実際の開催日だけ残す
-        if (rawDates.includes('《')) rawDates = rawDates.replace(/.*?《[^》]*》\s*/s, '').trim();
-        // 最初の改行で区切る
-        const firstLine = rawDates.split(/[\r\n]/)[0].trim();
-        rawDates = firstLine || rawDates;
-        // 60字超える場合は最後の読点・スペース・閉じ括弧の手前で切る
-        if (rawDates.length > 60) {
-          const cut = rawDates.substring(0, 60);
-          const lastBreak = Math.max(cut.lastIndexOf('、'), cut.lastIndexOf('。'), cut.lastIndexOf(' '), cut.lastIndexOf('）'));
-          rawDates = (lastBreak > 20 ? cut.substring(0, lastBreak) : cut) + '…';
-        }
-      }
+      // 日程：滞在期間に該当する日付だけに整形（長い羅列・途切れを防止）
+      const rawDates = formatEventDatesForStay(ev.dates, welcomeEventData.startDate, welcomeEventData.endDate);
       const dt     = rawDates ? `\n　📅 ${rawDates}` : '';
       // 会場＋最寄り駅
       const venueStr = ev.venue || ev.address || ev.area || '';
