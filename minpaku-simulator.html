@@ -1219,6 +1219,16 @@ function initFirebaseSync() {
     renderAnnual && renderAnnual();
   });
 
+  // Beds24自動同期（minpaku-sync Worker）の同期時刻をヘッダーの「更新」表示に反映
+  fbdb.ref('minpaku_sync_meta_v1').on('value', snap => {
+    const val = snap.val();
+    if (!val || !val.lastSyncAt) return;
+    if (dataUpdatedAt['airbnb'] === val.lastSyncAt && dataUpdatedAt['bookingCom'] === val.lastSyncAt) return;
+    dataUpdatedAt['airbnb'] = val.lastSyncAt;
+    dataUpdatedAt['bookingCom'] = val.lastSyncAt;
+    saveDataUpdatedAt();
+  });
+
   // 既存 localStorage データを Firebase に移行（初回のみ）
   fbdb.ref(KEYS.properties).once('value', snap => {
     if (!snap.val()) {
