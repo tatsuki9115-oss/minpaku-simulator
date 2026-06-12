@@ -684,7 +684,9 @@
   <button class="btn-add-property" onclick="addProperty()">＋ 物件を追加</button>
   <div class="save-bar">
     <div class="save-bar-inner">
-      <button onclick="downloadBackup()" style="padding:12px 18px;font-size:13px;font-weight:700;border-radius:12px;border:1.5px solid #4a7fc1;background:white;color:#4a7fc1;cursor:pointer;flex-shrink:0">💾 バックアップ</button>
+      <button onclick="downloadBackup()" style="padding:12px 14px;font-size:13px;font-weight:700;border-radius:12px;border:1.5px solid #4a7fc1;background:white;color:#4a7fc1;cursor:pointer;flex-shrink:0">💾 バックアップ</button>
+      <button onclick="document.getElementById('restore-file-input').click()" style="padding:12px 14px;font-size:13px;font-weight:700;border-radius:12px;border:1.5px solid #1C9A52;background:white;color:#1C9A52;cursor:pointer;flex-shrink:0">♻️ 復元</button>
+      <input type="file" id="restore-file-input" accept=".json,application/json" style="display:none" onchange="handleRestoreFile(this)">
       <button class="btn-save" id="save-btn" onclick="saveSettings()">設定を保存</button>
     </div>
   </div>
@@ -872,8 +874,9 @@ const DEFAULT_PROPERTIES = [
   }
 ];
 
-const AIRBNB_FEE_RATE = 0.15; // Airbnbホストサービス料（約15%）
-function getGuestPayment(hostPayout) { return Math.round(hostPayout / (1 - AIRBNB_FEE_RATE)); }
+const AIRBNB_FEE_RATE = 0.155; // Airbnbホストサービス料（シンプル料金体系15.5%・ホスト受取=ゲスト支払×0.845）
+const AIRBNB_HOST_RATE = 1 - AIRBNB_FEE_RATE; // 0.845
+function getGuestPayment(hostPayout) { return Math.round(hostPayout / AIRBNB_HOST_RATE); }
 
 // ★ KEYS は load関数より先に定義する（後で定義するとTDZエラーでlocalStorageが読めなくなる）
 const KEYS = {
@@ -900,7 +903,9 @@ let currentAnnualYear = new Date().getFullYear();
 let pendingListings = [];
 let annualPropFilter = 'all';
 let annualSelectedMonth = null; // null=全期間, {year,month}=月別ビュー
-let dataUpdatedAt = JSON.parse(localStorage.getItem('dataUpdatedAt') || '{}');
+let dataUpdatedAt = (function() {
+  try { return JSON.parse(localStorage.getItem('dataUpdatedAt') || '{}') || {}; } catch(e) { return {}; }
+})();
 function saveDataUpdatedAt() {
   localStorage.setItem('dataUpdatedAt', JSON.stringify(dataUpdatedAt));
   updateHeaderTimestamp();
@@ -1002,7 +1007,7 @@ fbauth.onAuthStateChanged(user => {
 
 function fbSave(key, data) {
   try { localStorage.setItem(key, JSON.stringify(data)); } catch(e) {}
-  fbdb.ref(key).set(data).catch(e => console.warn('Firebase save error:', e));
+  return fbdb.ref(key).set(data).catch(e => console.warn('Firebase save error:', e));
 }
 
 function loadData() {
@@ -2284,6 +2289,78 @@ function downloadBackup() {
   localStorage.setItem('minpaku_last_backup_v1', String(Date.now()));
 }
 
+// バックアップJSONから復元（downloadBackupが出力した形式を読み込む）
+function handleRestoreFile(input) {
+  const file = input.files[0];
+  input.value = '';
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    let data;
+    try { data = JSON.parse(e.target.result); }
+    catch(err) { showToast('読み込み失敗。バックアップのJSONファイルを選択してください', 'error'); return; }
+
+    // 主要キーの検証（不正なファイルなら何も変更しない）
+    if (!data || typeof data !== 'object'
+        || !Array.isArray(data.airbnbBookings)
+        || !Array.isArray(data.properties) || data.properties.length === 0) {
+      showToast('バックアップ形式が正しくありません。このアプリの「💾 バックアップ」で保存したファイルを選択してください', 'error');
+      return;
+    }
+
+    // 確認ダイアログ（保存日時と予約件数の変化を表示）
+    const exp = data.exportedAt ? new Date(data.exportedAt) : null;
+    const expLabel = (exp && !isNaN(exp))
+      ? `${exp.getFullYear()}/${exp.getMonth()+1}/${exp.getDate()} ${String(exp.getHours()).padStart(2,'0')}:${String(exp.getMinutes()).padStart(2,'0')}`
+      : '不明';
+    const curCount = getAllBookings().length;
+    const newCount = data.airbnbBookings.length + (Array.isArray(data.bookingComBookings) ? data.bookingComBookings.length : 0);
+    const ok = confirm(`バックアップ（保存日時: ${expLabel}）から復元します。\n\n現在のデータを上書きします。予約${curCount}件 → ${newCount}件\n\n続行しますか？`);
+    if (!ok) return;
+
+    try {
+      // メモリ上のデータを置き換え
+      airbnbBookings     = data.airbnbBookings;
+      bookingComBookings = Array.isArray(data.bookingComBookings) ? data.bookingComBookings : [];
+      properties         = data.properties;
+      bookingChecks      = (data.bookingChecks && typeof data.bookingChecks === 'object') ? data.bookingChecks : {};
+      listingMap         = (data.listingMap && typeof data.listingMap === 'object') ? data.listingMap : {};
+      actualCosts        = (data.actualCosts && typeof data.actualCosts === 'object') ? data.actualCosts : {};
+      pricelabsForecast  = (data.pricelabsForecast && typeof data.pricelabsForecast === 'object') ? data.pricelabsForecast : {};
+      history            = Array.isArray(data.history) ? data.history : [];
+      monthlyData        = (data.monthlyData && typeof data.monthlyData === 'object') ? data.monthlyData : {};
+      dataUpdatedAt      = (data.dataUpdatedAt && typeof data.dataUpdatedAt === 'object') ? data.dataUpdatedAt : {};
+
+      // localStorage + Firebase へ書き戻し（fbSaveはlocalStorage保存＋Firebase保存のPromiseを返す）
+      const tasks = [
+        fbSave(KEYS.airbnb, airbnbBookings),
+        fbSave(KEYS.bookingCom, bookingComBookings),
+        fbSave(KEYS.properties, properties),
+        fbSave(KEYS.bookingChecks, bookingChecks),
+        fbSave(KEYS.listingMap, listingMap),
+        fbSave(KEYS.actualCosts, actualCosts),
+        fbSave(KEYS.forecast, pricelabsForecast),
+        fbSave(KEYS.history, history),
+        fbSave(KEYS.monthly, monthlyData),
+      ];
+      localStorage.setItem('dataUpdatedAt', JSON.stringify(dataUpdatedAt));
+      if (data.msgUsageLog && typeof data.msgUsageLog === 'object' && typeof MSG_USAGE_KEY !== 'undefined') {
+        localStorage.setItem(MSG_USAGE_KEY, JSON.stringify(data.msgUsageLog));
+      }
+
+      showToast('♻️ 復元しました。ページを再読み込みします…', 'success');
+      // Firebaseへの保存完了を待ってからリロード（最大4秒でフォールバック）
+      let reloaded = false;
+      const doReload = () => { if (!reloaded) { reloaded = true; location.reload(); } };
+      Promise.all(tasks).then(doReload).catch(doReload);
+      setTimeout(doReload, 4000);
+    } catch(err) {
+      showToast('復元中にエラーが発生しました：' + (err && err.message ? err.message : err), 'error');
+    }
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
 // 前回バックアップからの経過日数（null=未取得）
 function daysSinceBackup() {
   const t = parseInt(localStorage.getItem('minpaku_last_backup_v1') || '0');
@@ -2343,6 +2420,29 @@ function togglePropertyAccordion(propId) {
 
 // ==================== ヘルパー ====================
 function getDaysInMonth(year, month) { return new Date(year, month, 0).getDate(); }
+
+// 180日カウント用：年度（4/1〜翌3/31）の宿泊数を物件別に集計（共通関数）
+// ・定期借家（28泊以上）は除外 ・¥0予約（ブロック期間等）は除外 ・チェックイン日基準
+function getFiscalYearNightsByProp(fiscalYear) {
+  const map = {};
+  getAllBookings().forEach(b => {
+    if (!b.checkin || !b.revenue || b.revenue === 0) return;
+    if (isLongStayListing(b)) return; // 定期借家（28泊以上）は180日カウントから除外
+    const [by, bm] = b.checkin.split('/').map(Number);
+    if (!by || !bm) return;
+    const fy = bm >= 4 ? by : by - 1;
+    if (fy !== fiscalYear) return;
+    const pid = getBookingPropId(b);
+    if (!pid) return;
+    map[pid] = (map[pid] || 0) + (b.nights || 0);
+  });
+  return map;
+}
+// 今日が属する年度（4月起点）を返す
+function getCurrentFiscalYear() {
+  const d = new Date();
+  return (d.getMonth() + 1) >= 4 ? d.getFullYear() : d.getFullYear() - 1;
+}
 
 // 物件がその月に営業しているか
 function isPropertyOperating(prop, year, month) {
@@ -2643,10 +2743,10 @@ function renderOverlapCheck() {
 }
 
 // ==================== 投資回収計算 ====================
-function renderInvestmentRecovery() {
-  const fmt = n => n.toLocaleString('ja-JP');
-  const fmtS = n => { const a = Math.abs(n); return (a >= 10000 ? (n/10000).toFixed(1)+'万' : n.toLocaleString('ja-JP')) + '円'; };
-
+// 共通計算関数：実績タブ（renderInvestmentRecovery）とホームのミニカードの両方から使用
+// 仕様：予約あり月=実績 / 未来空き月=PriceLabs予測補填 / 過去空き月=損失
+//       未来月で予約利益が予測利益を下回る月は予測値で計上（まだ予約が入りきっていないだけのため）
+function calcInvestmentRecoveryStats() {
   // 全期間の累積利益を物件別に計算（現在月までの実績のみ・売上と固定費の期間を統一）
   const nowY = new Date().getFullYear();
   const nowM = new Date().getMonth() + 1;
@@ -2798,6 +2898,15 @@ function renderInvestmentRecovery() {
 
     return { prop: p, initialTotal, cumulativeProfit, totalFixedCosts, totalRevenue, months, remaining, pct, avgMonthlyProfit, monthsNeeded, futureBookedMonths, yearEndProfit, yearEndPct, pastActualProfit, futureForecastProfit };
   });
+
+  return { propStats, recPeriodLabel, nowY, nowM };
+}
+
+function renderInvestmentRecovery() {
+  const fmt = n => n.toLocaleString('ja-JP');
+  const fmtS = n => { const a = Math.abs(n); return (a >= 10000 ? (n/10000).toFixed(1)+'万' : n.toLocaleString('ja-JP')) + '円'; };
+
+  const { propStats, recPeriodLabel, nowY, nowM } = calcInvestmentRecoveryStats();
 
   const totalInitial = propStats.reduce((s, x) => s + x.initialTotal, 0);
   const totalProfit = propStats.reduce((s, x) => s + x.cumulativeProfit, 0);
@@ -3254,6 +3363,12 @@ function handleCSVFile(input) {
   reader.onload = (e) => {
     const parsed = parseCSV(e.target.result);
     if (parsed.length === 0) { showToast('有効な予約データが見つかりませんでした', 'error'); return; }
+    // 件数が大幅に減る場合は確認（誤って一部期間だけのCSVを読むと過去の予約が消えるため）
+    const currentAirbnbCount = airbnbBookings.filter(b => b.source !== 'pricelabs').length;
+    if (currentAirbnbCount > 0 && parsed.length < currentAirbnbCount * 0.7) {
+      const ok = confirm(`現在${currentAirbnbCount}件 → 新規${parsed.length}件。過去の予約が消える可能性があります。続行しますか？\n\n（期間を絞ってエクスポートしたCSVを読み込むと、それ以外の予約は削除されます）`);
+      if (!ok) { showToast('CSV読み込みを中断しました（データは変更されていません）', 'info'); return; }
+    }
     // Airbnb CSV読み込み時はAirbnb分のみ置き換え（PriceLabs追加分は保持）
     const plBooks = airbnbBookings.filter(b => b.source === 'pricelabs');
     const plCodes = new Set(plBooks.map(b => b.code).filter(Boolean));
@@ -3844,17 +3959,10 @@ function renderDashboard() {
       strategyHint = '28泊以上の長期予約を積極的に受け入れる';
     }
 
-    // 180日消費計算（28泊以上除外・当年チェックインのみ・Airbnb+Booking.com）
-    const days180ByProp = {};
-    _allBooks.forEach(b => {
-      // 長期（定期借家・28泊以上）は除外
-      if (isLongStayListing(b)) return;
-      const ci = getCI(b);
-      if (ci.getFullYear() !== thisYear) return;
-      const pid = getBookingPropId(b);
-      if (!pid) return;
-      days180ByProp[pid] = (days180ByProp[pid] || 0) + (b.nights || 0);
-    });
+    // 180日消費計算（28泊以上除外・年度集計：4/1〜翌3/31・Airbnb+Booking.com）
+    // 実績タブと同じ共通関数で集計（getFiscalYearNightsByProp）
+    const meterFY = getCurrentFiscalYear();
+    const days180ByProp = getFiscalYearNightsByProp(meterFY);
 
     const meterRows = properties.map(p => {
       const max = p.maxAnnualNights || 180;
@@ -3877,7 +3985,7 @@ function renderDashboard() {
 
     html += `<div class="card" style="margin-bottom:12px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div style="font-size:11px;font-weight:800;color:#B0ADA8;letter-spacing:.5px">📅 180日消費メーター（${thisYear}年）</div>
+        <div style="font-size:11px;font-weight:800;color:#B0ADA8;letter-spacing:.5px">📅 180日消費メーター（${meterFY}年度・4月起点〜翌3月末）</div>
         <div style="display:inline-flex;align-items:center;gap:5px;background:${seasonColor}18;border-radius:20px;padding:3px 10px">
           <span style="font-size:12px">${seasonIcon}</span>
           <span style="font-size:11px;font-weight:800;color:${seasonColor}">${seasonPhase}</span>
@@ -3889,74 +3997,9 @@ function renderDashboard() {
   }
 
   // ========== 投資回収ミニカード ==========
+  // 実績タブと同じ共通計算関数（calcInvestmentRecoveryStats）の結果を表示するだけ
   {
-    const nowM2 = now.getMonth() + 1;
-    const recovStats = properties.map(p => {
-      const initialTotal = (p.initialCosts || []).reduce((s, c) => s + c.amount, 0);
-      if (!initialTotal) return null;
-      const books = _allBooks.filter(b => getBookingPropId(b) === p.id);
-      const perBooking = (p.perBookingCosts || []).reduce((s, c) => s + c.amount, 0);
-
-      // 統一ロジック：実績(予約あり) + PriceLabs予測(未来空き) - 過去空き月は損失
-      const bookedMonthSet = new Set();
-      let maxBookY = thisYear, maxBookM = nowM2;
-      books.forEach(b => {
-        const [by, bm] = b.checkin.split('/').map(Number);
-        bookedMonthSet.add(`${by}_${bm}`);
-        if (by > maxBookY || (by === maxBookY && bm > maxBookM)) { maxBookY = by; maxBookM = bm; }
-      });
-      let fyEndY = nowM2 >= 4 ? thisYear + 1 : thisYear;
-      let endY = fyEndY, endM = 3;
-      if (maxBookY > endY || (maxBookY === endY && maxBookM > endM)) { endY = maxBookY; endM = maxBookM; }
-      const pf = pricelabsForecast[String(thisYear)] && pricelabsForecast[String(thisYear)][p.id];
-      const monthForecastRev = pf ? ((pf.revenue || pf.shortTermRevenue || 0) / 12) : 0;
-      const pBks = books.filter(b => b.nights > 0);
-      const avgN = pBks.length > 0 ? pBks.reduce((s,b)=>s+b.nights,0)/pBks.length : 3;
-      const estMonthBkgs = pf ? Math.round((pf.occupancy / 100 * 365 / 12) / avgN) : 0;
-      const monthForecastVar = estMonthBkgs * perBooking;
-
-      let totalRev = 0, totalVar = 0, totalFixed = 0;
-      const futureMonthProfits = [];
-      if (p.operationStart) {
-        const [sy, sm] = p.operationStart.split('-').map(Number);
-        let cy = sy, cm = sm;
-        while (cy < endY || (cy === endY && cm <= endM)) {
-          const mk = `${cy}_${cm}`;
-          const monthBooks = books.filter(b => {
-            const [by, bm] = b.checkin.split('/').map(Number);
-            return by === cy && bm === cm;
-          });
-          const isFuture = cy > thisYear || (cy === thisYear && cm > nowM2);
-          const hasBooking = bookedMonthSet.has(mk);
-          const monthFixed = getPropMonthFixedCosts(p, cy, cm);
-          totalFixed += monthFixed;
-          let monthRev = 0, monthVar = 0;
-          if (hasBooking) {
-            monthRev = monthBooks.reduce((s,b)=>s+b.revenue,0);
-            monthVar = hasActualCosts(p.id, cy, cm)
-              ? getPropMonthActualVarCosts(p, cy, cm)
-              : monthBooks.reduce((s,b)=>s+getPerBookingTotal(b,p),0);
-          } else if (isFuture && pf) {
-            monthRev = monthForecastRev;
-            monthVar = monthForecastVar;
-          }
-          totalRev += monthRev;
-          totalVar += monthVar;
-          if (isFuture) futureMonthProfits.push(monthRev - monthFixed - monthVar);
-          cm++; if (cm > 12) { cm = 1; cy++; }
-        }
-      }
-      const cumProfit = totalRev - totalFixed - totalVar;
-      const remaining = Math.max(initialTotal - cumProfit, 0);
-      const pct = initialTotal > 0 ? Math.round(cumProfit / initialTotal * 100) : 0;
-      // 互換用
-      const yeProfit = cumProfit, yePct = pct;
-      // 未来月（予約あり実績 + 予測補填）の平均利益で回収月数算出
-      const avgMonthly = futureMonthProfits.length > 0
-        ? futureMonthProfits.reduce((a,b)=>a+b,0) / futureMonthProfits.length : 0;
-      const monthsNeeded = avgMonthly > 500 && remaining > 0 ? Math.ceil(remaining / avgMonthly) : null;
-      return { prop: p, initialTotal, cumProfit, remaining, pct, monthsNeeded, yeProfit, yePct };
-    }).filter(Boolean);
+    const recovStats = calcInvestmentRecoveryStats().propStats.filter(x => x.initialTotal > 0);
 
     if (recovStats.length > 0) {
       const recRows = recovStats.map(r => {
@@ -4516,12 +4559,8 @@ function renderAnnual() {
 
   // 年間稼働日数管理（アコーディオン）
   {
-    const nightsByProp = {};
-    yearBooks.forEach(b => {
-      if (isLongStayListing(b)) return; // 定期借家（28泊以上）は180日カウントから除外
-      const pid = getBookingPropId(b);
-      nightsByProp[pid] = (nightsByProp[pid] || 0) + b.nights;
-    });
+    // ホームの180日消費メーターと同じ共通関数で集計（年度：4/1〜翌3/31）
+    const nightsByProp = getFiscalYearNightsByProp(currentAnnualYear);
     const targetProps = annualPropFilter === 'all' ? properties : properties.filter(p => String(p.id) === String(annualPropFilter));
     const showSection = targetProps.some(p => p.maxAnnualNights != null || (nightsByProp[p.id] || 0) > 0);
     const hasNightAlert = targetProps.some(p => {
@@ -6722,7 +6761,7 @@ function calcCheckV2() {
     return;
   }
 
-  const FEE = 0.845;
+  const FEE = AIRBNB_HOST_RATE; // 0.845（ホスト受取率・AIRBNB_FEE_RATEから算出）
   const adrBusyH = adrBusyG * FEE;
   const adrNormH = adrNormG * FEE;
   const adrSlowH = adrSlowG * FEE;
