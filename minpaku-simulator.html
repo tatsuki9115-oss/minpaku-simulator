@@ -5835,9 +5835,12 @@ function renderConversation(code) {
       <div style="font-size:12px;font-weight:800;color:#555">💬 ゲストとの会話（${conv.length}件）</div>
       <div style="font-size:11px;color:#aaa" id="${loadingId}"></div>
     </div>
-    <div style="display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto;padding:4px;background:#F7F6F4;border-radius:10px">
+    <div id="msg-conv-scroll" style="display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto;padding:4px;background:#F7F6F4;border-radius:10px">
       ${bubbles}
     </div>`;
+  // 最初から一番下（最新メッセージ）が見える状態にする
+  const box = document.getElementById('msg-conv-scroll');
+  if (box) box.scrollTop = box.scrollHeight;
 }
 
 // 「今すぐ取得」：Googleログインのトークンでオンデマンド取得し、最新会話を反映
