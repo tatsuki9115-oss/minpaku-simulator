@@ -889,6 +889,7 @@ const KEYS = {
   bookingChecks: 'minpaku_booking_checks_v1',
   actualCosts: 'minpaku_actual_costs_v1',
   bookingCom: 'minpaku_bookingcom_v1',
+  systemFee: 'minpaku_system_fee_v1',
 };
 
 let properties = loadData();
@@ -938,6 +939,7 @@ let calendarPropFilter = 'all';
 let calendarYear = new Date().getFullYear();
 let calendarMonth = new Date().getMonth() + 1;
 let bookingChecks = loadBookingChecks();
+let systemFee = loadSystemFee();
 
 // ==================== Firebase ====================
 const firebaseConfig = {
@@ -1097,6 +1099,29 @@ function loadActualCosts() {
 }
 function saveActualCosts() { fbSave(KEYS.actualCosts, actualCosts); }
 
+// 全物件共通のシステム利用料（物件数で割って各物件の固定費に加算）
+function loadSystemFee() {
+  try { const s = localStorage.getItem(KEYS.systemFee); if (s) return JSON.parse(s); } catch(e) {}
+  // 初期値：2026年5月開始・PriceLabs 3404円・Beds24 0円
+  return { startMonth: '2026-05', items: [ { name: 'PriceLabs', amount: 3404 }, { name: 'Beds24', amount: 0 } ] };
+}
+function saveSystemFee() { fbSave(KEYS.systemFee, systemFee); }
+
+// 指定年月において1物件が負担するシステム利用料（その月に営業中の物件数で按分）
+function getSystemFeePerProp(year, month) {
+  if (!systemFee || !Array.isArray(systemFee.items)) return 0;
+  // 開始月チェック
+  if (systemFee.startMonth) {
+    const [sy, sm] = systemFee.startMonth.split('-').map(Number);
+    if (year < sy || (year === sy && month < sm)) return 0;
+  }
+  const total = systemFee.items.reduce((s, it) => s + (parseInt(it.amount) || 0), 0);
+  if (total === 0) return 0;
+  const opCount = properties.filter(p => isPropertyOperating(p, year, month)).length;
+  if (opCount === 0) return 0;
+  return Math.round(total / opCount);
+}
+
 // ==================== Firebase リアルタイム同期 ====================
 let _fbSyncInit = false;
 function initFirebaseSync() {
@@ -1219,6 +1244,16 @@ function initFirebaseSync() {
     renderCalendarTab && renderCalendarTab();
     renderMonthly && renderMonthly();
     renderAnnual && renderAnnual();
+  });
+
+  fbdb.ref(KEYS.systemFee).on('value', snap => {
+    const val = snap.val();
+    if (!val || typeof val !== 'object' || !Array.isArray(val.items)) return;
+    if (JSON.stringify(val) === JSON.stringify(systemFee)) return;
+    try { localStorage.setItem(KEYS.systemFee, JSON.stringify(val)); } catch(e) {}
+    systemFee = val;
+    renderAnnual && renderAnnual();
+    renderDashboard && renderDashboard();
   });
 
   // Beds24から同期されたゲストメッセージ（minpaku-sync Worker）
@@ -2116,6 +2151,37 @@ function renderSettings() {
     <div style="font-size:13px;font-weight:800">⚙️ 物件設定</div>
     <div style="font-size:11px;opacity:.8;margin-top:2px">物件ごとの費用・スタッフ・リスティングを管理</div>
   </div>`;
+
+  // 全物件共通のシステム利用料カード
+  {
+    const sf = systemFee || { startMonth: '2026-05', items: [] };
+    const total = (sf.items || []).reduce((s, it) => s + (parseInt(it.amount) || 0), 0);
+    const opCountNow = properties.length || 1;
+    const perProp = Math.round(total / opCountNow);
+    settingsHTML += `<div class="property-item">
+      <div class="property-header" style="cursor:pointer" onclick="document.getElementById('sysfee-body').style.display=document.getElementById('sysfee-body').style.display==='none'?'block':'none';this.querySelector('.sysfee-chev').style.transform=document.getElementById('sysfee-body').style.display==='none'?'':'rotate(180deg)'">
+        <span style="font-size:14px;font-weight:700;flex:1;color:#1C1C1E">🧾 システム利用料（全物件共通・按分）</span>
+        <span class="sysfee-chev" style="color:#B0ADA8;margin-left:8px;transition:transform .2s;flex-shrink:0;font-size:11px">▼</span>
+      </div>
+      <div class="cost-section" id="sysfee-body" style="display:none">
+        <div style="font-size:11px;color:#888;margin-bottom:10px;line-height:1.6">毎月の合計を物件数で割って、各物件の固定費（実績）に自動計上します。<br>現在：合計 <strong>¥${total.toLocaleString()}</strong> ÷ ${opCountNow}物件 = <strong style="color:#F07C3F">1物件あたり ¥${perProp.toLocaleString()}/月</strong></div>
+        <div style="margin-bottom:12px">
+          <label style="font-size:11px;font-weight:700;color:#B0ADA8;display:block;margin-bottom:4px">計上開始月</label>
+          <input type="month" value="${sf.startMonth || '2026-05'}" onchange="updateSystemFeeStart(this.value)" style="border:1.5px solid #E8E6E1;border-radius:10px;padding:8px 12px;font-size:14px;background:#FAFAF9">
+        </div>
+        <div style="font-size:11px;font-weight:700;color:#B0ADA8;margin-bottom:6px">項目</div>
+        ${(sf.items || []).map((it, ii) => `
+          <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+            <input type="text" value="${escHtml(it.name)}" placeholder="項目名" onchange="updateSystemFeeItem(${ii},'name',this.value)" style="flex:1;border:1.5px solid #E8E6E1;border-radius:10px;padding:8px 12px;font-size:14px;background:#FAFAF9;box-sizing:border-box">
+            <input type="number" value="${it.amount}" inputmode="numeric" onchange="updateSystemFeeItem(${ii},'amount',this.value)" style="width:110px;border:1.5px solid #E8E6E1;border-radius:10px;padding:8px 12px;font-size:14px;text-align:right;background:#FAFAF9;box-sizing:border-box">
+            <span style="font-size:12px;color:#aaa">円/月</span>
+            <button onclick="removeSystemFeeItem(${ii})" style="background:none;border:none;color:#e53935;font-size:16px;cursor:pointer;padding:4px">×</button>
+          </div>`).join('')}
+        <button onclick="addSystemFeeItem()" style="width:100%;padding:8px;border:1.5px dashed #ccc;border-radius:10px;background:#fafafa;color:#888;font-size:12px;font-weight:700;cursor:pointer;margin-top:4px">＋ 項目を追加</button>
+      </div>
+    </div>`;
+  }
+
   settingsHTML += properties.map((p, pi) => `
     <div class="property-item" id="prop-item-${p.id}">
       <div class="property-header" style="cursor:pointer" onclick="togglePropertyAccordion(${p.id})">
@@ -2228,6 +2294,13 @@ function renderSettings() {
 }
 
 function updateName(pi, val) { properties[pi].name = val; }
+
+// ---- システム利用料 ----
+function _ensureSystemFee() { if (!systemFee || typeof systemFee !== 'object') systemFee = { startMonth: '2026-05', items: [] }; if (!Array.isArray(systemFee.items)) systemFee.items = []; }
+function updateSystemFeeStart(val) { _ensureSystemFee(); systemFee.startMonth = val; saveSystemFee(); renderSettingsKeepOpen(); renderAnnual && renderAnnual(); renderDashboard && renderDashboard(); }
+function updateSystemFeeItem(ii, field, val) { _ensureSystemFee(); if (!systemFee.items[ii]) return; systemFee.items[ii][field] = field === 'amount' ? (parseInt(val) || 0) : val; saveSystemFee(); renderSettingsKeepOpen(); renderAnnual && renderAnnual(); renderDashboard && renderDashboard(); }
+function addSystemFeeItem() { _ensureSystemFee(); systemFee.items.push({ name: '', amount: 0 }); saveSystemFee(); renderSettingsKeepOpen(); }
+function removeSystemFeeItem(ii) { _ensureSystemFee(); systemFee.items.splice(ii, 1); saveSystemFee(); renderSettingsKeepOpen(); renderAnnual && renderAnnual(); renderDashboard && renderDashboard(); }
 function getCostList(pi, type) {
   if (type === 'monthly') return properties[pi].monthlyFixedCosts;
   if (type === 'booking') return properties[pi].perBookingCosts;
@@ -2297,7 +2370,8 @@ function downloadBackup() {
     history,
     monthlyData,
     dataUpdatedAt,
-    msgUsageLog: (typeof msgUsageLog !== 'undefined' ? msgUsageLog : {})
+    msgUsageLog: (typeof msgUsageLog !== 'undefined' ? msgUsageLog : {}),
+    systemFee: (typeof systemFee !== 'undefined' ? systemFee : null)
   };
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -2421,6 +2495,7 @@ function renderSettingsKeepOpen() {
     const body = document.getElementById('prop-body-' + id);
     return body && body.style.display !== 'none';
   });
+  const sysfeeOpen = (() => { const b = document.getElementById('sysfee-body'); return b && b.style.display !== 'none'; })();
   renderSettings();
   // 同じアコーディオンを再び開く
   openIds.forEach(id => {
@@ -2429,6 +2504,12 @@ function renderSettingsKeepOpen() {
     if (body) body.style.display = 'block';
     if (chevron) chevron.style.transform = 'rotate(180deg)';
   });
+  if (sysfeeOpen) {
+    const b = document.getElementById('sysfee-body');
+    if (b) b.style.display = 'block';
+    const c = document.querySelector('.sysfee-chev');
+    if (c) c.style.transform = 'rotate(180deg)';
+  }
 }
 
 function togglePropertyAccordion(propId) {
@@ -2486,13 +2567,14 @@ function totalMonthsOperating(prop) {
 // ある月の固定費合計（実費保存時は固定費項目のみ合計）
 function getPropMonthFixedCosts(prop, year, month) {
   if (!isPropertyOperating(prop, year, month)) return 0; // 営業開始前は0
+  const systemFeeShare = getSystemFeePerProp(year, month); // 全物件共通のシステム利用料（按分）
   const key = `${prop.id}_${year}_${month}`;
   const ac = actualCosts[key];
   if (ac && Array.isArray(ac)) {
     const fixedNames = new Set(prop.monthlyFixedCosts.map(c => c.name));
-    return ac.reduce((s, c) => s + (fixedNames.has(c.name) ? (c.amount || 0) : 0), 0);
+    return ac.reduce((s, c) => s + (fixedNames.has(c.name) ? (c.amount || 0) : 0), 0) + systemFeeShare;
   }
-  return prop.monthlyFixedCosts.reduce((s, c) => s + c.amount, 0);
+  return prop.monthlyFixedCosts.reduce((s, c) => s + c.amount, 0) + systemFeeShare;
 }
 // ある月の変動費合計（実費保存時のみ有効・非固定費項目の合計）
 function getPropMonthActualVarCosts(prop, year, month) {
