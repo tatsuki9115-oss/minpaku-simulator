@@ -1892,8 +1892,8 @@ function renderCalendarTab() {
         const coDate = coParts ? new Date(coParts[0], coParts[1]-1, coParts[2]) : null;
         const daysToCO = coDate ? Math.round((coDate - nowForCal) / 86400000) : 999;
         // アラート状態判定
-        const formAlert = b.code && !chk.formDone && daysToCI <= 7 && daysToCI >= -3;
-        const cleanAlert = b.code && !chk.cleaningDone && daysToCI <= 14 && daysToCI >= -3;
+        const formAlert = b.code && !chk.formDone && daysToCI <= 30 && daysToCI >= -3;
+        const cleanAlert = b.code && !chk.cleaningDone && daysToCI <= 30 && daysToCI >= -3;
         const checkinMsgAlert = b.code && !chk.checkinMsgDone && daysToCI >= 0 && daysToCI <= 2;
         const welcomeMsgAlert = b.code && !chk.welcomeMsgDone && daysToCI >= 0 && daysToCI <= 2;
         // 清掃直前連絡：チェックアウト3日前〜当日
@@ -3789,16 +3789,16 @@ function renderDashboard() {
   }
   events.sort((a, b2) => a.date - b2.date || (a.type === 'out' ? -1 : 1));
 
-  // アラート対象（名簿：7日前、清掃：14日前から）
+  // アラート対象（名簿・清掃ともチェックイン1か月前（30日前）から）
   const alertForm = _allBooks.filter(b => {
     if (!b.code || bookingChecks[b.code]?.formDone) return false;
     const diff = Math.round((getCI(b) - now) / 86400000);
-    return diff >= -3 && diff <= 7;
+    return diff >= -3 && diff <= 30;
   }).sort((a,b2) => getCI(a) - getCI(b2));
   const alertClean = _allBooks.filter(b => {
     if (!b.code || bookingChecks[b.code]?.cleaningDone) return false;
     const diff = Math.round((getCI(b) - now) / 86400000);
-    return diff >= -3 && diff <= 14;
+    return diff >= -3 && diff <= 30;
   }).sort((a,b2) => getCI(a) - getCI(b2));
   // ゴミ回収依頼アラート（フィオーレ新子安のみ・チェックアウト3日前〜当日）
   const alertGarbage = _allBooks.filter(b => {
