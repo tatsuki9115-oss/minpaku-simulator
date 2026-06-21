@@ -890,6 +890,7 @@ const KEYS = {
   actualCosts: 'minpaku_actual_costs_v1',
   bookingCom: 'minpaku_bookingcom_v1',
   systemFee: 'minpaku_system_fee_v1',
+  whatsapp: 'minpaku_whatsapp_v1',
 };
 
 let properties = loadData();
@@ -940,6 +941,7 @@ let calendarYear = new Date().getFullYear();
 let calendarMonth = new Date().getMonth() + 1;
 let bookingChecks = loadBookingChecks();
 let systemFee = loadSystemFee();
+let whatsappNotes = loadWhatsapp();
 
 // ==================== Firebase ====================
 const firebaseConfig = {
@@ -1107,6 +1109,13 @@ function loadSystemFee() {
 }
 function saveSystemFee() { fbSave(KEYS.systemFee, systemFee); }
 
+// WhatsApp会話メモ（予約コードごと）
+function loadWhatsapp() {
+  try { const s = localStorage.getItem(KEYS.whatsapp); if (s) return JSON.parse(s); } catch(e) {}
+  return {};
+}
+function saveWhatsapp() { fbSave(KEYS.whatsapp, whatsappNotes); }
+
 // 指定年月において1物件が負担するシステム利用料（その月に営業中の物件数で按分）
 function getSystemFeePerProp(year, month) {
   if (!systemFee || !Array.isArray(systemFee.items)) return 0;
@@ -1254,6 +1263,20 @@ function initFirebaseSync() {
     systemFee = val;
     renderAnnual && renderAnnual();
     renderDashboard && renderDashboard();
+  });
+
+  fbdb.ref(KEYS.whatsapp).on('value', snap => {
+    const val = snap.val();
+    if (!val || typeof val !== 'object') return;
+    if (JSON.stringify(val) === JSON.stringify(whatsappNotes)) return;
+    try { localStorage.setItem(KEYS.whatsapp, JSON.stringify(val)); } catch(e) {}
+    whatsappNotes = val;
+    // 編集中でなければ表示中の予約のメモを更新
+    const sel = document.getElementById('msg-booking-select');
+    const ta = document.getElementById('msg-whatsapp');
+    if (sel && ta && sel.value && document.activeElement !== ta) {
+      ta.value = whatsappNotes[sel.value] || '';
+    }
   });
 
   // Beds24から同期されたゲストメッセージ（minpaku-sync Worker）
@@ -2371,7 +2394,8 @@ function downloadBackup() {
     monthlyData,
     dataUpdatedAt,
     msgUsageLog: (typeof msgUsageLog !== 'undefined' ? msgUsageLog : {}),
-    systemFee: (typeof systemFee !== 'undefined' ? systemFee : null)
+    systemFee: (typeof systemFee !== 'undefined' ? systemFee : null),
+    whatsappNotes: (typeof whatsappNotes !== 'undefined' ? whatsappNotes : {})
   };
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -2442,6 +2466,10 @@ function handleRestoreFile(input) {
       localStorage.setItem('dataUpdatedAt', JSON.stringify(dataUpdatedAt));
       if (data.msgUsageLog && typeof data.msgUsageLog === 'object' && typeof MSG_USAGE_KEY !== 'undefined') {
         localStorage.setItem(MSG_USAGE_KEY, JSON.stringify(data.msgUsageLog));
+      }
+      if (data.whatsappNotes && typeof data.whatsappNotes === 'object') {
+        whatsappNotes = data.whatsappNotes;
+        tasks.push(fbSave(KEYS.whatsapp, whatsappNotes));
       }
 
       showToast('♻️ 復元しました。ページを再読み込みします…', 'success');
@@ -5537,6 +5565,24 @@ function cleanupMsgUsageLog() {
   if (changed) saveMsgUsageLog();
 }
 
+// WhatsApp会話メモの自動保存（入力が止まって0.8秒後に保存）
+let _waSaveTimer = null;
+function onWhatsappInput() {
+  const sel = document.getElementById('msg-booking-select');
+  const ta = document.getElementById('msg-whatsapp');
+  const sv = document.getElementById('msg-whatsapp-saved');
+  if (!sel || !ta || !sel.value) return;
+  const code = sel.value;
+  if (sv) sv.textContent = '入力中…';
+  clearTimeout(_waSaveTimer);
+  _waSaveTimer = setTimeout(() => {
+    const v = ta.value.trim();
+    if (v) whatsappNotes[code] = v; else delete whatsappNotes[code];
+    saveWhatsapp();
+    if (sv) sv.textContent = v ? '✓ 保存しました' : '';
+  }, 800);
+}
+
 function saveMsgEntry(code, checkout, guestMsg, notes, stage) {
   if (!code) return;
   if (!msgUsageLog[code]) msgUsageLog[code] = { checkout: checkout || '', entries: [] };
@@ -5718,6 +5764,12 @@ function renderMessageTab() {
       <div class="card-title">特記事項</div>
       <textarea id="msg-notes" placeholder="例：深夜到着、アレルギー有り、リピーター、ペット連れ など" style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:12px;font-size:14px;line-height:1.7;resize:vertical;min-height:70px;background:#FAFAF9;font-family:inherit;box-sizing:border-box"></textarea>
     </div>
+    <div class="card">
+      <div class="card-title">💬 WhatsApp会話メモ <span style="font-size:10px;font-weight:400;color:#25D366">（予約ごとに記憶・返信生成時に参照）</span></div>
+      <div style="font-size:11px;color:#aaa;margin-bottom:8px;line-height:1.6">WhatsAppでやり取りしたゲストは、ここに会話を貼っておくと保存され、次回も覚えています。Airbnbの履歴と合わせて返信案を考えます。</div>
+      <textarea id="msg-whatsapp" oninput="onWhatsappInput()" placeholder="WhatsAppの会話をコピペ（例：&#10;ゲスト: Can we check in early?&#10;私: Sure, from 13:00 is possible 😊）" style="width:100%;border:1.5px solid #25D366;border-radius:10px;padding:12px;font-size:14px;line-height:1.7;resize:vertical;min-height:90px;background:#F6FFF9;font-family:inherit;box-sizing:border-box"></textarea>
+      <div id="msg-whatsapp-saved" style="font-size:10px;color:#1C9A52;margin-top:4px;text-align:right;min-height:13px"></div>
+    </div>
     `}
 
     <div class="card" style="background:#1C1C1E">
@@ -5777,6 +5829,9 @@ function onMsgBookingSelect() {
     document.getElementById('msg-adults').value     = b.adults   != null ? b.adults   : '';
     document.getElementById('msg-children').value   = b.children != null ? b.children : '';
     document.getElementById('msg-infants').value    = b.infants  != null ? b.infants  : '';
+    // WhatsApp会話メモを読み込み（予約ごとに記憶）
+    const waEl = document.getElementById('msg-whatsapp');
+    if (waEl) { waEl.value = whatsappNotes[code] || ''; const sv = document.getElementById('msg-whatsapp-saved'); if (sv) sv.textContent = whatsappNotes[code] ? '✓ 保存済み' : ''; }
   } else {
     // ウェルカムモード：エリア情報を更新しフェッチボタンを有効化
     const area = getWelcomeArea(b);
@@ -6732,6 +6787,10 @@ function generateMsgPrompt() {
     if (language) prompt += `- 国籍・言語：${language}\n`;
     if (guestText) prompt += `\n## 今回の滞在メモ\n${guestText}\n`;
     if (notes)     prompt += `\n## 特記事項\n${notes}\n`;
+    { const _conv = formatConversationForPrompt(code);
+      if (_conv) prompt += `\n## 会話履歴（Airbnb/Beds24・古い順）\n\`\`\`\n${_conv}\n\`\`\`\n`;
+      const _wa = (whatsappNotes[code] || '').trim();
+      if (_wa) prompt += `\n## WhatsAppでのやり取り\n\`\`\`\n${_wa}\n\`\`\`\n`; }
     prompt += `
 ---
 
@@ -6789,7 +6848,14 @@ ${langRule}
 `;
     const convText = formatConversationForPrompt(code);
     if (convText) {
-      prompt += `\n## これまでの会話履歴（Beds24から自動取得・古い順）\n\`\`\`\n${convText}\n\`\`\`\n`;
+      prompt += `\n## これまでの会話履歴（Airbnb/Beds24から自動取得・古い順）\n\`\`\`\n${convText}\n\`\`\`\n`;
+    }
+    const waText = (whatsappNotes[code] || '').trim();
+    if (waText) {
+      prompt += `\n## WhatsAppでのやり取り（別チャネル・このゲストとの会話）\n\`\`\`\n${waText}\n\`\`\`\n`;
+    }
+    if (convText && waText) {
+      prompt += `\n※ このゲストとはAirbnb（上記会話履歴）とWhatsApp（上記）の両方でやり取りしています。**両方の内容を踏まえて**、矛盾なく返信を考えてください。\n`;
     }
     if (guestText) {
       prompt += `\n## 今回ゲストから届いた未返信メッセージ（原文）\n\`\`\`\n${guestText}\n\`\`\`\n`;
