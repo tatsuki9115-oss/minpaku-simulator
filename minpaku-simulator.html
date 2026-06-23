@@ -750,7 +750,7 @@
       </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
       <div>
         <div style="font-size:12px;color:#888;margin-bottom:4px">準備期間の空家賃(ヶ月)</div>
         <input type="number" id="ck-vacancy" value="3" step="0.5" oninput="calcCheckV2()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
@@ -759,12 +759,15 @@
         <div style="font-size:12px;color:#888;margin-bottom:4px">家具家電(円) <span style="color:#059669;font-size:10px">自動</span></div>
         <input type="number" id="ck-furniture" placeholder="自動" oninput="markCkManual('ck-furniture');calcCheckV2()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box;background:#F0FDF4">
       </div>
-      <div>
-        <div style="font-size:12px;color:#888;margin-bottom:4px">その他初期費用(円)</div>
-        <input type="number" id="ck-initial" placeholder="鍵交換・保険・保証料・消防・届出・撮影など" oninput="calcCheckV2()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
-      </div>
     </div>
-    <div style="font-size:11px;color:#B0ADA8;margin-bottom:8px;line-height:1.5">💡「その他初期費用」に入れる項目：鍵交換・火災保険・保証会社保証料・<b>消防設備</b>・民泊の<b>届出/許認可</b>・<b>カメラマン撮影</b>・契約時管理費 など（敷礼・仲介・空家賃・家具家電は別枠で自動計上）</div>
+
+    <div style="margin-bottom:8px">
+      <div style="font-size:12px;color:#888;margin-bottom:6px">その他初期費用（内訳・項目ごとに入力）</div>
+      <div id="ck-other-costs"></div>
+      <button type="button" onclick="addCkOtherCost()" style="margin-top:2px;padding:6px 12px;background:#fff;border:1.5px dashed #C7C3BD;color:#666;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">＋ 項目を追加</button>
+      <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-top:8px;padding-top:8px;border-top:1px solid #E5E2DE;color:#333"><span>その他初期費用 合計</span><span id="ck-other-total">¥0</span></div>
+      <div style="font-size:11px;color:#B0ADA8;margin-top:4px;line-height:1.5">💡 鍵交換・火災保険・保証会社保証料・<b>消防設備</b>・民泊の<b>届出/許認可</b>・<b>カメラマン撮影</b>・契約時管理費 など（敷礼・仲介・空家賃・家具家電は別枠で自動計上）</div>
+    </div>
 
     <button onclick="runResearch()" style="margin-top:10px;width:100%;padding:14px;background:#059669;color:white;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer">📡 リサーチ実行</button>
   </div>
@@ -7119,7 +7122,7 @@ function calcCheckV2() {
   const agencyM    = _ckReadNum('ck-agency', 1.5);   // 仲介手数料（ヶ月）
   const vacancyM   = _ckReadNum('ck-vacancy', 3);    // 準備期間の空家賃（ヶ月）
   const furniture  = _ckReadNum('ck-furniture', 0);  // 家具家電（自動算出）
-  const initial    = _ckReadNum('ck-initial', 0);    // その他初期費用（鍵交換・保険・保証料など）
+  const initial    = getCkOtherTotal();              // その他初期費用（内訳の合計）
 
   const el = document.getElementById('ck-sim-result');
 
@@ -7202,7 +7205,8 @@ function calcCheckV2() {
         <div>仲介手数料 ${agencyM}ヶ月</div><div style="text-align:right;color:#333">¥${Math.round(agency).toLocaleString()}</div>
         <div>準備期間の空家賃 ${vacancyM}ヶ月</div><div style="text-align:right;color:#333">¥${Math.round(vacancy).toLocaleString()}</div>
         <div>家具家電</div><div style="text-align:right;color:#333">¥${furniture.toLocaleString()}</div>
-        <div>その他初期費用</div><div style="text-align:right;color:#333">¥${initial.toLocaleString()}</div>
+        <div style="color:#555">その他初期費用</div><div style="text-align:right;color:#333">¥${initial.toLocaleString()}</div>
+        ${(ckOtherCosts||[]).filter(c=>(parseFloat(c.amount)||0)>0).map(c=>`<div style="padding-left:12px;color:#aaa;font-size:11px">・${escHtml(c.name||'(項目)')}</div><div style="text-align:right;color:#aaa;font-size:11px">¥${(parseFloat(c.amount)||0).toLocaleString()}</div>`).join('')}
         <div style="font-weight:700;border-top:1px solid #E5E2DE;padding-top:4px;color:#333">合計</div>
         <div style="text-align:right;font-weight:700;border-top:1px solid #E5E2DE;padding-top:4px;color:#333">¥${Math.round(initialTotal).toLocaleString()}</div>
       </div>
@@ -7216,6 +7220,7 @@ function calcCheckV2() {
 function renderCheckTab() {
   const a = document.getElementById('ck-assumptions-card');
   if (a) a.style.display = 'none';
+  renderCkOtherCosts();
   renderCheckHistory();
 }
 
@@ -7223,7 +7228,7 @@ function renderCheckTab() {
 let _lastResearchData = null;   // 直近のリサーチ結果（保存・復元用）
 let _ckLastResult = null;       // 直近の計算結果サマリー
 
-const CK_INPUT_IDS = ['ck-address','ck-station','ck-prefecture','ck-municipality','ck-rent','ck-area','ck-guests','ck-reikin','ck-shikikin','ck-agency','ck-vacancy','ck-furniture','ck-initial','ck-adr-busy','ck-adr-slow','ck-adr-norm','ck-annual-days','ck-los','ck-fixed-other','ck-var'];
+const CK_INPUT_IDS = ['ck-address','ck-station','ck-prefecture','ck-municipality','ck-rent','ck-area','ck-guests','ck-reikin','ck-shikikin','ck-agency','ck-vacancy','ck-furniture','ck-adr-busy','ck-adr-slow','ck-adr-norm','ck-annual-days','ck-los','ck-fixed-other','ck-var'];
 
 // 定員・㎡から3項目を自動算出（ATT・新子安15㎡定員2の実績で較正）
 const _ckManual = {};  // 手動で上書きされた項目を記録（自動上書きしない）
@@ -7244,6 +7249,33 @@ function autoCalcCk() {
   if (typeof calcCheckV2 === 'function') calcCheckV2();
 }
 
+// その他初期費用の内訳（鍵交換・保険・消防・届出・撮影など）
+function defaultCkOtherCosts() {
+  return [
+    { name:'鍵交換', amount:0 },
+    { name:'火災保険', amount:0 },
+    { name:'保証会社保証料', amount:0 },
+    { name:'消防設備', amount:0 },
+    { name:'民泊届出', amount:0 },
+    { name:'カメラマン撮影', amount:0 },
+    { name:'契約時管理費', amount:0 },
+  ];
+}
+let ckOtherCosts = defaultCkOtherCosts();
+function getCkOtherTotal() { return (ckOtherCosts||[]).reduce((s,c)=>s+(parseFloat(c.amount)||0),0); }
+function updateCkOtherTotal() { const el=document.getElementById('ck-other-total'); if(el) el.textContent='¥'+getCkOtherTotal().toLocaleString(); }
+function addCkOtherCost() { ckOtherCosts.push({name:'',amount:0}); renderCkOtherCosts(); }
+function renderCkOtherCosts() {
+  const el = document.getElementById('ck-other-costs'); if(!el) return;
+  el.innerHTML = (ckOtherCosts||[]).map((c,i)=>`
+    <div style="display:flex;gap:6px;margin-bottom:5px;align-items:center">
+      <input type="text" value="${escHtml(c.name)}" oninput="ckOtherCosts[${i}].name=this.value" placeholder="項目名" style="flex:1;padding:7px 9px;border:1px solid #E5E2DE;border-radius:8px;font-size:13px;box-sizing:border-box">
+      <input type="number" value="${c.amount||''}" oninput="ckOtherCosts[${i}].amount=parseFloat(this.value)||0;updateCkOtherTotal();calcCheckV2()" placeholder="0" style="width:120px;padding:7px 9px;border:1px solid #E5E2DE;border-radius:8px;font-size:13px;text-align:right;box-sizing:border-box">
+      <button type="button" onclick="ckOtherCosts.splice(${i},1);renderCkOtherCosts();updateCkOtherTotal();calcCheckV2()" style="border:none;background:none;color:#E53935;cursor:pointer;font-size:18px;line-height:1;padding:0 4px">×</button>
+    </div>`).join('');
+  updateCkOtherTotal();
+}
+
 function savePropCheck() {
   const address = (document.getElementById('ck-address')?.value || '').trim();
   if (!address) { showToast('住所（または物件名）を入力してください', 'error'); return; }
@@ -7258,6 +7290,7 @@ function savePropCheck() {
     title: address,
     savedAt: new Date().toISOString(),
     inputs,
+    otherCosts: JSON.parse(JSON.stringify(ckOtherCosts || [])),
     research: _lastResearchData || null,
     summary: _ckLastResult || null,
   };
@@ -7314,6 +7347,8 @@ function loadPropCheckEntry(id) {
   const e = propCheckHistory.find(x => x.id === id);
   if (!e) return;
   CK_INPUT_IDS.forEach(k => { const el = document.getElementById(k); if (el && e.inputs && e.inputs[k] != null) el.value = e.inputs[k]; });
+  ckOtherCosts = Array.isArray(e.otherCosts) ? JSON.parse(JSON.stringify(e.otherCosts)) : defaultCkOtherCosts();
+  renderCkOtherCosts();
   _lastResearchData = e.research || null;
   if (e.research) {
     renderResearchResult(e.research);
