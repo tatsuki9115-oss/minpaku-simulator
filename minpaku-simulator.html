@@ -727,33 +727,41 @@
       </div>
       <div>
         <div style="font-size:12px;color:#888;margin-bottom:4px">広さ(㎡)</div>
-        <input type="number" id="ck-area" placeholder="15" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
+        <input type="number" id="ck-area" placeholder="15" oninput="autoCalcCk()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
       </div>
       <div>
         <div style="font-size:12px;color:#888;margin-bottom:4px">定員</div>
-        <input type="number" id="ck-guests" value="2" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
+        <input type="number" id="ck-guests" value="2" oninput="autoCalcCk()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
       </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
       <div>
         <div style="font-size:12px;color:#888;margin-bottom:4px">礼金(ヶ月)</div>
-        <input type="number" id="ck-reikin" placeholder="0" oninput="calcCheckV2()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
+        <input type="number" id="ck-reikin" value="1" oninput="calcCheckV2()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
       </div>
       <div>
         <div style="font-size:12px;color:#888;margin-bottom:4px">敷金(ヶ月)</div>
-        <input type="number" id="ck-shikikin" placeholder="0" oninput="calcCheckV2()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
+        <input type="number" id="ck-shikikin" value="1" oninput="calcCheckV2()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
+      </div>
+      <div>
+        <div style="font-size:12px;color:#888;margin-bottom:4px">仲介手数料(ヶ月)</div>
+        <input type="number" id="ck-agency" value="1.5" step="0.5" oninput="calcCheckV2()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
       </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
       <div>
-        <div style="font-size:12px;color:#888;margin-bottom:4px">仲介手数料(円)</div>
-        <input type="number" id="ck-agency" placeholder="0" oninput="calcCheckV2()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
+        <div style="font-size:12px;color:#888;margin-bottom:4px">準備期間の空家賃(ヶ月)</div>
+        <input type="number" id="ck-vacancy" value="3" step="0.5" oninput="calcCheckV2()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
+      </div>
+      <div>
+        <div style="font-size:12px;color:#888;margin-bottom:4px">家具家電(円) <span style="color:#059669;font-size:10px">自動</span></div>
+        <input type="number" id="ck-furniture" placeholder="自動" oninput="markCkManual('ck-furniture');calcCheckV2()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box;background:#F0FDF4">
       </div>
       <div>
         <div style="font-size:12px;color:#888;margin-bottom:4px">その他初期費用(円)</div>
-        <input type="number" id="ck-initial" placeholder="0" oninput="calcCheckV2()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
+        <input type="number" id="ck-initial" placeholder="鍵交換・保険・保証料など" oninput="calcCheckV2()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
       </div>
     </div>
 
@@ -795,12 +803,12 @@
         <input type="number" id="ck-los" value="3" oninput="calcCheckV2()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
       </div>
       <div>
-        <div style="font-size:12px;color:#888;margin-bottom:4px">月固定費(家賃以外)</div>
-        <input type="number" id="ck-fixed-other" value="35000" oninput="calcCheckV2()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
+        <div style="font-size:12px;color:#888;margin-bottom:4px">月固定費(家賃以外) <span style="color:#059669;font-size:10px">自動</span></div>
+        <input type="number" id="ck-fixed-other" value="35670" oninput="markCkManual('ck-fixed-other');calcCheckV2()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box;background:#F0FDF4">
       </div>
       <div>
-        <div style="font-size:12px;color:#888;margin-bottom:4px">1組変動費</div>
-        <input type="number" id="ck-var" value="7400" oninput="calcCheckV2()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
+        <div style="font-size:12px;color:#888;margin-bottom:4px">1組変動費 <span style="color:#059669;font-size:10px">自動</span></div>
+        <input type="number" id="ck-var" value="7400" oninput="markCkManual('ck-var');calcCheckV2()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box;background:#F0FDF4">
       </div>
     </div>
   </div>
@@ -7043,7 +7051,7 @@ async function runResearch() {
     _lastResearchData = data;
     renderResearchResult(data);
     document.getElementById('ck-assumptions-card').style.display = 'block';
-    calcCheckV2();
+    autoCalcCk();
   } catch (e) {
     resultEl.innerHTML = `<div class="card" style="color:#E53935;padding:16px">エラー: ${e.message}</div>`;
   }
@@ -7071,9 +7079,7 @@ function renderResearchResult(data) {
           <div>年間収益中央値</div><div style="text-align:right;font-weight:700">¥${(airroi.revenue_median||0).toLocaleString()}</div>
         </div>
       </div>`;
-    // LOSをデフォルトに反映
-    const losEl = document.getElementById('ck-los');
-    if (losEl && airroi.los) losEl.value = airroi.los;
+    // ※平均滞在(LOS)はリサーチ値で上書きしない（実運用に近い3泊固定）。AirROIのLOSは上の相場表示のみ。
   } else {
     airroiHtml = `<div class="card" style="color:#E53935;margin-bottom:10px">AirROIエラー: ${airroi?.error || '不明'}</div>`;
   }
@@ -7107,10 +7113,12 @@ function calcCheckV2() {
   const fixedOther = _ckReadNum('ck-fixed-other', 35000);
   const varPer     = _ckReadNum('ck-var', 7400);
   const rent       = _ckReadNum('ck-rent', 0);
-  const reikin     = _ckReadNum('ck-reikin', 0);
-  const shikikin   = _ckReadNum('ck-shikikin', 0);
-  const agency     = _ckReadNum('ck-agency', 0);
-  const initial    = _ckReadNum('ck-initial', 0);
+  const reikin     = _ckReadNum('ck-reikin', 1);
+  const shikikin   = _ckReadNum('ck-shikikin', 1);
+  const agencyM    = _ckReadNum('ck-agency', 1.5);   // 仲介手数料（ヶ月）
+  const vacancyM   = _ckReadNum('ck-vacancy', 3);    // 準備期間の空家賃（ヶ月）
+  const furniture  = _ckReadNum('ck-furniture', 0);  // 家具家電（自動算出）
+  const initial    = _ckReadNum('ck-initial', 0);    // その他初期費用（鍵交換・保険・保証料など）
 
   const el = document.getElementById('ck-sim-result');
 
@@ -7144,7 +7152,9 @@ function calcCheckV2() {
   const adrAvgH = annualRev / annualDays;
   const beDays  = (rent + fixedOther) / (adrAvgH - varPer / los);
 
-  const initialTotal = rent * reikin + rent * shikikin + agency + initial;
+  const agency = rent * agencyM;       // 仲介手数料（円）
+  const vacancy = rent * vacancyM;     // 空家賃（円）
+  const initialTotal = rent * reikin + rent * shikikin + agency + vacancy + furniture + initial;
   const paybackMonths = annualProfit > 0 ? initialTotal / (annualProfit / 12) : Infinity;
   _ckLastResult = { annualProfit: Math.round(annualProfit), annualRev: Math.round(annualRev), initialTotal: Math.round(initialTotal), paybackMonths: isFinite(paybackMonths) ? Math.round(paybackMonths) : null };
 
@@ -7188,7 +7198,9 @@ function calcCheckV2() {
       <div style="font-size:12px;color:#888;display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:10px">
         <div>礼金 ${reikin}ヶ月</div><div style="text-align:right;color:#333">¥${(rent*reikin).toLocaleString()}</div>
         <div>敷金 ${shikikin}ヶ月</div><div style="text-align:right;color:#333">¥${(rent*shikikin).toLocaleString()}</div>
-        <div>仲介手数料</div><div style="text-align:right;color:#333">¥${agency.toLocaleString()}</div>
+        <div>仲介手数料 ${agencyM}ヶ月</div><div style="text-align:right;color:#333">¥${Math.round(agency).toLocaleString()}</div>
+        <div>準備期間の空家賃 ${vacancyM}ヶ月</div><div style="text-align:right;color:#333">¥${Math.round(vacancy).toLocaleString()}</div>
+        <div>家具家電</div><div style="text-align:right;color:#333">¥${furniture.toLocaleString()}</div>
         <div>その他初期費用</div><div style="text-align:right;color:#333">¥${initial.toLocaleString()}</div>
         <div style="font-weight:700;border-top:1px solid #E5E2DE;padding-top:4px;color:#333">合計</div>
         <div style="text-align:right;font-weight:700;border-top:1px solid #E5E2DE;padding-top:4px;color:#333">¥${Math.round(initialTotal).toLocaleString()}</div>
@@ -7210,7 +7222,26 @@ function renderCheckTab() {
 let _lastResearchData = null;   // 直近のリサーチ結果（保存・復元用）
 let _ckLastResult = null;       // 直近の計算結果サマリー
 
-const CK_INPUT_IDS = ['ck-address','ck-station','ck-prefecture','ck-municipality','ck-rent','ck-area','ck-guests','ck-reikin','ck-shikikin','ck-agency','ck-initial','ck-adr-busy','ck-adr-slow','ck-adr-norm','ck-annual-days','ck-los','ck-fixed-other','ck-var'];
+const CK_INPUT_IDS = ['ck-address','ck-station','ck-prefecture','ck-municipality','ck-rent','ck-area','ck-guests','ck-reikin','ck-shikikin','ck-agency','ck-vacancy','ck-furniture','ck-initial','ck-adr-busy','ck-adr-slow','ck-adr-norm','ck-annual-days','ck-los','ck-fixed-other','ck-var'];
+
+// 定員・㎡から3項目を自動算出（ATT・新子安15㎡定員2の実績で較正）
+const _ckManual = {};  // 手動で上書きされた項目を記録（自動上書きしない）
+function markCkManual(id) { _ckManual[id] = true; const el=document.getElementById(id); if(el) el.style.background='#fff'; }
+function autoCalcCk() {
+  const g = parseFloat(document.getElementById('ck-guests')?.value) || 2;
+  const a = parseFloat(document.getElementById('ck-area')?.value) || 0;
+  // 月固定費(家賃外)：固定15,670 + 光熱費[13,000 + 定員×2,500 + ㎡×120] + システム按分1,000
+  const fixedAuto = Math.round(15670 + (13000 + g*2500 + a*120) + 1000);
+  // 1組変動費：清掃[3,000 + ㎡×200] + リネン[定員×700]
+  const varAuto   = Math.round((3000 + a*200) + g*700);
+  // 家具家電：基準530,000(定員2) + 定員2人ごとに250,000(=1人125,000)
+  const furnAuto  = Math.round(530000 + 125000*(g-2));
+  const setAuto = (id, v) => { if (_ckManual[id]) return; const el=document.getElementById(id); if(el){ el.value=v; el.style.background='#F0FDF4'; } };
+  setAuto('ck-fixed-other', fixedAuto);
+  setAuto('ck-var', varAuto);
+  setAuto('ck-furniture', furnAuto);
+  if (typeof calcCheckV2 === 'function') calcCheckV2();
+}
 
 function savePropCheck() {
   const address = (document.getElementById('ck-address')?.value || '').trim();
