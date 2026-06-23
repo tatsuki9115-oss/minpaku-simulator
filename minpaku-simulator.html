@@ -808,6 +808,15 @@
   <!-- 収支シミュレーション結果 -->
   <div id="ck-sim-result"></div>
 
+  <!-- シミュレーション履歴 -->
+  <div class="card" id="ck-history-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px">
+      <div class="card-title" style="margin:0">📁 シミュレーション履歴</div>
+      <button onclick="savePropCheck()" style="padding:8px 14px;background:#059669;color:white;border:none;border-radius:9px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap">💾 この物件を保存</button>
+    </div>
+    <div id="ck-history-list"></div>
+  </div>
+
 </div>
 
 <script>
@@ -891,6 +900,7 @@ const KEYS = {
   bookingCom: 'minpaku_bookingcom_v1',
   systemFee: 'minpaku_system_fee_v1',
   whatsapp: 'minpaku_whatsapp_v1',
+  propCheck: 'minpaku_propcheck_history_v1',
 };
 
 let properties = loadData();
@@ -942,6 +952,7 @@ let calendarMonth = new Date().getMonth() + 1;
 let bookingChecks = loadBookingChecks();
 let systemFee = loadSystemFee();
 let whatsappNotes = loadWhatsapp();
+let propCheckHistory = loadPropCheck();
 
 // ==================== Firebase ====================
 const firebaseConfig = {
@@ -1116,6 +1127,13 @@ function loadWhatsapp() {
 }
 function saveWhatsapp() { fbSave(KEYS.whatsapp, whatsappNotes); }
 
+// 物件候補シミュレーションの履歴（配列・新しい順）
+function loadPropCheck() {
+  try { const s = localStorage.getItem(KEYS.propCheck); if (s) return JSON.parse(s); } catch(e) {}
+  return [];
+}
+function savePropCheckStore() { fbSave(KEYS.propCheck, propCheckHistory); }
+
 // 指定年月において1物件が負担するシステム利用料（その月に営業中の物件数で按分）
 function getSystemFeePerProp(year, month) {
   if (!systemFee || !Array.isArray(systemFee.items)) return 0;
@@ -1263,6 +1281,15 @@ function initFirebaseSync() {
     systemFee = val;
     renderAnnual && renderAnnual();
     renderDashboard && renderDashboard();
+  });
+
+  fbdb.ref(KEYS.propCheck).on('value', snap => {
+    const val = snap.val();
+    if (!Array.isArray(val)) return;
+    if (JSON.stringify(val) === JSON.stringify(propCheckHistory)) return;
+    try { localStorage.setItem(KEYS.propCheck, JSON.stringify(val)); } catch(e) {}
+    propCheckHistory = val;
+    if (document.getElementById('page-check')?.classList.contains('active')) renderCheckHistory && renderCheckHistory();
   });
 
   fbdb.ref(KEYS.whatsapp).on('value', snap => {
@@ -2395,7 +2422,8 @@ function downloadBackup() {
     dataUpdatedAt,
     msgUsageLog: (typeof msgUsageLog !== 'undefined' ? msgUsageLog : {}),
     systemFee: (typeof systemFee !== 'undefined' ? systemFee : null),
-    whatsappNotes: (typeof whatsappNotes !== 'undefined' ? whatsappNotes : {})
+    whatsappNotes: (typeof whatsappNotes !== 'undefined' ? whatsappNotes : {}),
+    propCheckHistory: (typeof propCheckHistory !== 'undefined' ? propCheckHistory : [])
   };
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -2470,6 +2498,10 @@ function handleRestoreFile(input) {
       if (data.whatsappNotes && typeof data.whatsappNotes === 'object') {
         whatsappNotes = data.whatsappNotes;
         tasks.push(fbSave(KEYS.whatsapp, whatsappNotes));
+      }
+      if (Array.isArray(data.propCheckHistory)) {
+        propCheckHistory = data.propCheckHistory;
+        tasks.push(fbSave(KEYS.propCheck, propCheckHistory));
       }
 
       showToast('♻️ 復元しました。ページを再読み込みします…', 'success');
@@ -7008,6 +7040,7 @@ async function runResearch() {
     const data = await r.json();
     if (!data.ok) throw new Error(data.error || 'リサーチ失敗');
 
+    _lastResearchData = data;
     renderResearchResult(data);
     document.getElementById('ck-assumptions-card').style.display = 'block';
     calcCheckV2();
@@ -7113,6 +7146,7 @@ function calcCheckV2() {
 
   const initialTotal = rent * reikin + rent * shikikin + agency + initial;
   const paybackMonths = annualProfit > 0 ? initialTotal / (annualProfit / 12) : Infinity;
+  _ckLastResult = { annualProfit: Math.round(annualProfit), annualRev: Math.round(annualRev), initialTotal: Math.round(initialTotal), paybackMonths: isFinite(paybackMonths) ? Math.round(paybackMonths) : null };
 
   const isProfit = annualProfit > 0;
   const profitColor = isProfit ? '#1C9A52' : '#E53935';
@@ -7169,6 +7203,102 @@ function calcCheckV2() {
 function renderCheckTab() {
   const a = document.getElementById('ck-assumptions-card');
   if (a) a.style.display = 'none';
+  renderCheckHistory();
+}
+
+// ===== 物件候補シミュレーションの履歴 =====
+let _lastResearchData = null;   // 直近のリサーチ結果（保存・復元用）
+let _ckLastResult = null;       // 直近の計算結果サマリー
+
+const CK_INPUT_IDS = ['ck-address','ck-station','ck-prefecture','ck-municipality','ck-rent','ck-area','ck-guests','ck-reikin','ck-shikikin','ck-agency','ck-initial','ck-adr-busy','ck-adr-slow','ck-adr-norm','ck-annual-days','ck-los','ck-fixed-other','ck-var'];
+
+function savePropCheck() {
+  const address = (document.getElementById('ck-address')?.value || '').trim();
+  if (!address) { showToast('住所（または物件名）を入力してください', 'error'); return; }
+  const adrBusy = (document.getElementById('ck-adr-busy')?.value || '').trim();
+  const adrSlow = (document.getElementById('ck-adr-slow')?.value || '').trim();
+  if (!adrBusy || !adrSlow) { showToast('先に想定ADRを入力してシミュレーションしてください', 'error'); return; }
+  calcCheckV2(); // 最新の計算結果を確定
+  const inputs = {};
+  CK_INPUT_IDS.forEach(id => { const el = document.getElementById(id); if (el) inputs[id] = el.value; });
+  const entry = {
+    id: 'pc_' + Date.now(),
+    title: address,
+    savedAt: new Date().toISOString(),
+    inputs,
+    research: _lastResearchData || null,
+    summary: _ckLastResult || null,
+  };
+  // 同じタイトルの既存履歴があれば上書き確認
+  const dupIdx = propCheckHistory.findIndex(e => e.title === address);
+  if (dupIdx >= 0) {
+    if (!confirm(`「${address}」の履歴が既にあります。上書きしますか？\n（キャンセルで別履歴として追加）`)) {
+      propCheckHistory.unshift(entry);
+    } else {
+      entry.id = propCheckHistory[dupIdx].id;
+      propCheckHistory.splice(dupIdx, 1);
+      propCheckHistory.unshift(entry);
+    }
+  } else {
+    propCheckHistory.unshift(entry);
+  }
+  savePropCheckStore();
+  renderCheckHistory();
+  showToast('💾 履歴に保存しました', 'success');
+}
+
+function renderCheckHistory() {
+  const el = document.getElementById('ck-history-list');
+  if (!el) return;
+  if (!Array.isArray(propCheckHistory) || propCheckHistory.length === 0) {
+    el.innerHTML = '<div style="font-size:12px;color:#bbb;padding:6px 0">まだ保存された物件はありません。リサーチ＆シミュレーション後に「この物件を保存」を押すと、住所をタイトルにして記録されます。</div>';
+    return;
+  }
+  const fmtD = iso => { const d = new Date(iso); return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
+  el.innerHTML = propCheckHistory.map((e, i) => {
+    const s = e.summary || {};
+    const profit = s.annualProfit;
+    const profitStr = (profit != null) ? `${profit>=0?'+':'▲'}¥${Math.abs(profit).toLocaleString()}` : '—';
+    const profitColor = (profit != null) ? (profit>=0?'#1C9A52':'#E53935') : '#999';
+    const payback = (s.paybackMonths != null) ? `回収${Math.round(s.paybackMonths/12*10)/10}年` : '回収不可';
+    const rent = e.inputs?.['ck-rent'] ? `家賃¥${parseInt(e.inputs['ck-rent']).toLocaleString()}` : '';
+    return `<div style="border:1px solid #E8E6E1;border-radius:10px;padding:10px 12px;margin-bottom:8px;background:#FAFAF9">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <div style="flex:1;min-width:0;cursor:pointer" onclick="loadPropCheckEntry('${e.id}')">
+          <div style="font-size:13px;font-weight:800;color:#1C1C1E;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(e.title)}</div>
+          <div style="font-size:10px;color:#aaa;margin-top:2px">${fmtD(e.savedAt)}　${rent}</div>
+          <div style="font-size:12px;margin-top:4px">年間利益 <strong style="color:${profitColor}">${profitStr}</strong> <span style="color:#aaa;font-size:11px">／ ${payback}</span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+          <button onclick="loadPropCheckEntry('${e.id}')" style="font-size:11px;padding:5px 10px;border:1.5px solid #059669;background:white;color:#059669;border-radius:8px;font-weight:700;cursor:pointer">開く</button>
+          <button onclick="deletePropCheckEntry('${e.id}')" style="font-size:11px;padding:5px 10px;border:none;background:none;color:#E53935;cursor:pointer">削除</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function loadPropCheckEntry(id) {
+  const e = propCheckHistory.find(x => x.id === id);
+  if (!e) return;
+  CK_INPUT_IDS.forEach(k => { const el = document.getElementById(k); if (el && e.inputs && e.inputs[k] != null) el.value = e.inputs[k]; });
+  _lastResearchData = e.research || null;
+  if (e.research) {
+    renderResearchResult(e.research);
+    const a = document.getElementById('ck-assumptions-card'); if (a) a.style.display = 'block';
+  }
+  calcCheckV2();
+  showToast(`「${e.title}」を読み込みました`, 'success');
+  document.getElementById('page-check')?.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+function deletePropCheckEntry(id) {
+  const e = propCheckHistory.find(x => x.id === id);
+  if (!e) return;
+  if (!confirm(`「${e.title}」の履歴を削除しますか？`)) return;
+  propCheckHistory = propCheckHistory.filter(x => x.id !== id);
+  savePropCheckStore();
+  renderCheckHistory();
 }
 
 </script>
