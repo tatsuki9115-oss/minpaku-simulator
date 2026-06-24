@@ -735,6 +735,32 @@
       </div>
     </div>
 
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:4px">
+      <div>
+        <div style="font-size:12px;color:#888;margin-bottom:4px">物件タイプ <span style="color:#059669;font-size:10px">消防自動</span></div>
+        <select id="ck-bldg-type" onchange="autoCalcCk()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box;background:#fff">
+          <option value="house">戸建</option>
+          <option value="apartment">マンション・共同住宅</option>
+        </select>
+      </div>
+      <div>
+        <div style="font-size:12px;color:#888;margin-bottom:4px">階数</div>
+        <select id="ck-floors" onchange="autoCalcCk()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box;background:#fff">
+          <option value="1">平屋・1階</option>
+          <option value="2" selected>2階建</option>
+          <option value="3">3階建以上</option>
+        </select>
+      </div>
+      <div>
+        <div style="font-size:12px;color:#888;margin-bottom:4px">家主タイプ</div>
+        <select id="ck-host-type" onchange="autoCalcCk()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box;background:#fff">
+          <option value="absent" selected>家主不在型</option>
+          <option value="present">家主居住型</option>
+        </select>
+      </div>
+    </div>
+    <div id="ck-fire-reason" style="font-size:11px;color:#059669;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:8px 10px;margin-bottom:8px;line-height:1.5"></div>
+
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
       <div>
         <div style="font-size:12px;color:#888;margin-bottom:4px">礼金(ヶ月)</div>
@@ -7221,6 +7247,7 @@ function renderCheckTab() {
   const a = document.getElementById('ck-assumptions-card');
   if (a) a.style.display = 'none';
   renderCkOtherCosts();
+  if (typeof autoCalcCk === 'function') autoCalcCk();
   renderCheckHistory();
 }
 
@@ -7228,7 +7255,7 @@ function renderCheckTab() {
 let _lastResearchData = null;   // 直近のリサーチ結果（保存・復元用）
 let _ckLastResult = null;       // 直近の計算結果サマリー
 
-const CK_INPUT_IDS = ['ck-address','ck-station','ck-prefecture','ck-municipality','ck-rent','ck-area','ck-guests','ck-reikin','ck-shikikin','ck-agency','ck-vacancy','ck-furniture','ck-adr-busy','ck-adr-slow','ck-adr-norm','ck-annual-days','ck-los','ck-fixed-other','ck-var'];
+const CK_INPUT_IDS = ['ck-address','ck-station','ck-prefecture','ck-municipality','ck-rent','ck-area','ck-guests','ck-bldg-type','ck-floors','ck-host-type','ck-reikin','ck-shikikin','ck-agency','ck-vacancy','ck-furniture','ck-adr-busy','ck-adr-slow','ck-adr-norm','ck-annual-days','ck-los','ck-fixed-other','ck-var'];
 
 // 定員・㎡から3項目を自動算出（ATT・新子安15㎡定員2の実績で較正）
 const _ckManual = {};  // 手動で上書きされた項目を記録（自動上書きしない）
@@ -7246,6 +7273,32 @@ function autoCalcCk() {
   setAuto('ck-fixed-other', fixedAuto);
   setAuto('ck-var', varAuto);
   setAuto('ck-furniture', furnAuto);
+
+  // 消防設備の自動算出（物件タイプ・延床面積・階数・家主タイプから）
+  const bldg  = document.getElementById('ck-bldg-type')?.value  || 'house';
+  const floors= parseInt(document.getElementById('ck-floors')?.value || '2');
+  const host  = document.getElementById('ck-host-type')?.value || 'absent';
+  let fireAmount=0, fireReason='', spec='';
+  if (bldg==='house') {
+    if (a<50)            { fireAmount=20000;  spec='住宅用火災警報器＋消火器'; }
+    else if (a<=100)     { fireAmount=80000;  spec='特定小規模用 自動火災報知設備＋消火器（誘導灯は戸建免除）'; }
+    else                 { fireAmount=200000; spec='自動火災報知設備フル＋誘導灯＋消火器'; }
+    if (floors>=3)       { fireAmount=Math.round(fireAmount*1.5); spec+='（3階建てで設備強化）'; }
+  } else { // apartment
+    if (floors<=3)       { fireAmount=170000; spec='自動火災報知設備＋避難誘導灯＋消火器（共用部要件）'; }
+    else                 { fireAmount=300000; spec='フル設備＋設計費（高層階・特定一階段の可能性）'; }
+  }
+  if (host==='present')  { fireAmount=Math.round(fireAmount*0.7); spec+='／家主居住型で簡略化'; }
+  fireReason = `🚒 ${bldg==='house'?'戸建':'マンション'}・${a||'-'}㎡・${floors}階建・${host==='absent'?'家主不在型':'家主居住型'} → <b>${spec}</b><br>標準セット <b>¥${fireAmount.toLocaleString()}</b>（変更は下の「その他初期費用」内の項目を直接編集）`;
+  const reasonEl = document.getElementById('ck-fire-reason');
+  if (reasonEl) reasonEl.innerHTML = fireReason;
+  // ckOtherCostsの「消防設備」項目に書き込む（無ければ追加）
+  if (typeof ckOtherCosts !== 'undefined' && Array.isArray(ckOtherCosts)) {
+    let f = ckOtherCosts.find(c=>c.name==='消防設備');
+    if (!f) { f={name:'消防設備',amount:0}; ckOtherCosts.push(f); }
+    if (!_ckManual['ck-fire']) { f.amount = fireAmount; if (typeof renderCkOtherCosts==='function') renderCkOtherCosts(); }
+  }
+
   if (typeof calcCheckV2 === 'function') calcCheckV2();
 }
 
