@@ -761,6 +761,11 @@
     </div>
     <div id="ck-fire-reason" style="font-size:11px;color:#059669;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:8px 10px;margin-bottom:8px;line-height:1.5"></div>
 
+    <div style="margin-bottom:8px">
+      <div style="font-size:12px;color:#888;margin-bottom:4px">📜 許認可・規制メモ <span style="color:#3B82F6;font-size:10px">必須記入</span></div>
+      <textarea id="ck-regulation" rows="3" oninput="calcCheckV2()" placeholder="例：&#10;・用途地域：第一種住居地域&#10;・上乗せ条例：なし（川崎市は180日OK）&#10;・営業形態：民泊新法180日 ／ 旅館業365日可" style="width:100%;padding:10px 12px;border:1.5px solid #93C5FD;border-radius:10px;font-size:13px;box-sizing:border-box;background:#EFF6FF;font-family:inherit;line-height:1.5;resize:vertical"></textarea>
+    </div>
+
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
       <div>
         <div style="font-size:12px;color:#888;margin-bottom:4px">礼金(ヶ月)</div>
@@ -7197,7 +7202,10 @@ function calcCheckV2() {
       <div style="text-align:right;font-weight:700;color:${profit>=0?'#1C9A52':'#E53935'}">${profit>=0?'+':''}¥${Math.round(profit).toLocaleString()}</div>
     </div>`;
 
+  const regulation = (document.getElementById('ck-regulation')?.value || '').trim();
+  const regulationBox = regulation ? `<div class="card" style="margin-bottom:10px;background:#EFF6FF;border-left:4px solid #3B82F6"><div style="font-size:12px;font-weight:700;color:#1E40AF;margin-bottom:6px">📜 許認可・規制メモ</div><div style="font-size:13px;color:#1E3A8A;white-space:pre-wrap;line-height:1.6">${escHtml(regulation)}</div></div>` : '';
   el.innerHTML = `
+    ${regulationBox}
     <div class="card" style="margin-bottom:10px">
       <div class="card-title">季節別月間収支（ホスト受取変換後）</div>
       <div style="font-size:11px;color:#B0ADA8;margin-bottom:4px">入力ADR×0.845でAirbnb手数料控除</div>
@@ -7255,7 +7263,7 @@ function renderCheckTab() {
 let _lastResearchData = null;   // 直近のリサーチ結果（保存・復元用）
 let _ckLastResult = null;       // 直近の計算結果サマリー
 
-const CK_INPUT_IDS = ['ck-address','ck-station','ck-prefecture','ck-municipality','ck-rent','ck-area','ck-guests','ck-bldg-type','ck-floors','ck-host-type','ck-reikin','ck-shikikin','ck-agency','ck-vacancy','ck-furniture','ck-adr-busy','ck-adr-slow','ck-adr-norm','ck-annual-days','ck-los','ck-fixed-other','ck-var'];
+const CK_INPUT_IDS = ['ck-address','ck-station','ck-prefecture','ck-municipality','ck-rent','ck-area','ck-guests','ck-bldg-type','ck-floors','ck-host-type','ck-regulation','ck-reikin','ck-shikikin','ck-agency','ck-vacancy','ck-furniture','ck-adr-busy','ck-adr-slow','ck-adr-norm','ck-annual-days','ck-los','ck-fixed-other','ck-var'];
 
 // 定員・㎡から3項目を自動算出（ATT・新子安15㎡定員2の実績で較正）
 const _ckManual = {};  // 手動で上書きされた項目を記録（自動上書きしない）
@@ -7380,12 +7388,15 @@ function renderCheckHistory() {
     const profitColor = (profit != null) ? (profit>=0?'#1C9A52':'#E53935') : '#999';
     const payback = (s.paybackMonths != null) ? `回収${Math.round(s.paybackMonths/12*10)/10}年` : '回収不可';
     const rent = e.inputs?.['ck-rent'] ? `家賃¥${parseInt(e.inputs['ck-rent']).toLocaleString()}` : '';
+    const reg = (e.inputs?.['ck-regulation'] || '').trim();
+    const regLine = reg ? `<div style="font-size:11px;color:#1E40AF;background:#EFF6FF;border-radius:6px;padding:4px 6px;margin-top:4px;white-space:pre-wrap;line-height:1.4">📜 ${escHtml(reg.length>120?reg.slice(0,120)+'…':reg)}</div>` : '';
     return `<div style="border:1px solid #E8E6E1;border-radius:10px;padding:10px 12px;margin-bottom:8px;background:#FAFAF9">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
         <div style="flex:1;min-width:0;cursor:pointer" onclick="loadPropCheckEntry('${e.id}')">
           <div style="font-size:13px;font-weight:800;color:#1C1C1E;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(e.title)}</div>
           <div style="font-size:10px;color:#aaa;margin-top:2px">${fmtD(e.savedAt)}　${rent}</div>
           <div style="font-size:12px;margin-top:4px">年間利益 <strong style="color:${profitColor}">${profitStr}</strong> <span style="color:#aaa;font-size:11px">／ ${payback}</span></div>
+          ${regLine}
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
           <button onclick="loadPropCheckEntry('${e.id}')" style="font-size:11px;padding:5px 10px;border:1.5px solid #059669;background:white;color:#059669;border-radius:8px;font-weight:700;cursor:pointer">開く</button>
