@@ -7288,15 +7288,15 @@ function autoCalcCk() {
   const host  = document.getElementById('ck-host-type')?.value || 'absent';
   let fireAmount=0, fireReason='', spec='';
   if (bldg==='house') {
-    if (a<50)            { fireAmount=20000;  spec='住宅用火災警報器＋消火器'; }
-    else if (a<=100)     { fireAmount=80000;  spec='特定小規模用 自動火災報知設備＋消火器（誘導灯は戸建免除）'; }
-    else                 { fireAmount=200000; spec='自動火災報知設備フル＋誘導灯＋消火器'; }
-    if (floors>=3)       { fireAmount=Math.round(fireAmount*1.5); spec+='（3階建てで設備強化）'; }
+    if (a<50)            { fireAmount=80000;  spec='特定小規模用自火報＋消火器＋防炎カーテン＋適合通知取得'; }
+    else if (a<=100)     { fireAmount=200000; spec='特定小規模用自火報＋誘導灯（所轄判断）＋消火器＋防炎品＋適合通知取得'; }
+    else                 { fireAmount=300000; spec='自動火災報知設備フル＋誘導灯＋消火器＋防炎品＋適合通知取得'; }
+    if (floors>=3)       { fireAmount=Math.round(fireAmount*1.3); spec+='（3階建てで設備強化）'; }
   } else { // apartment
-    if (floors<=3)       { fireAmount=170000; spec='自動火災報知設備＋避難誘導灯＋消火器（共用部要件）'; }
-    else                 { fireAmount=300000; spec='フル設備＋設計費（高層階・特定一階段の可能性）'; }
+    if (floors<=3)       { fireAmount=200000; spec='自火報＋避難誘導灯＋消火器＋防炎品（共用部要件）'; }
+    else                 { fireAmount=350000; spec='フル設備＋設計費＋避難器具（高層階・特定一階段の可能性）'; }
   }
-  if (host==='present')  { fireAmount=Math.round(fireAmount*0.7); spec+='／家主居住型で簡略化'; }
+  if (host==='present')  { fireAmount=Math.round(fireAmount*0.6); spec+='／家主居住型で簡略化'; }
   fireReason = `🚒 ${bldg==='house'?'戸建':'マンション'}・${a||'-'}㎡・${floors}階建・${host==='absent'?'家主不在型':'家主居住型'} → <b>${spec}</b><br>標準セット <b>¥${fireAmount.toLocaleString()}</b>（変更は下の「その他初期費用」内の項目を直接編集）`;
   const reasonEl = document.getElementById('ck-fire-reason');
   if (reasonEl) reasonEl.innerHTML = fireReason;
