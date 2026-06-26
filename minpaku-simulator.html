@@ -6747,7 +6747,10 @@ function generateWelcomeMsg() {
   const closingLine = hasTyphoon
     ? '何かご不明点やお困りのことがあれば、いつでもご連絡ください。どうかお気をつけてお過ごしください。'
     : '何かご不明点やリクエストがありましたら、いつでもご連絡ください。素敵な滞在となりますよう願っております！';
-  let msg = `${greeting}\n\n当施設をご予約いただき、ありがとうございます。\n快適に過ごしていただけるよう、天気予報と近隣のイベント情報をお知らせしますので、ぜひご参考にしてください。\n\n${typhoonBlock}＜週間天気予報＞\n${weatherLines}\n\n${comment}\n▶ 最新の天気予報はこちら：${area.jmaUrl}\n\n${eventLines}\n\n※ 上記は参考情報です。開催日程・内容は予告なく変更になる場合がありますので、最新情報は各リンクよりご確認ください。有料施設のチケットはお客様ご自身でのご購入をお願いしております。\n\n${closingLine}\n\nTy`;
+  const introLine = hasTyphoon
+    ? '安全にお過ごしいただけるよう、天気予報と台風・イベント情報をお知らせします。'
+    : '快適に過ごしていただけるよう、天気予報と近隣のイベント情報をお知らせしますので、ぜひご参考にしてください。';
+  let msg = `${greeting}\n\n当施設をご予約いただき、ありがとうございます。\n${introLine}\n\n${typhoonBlock}＜週間天気予報＞\n${weatherLines}\n\n${comment}\n▶ 最新の天気予報はこちら：${area.jmaUrl}\n\n${eventLines}\n\n※ 上記は参考情報です。開催日程・内容は予告なく変更になる場合がありますので、最新情報は各リンクよりご確認ください。有料施設のチケットはお客様ご自身でのご購入をお願いしております。\n\n${closingLine}\n\nTy`;
   const ta = document.getElementById('msg-prompt-area');
   if (ta) { ta.value = msg; ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 800) + 'px'; }
   document.getElementById('msg-output-card').style.display = 'block';
