@@ -6736,7 +6736,9 @@ function generateWelcomeMsg() {
       let placeLabel = venueStr;
       if (ev.station) placeLabel += `（最寄：${ev.station}）`;
       const place  = placeLabel ? `\n　📍 ${placeLabel}` : '';
-      return `・${ev.title}${dt}${place}`;
+      // タイトル先頭の装飾記号（◆◇■□★☆●○▼▲◎※＊*・等）を除去（【】ラベルは残す）
+      const title = (ev.title || '').replace(/^[\s　◆◇■□★☆●○▼▲△▽◎※＊*・〇〔〕\-―—~〜]+/, '').trim();
+      return `・${title}${dt}${place}`;
     }).join('\n');
     eventLines = `＜期間中のイベント情報＞\n${evList}\n\n${welcomeEventData.targetUrl}`;
   } else {
