@@ -6630,9 +6630,12 @@ function renderTyphoonBox() {
     </div>`;
 }
 
-function buildWeatherComment(days, areaName) {
+function buildWeatherComment(days, areaName, hasTyphoon = false) {
   const valid = days.filter(d => d.tempMax !== null && d.tempMin !== null);
-  if (valid.length === 0) return `どうぞ快適で安全な${areaName}滞在をお楽しみください☺️`;
+  const closing = hasTyphoon
+    ? `\nどうぞ安全にお過ごしください。お気をつけて。`
+    : `\nどうぞ快適で安全な${areaName}滞在をお楽しみください☺️`;
+  if (valid.length === 0) return closing.trim();
   const maxArr = valid.map(d => parseInt(d.tempMax)).filter(n => !isNaN(n));
   // 最高気温＝最低気温の日（APIデータ不備）は朝晩気温の計算から除外
   const minArrFull = valid.map(d => parseInt(d.tempMin)).filter(n => !isNaN(n));
@@ -6643,13 +6646,17 @@ function buildWeatherComment(days, areaName) {
   const minMax = Math.min(...maxArr), maxMax = Math.max(...maxArr);
   const avgMax = Math.round(maxArr.reduce((a,b)=>a+b,0)/maxArr.length);
   const hasRain = days.some(d => d.weather.includes('雨'));
+  // 梅雨判定（6月・7月20日以前）
+  const firstDate = days[0]?.date;
+  const isTsuyu = firstDate && (firstDate.getMonth() === 5 || (firstDate.getMonth() === 6 && firstDate.getDate() <= 20));
   let c = `今週の${areaName}は、朝晩${minMin}〜${maxMin}°C、`;
-  if (avgMax >= 28)      c += `日中${minMax}〜${maxMax}°Cまで上がりかなり暑くなります。熱中症対策・こまめな水分補給をお忘れなく。`;
-  else if (avgMax >= 23) c += `日中${minMax}〜${maxMax}°Cまで上がり、初夏の陽気です。紫外線対策もお忘れなく。`;
-  else if (avgMax >= 18) c += `日中${minMax}〜${maxMax}°Cまで上がります。${minMin < 12 ? '朝晩はひんやりするので' : ''}長袖シャツや薄手のジャケットがちょうどよい気候です。`;
-  else                   c += `日中も${minMax}〜${maxMax}°C程度とかなりひんやりします。暖かい服装でお越しください。`;
+  if (avgMax >= 28)           c += `日中${minMax}〜${maxMax}°Cまで上がりかなり暑くなります。熱中症対策・こまめな水分補給をお忘れなく。`;
+  else if (avgMax >= 23 && isTsuyu) c += `日中${minMax}〜${maxMax}°Cまで上がる蒸し暑い梅雨の時期です。汗拭きタオルや着替えがあると快適に過ごせます。`;
+  else if (avgMax >= 23)      c += `日中${minMax}〜${maxMax}°Cまで上がり、初夏の陽気です。紫外線対策もお忘れなく。`;
+  else if (avgMax >= 18)      c += `日中${minMax}〜${maxMax}°Cまで上がります。${minMin < 12 ? '朝晩はひんやりするので' : ''}長袖シャツや薄手のジャケットがちょうどよい気候です。`;
+  else                        c += `日中も${minMax}〜${maxMax}°C程度とかなりひんやりします。暖かい服装でお越しください。`;
   if (hasRain) c += '\n折りたたみ傘を持っておくと便利です。';
-  c += `\nどうぞ快適で安全な${areaName}滞在をお楽しみください☺️`;
+  c += closing;
   return c;
 }
 
@@ -6706,7 +6713,7 @@ function generateWelcomeMsg() {
     const temp = (d.tempMax || d.tempMin) ? (sameTemp ? ` ${d.tempMax}°C` : ` ${d.tempMax ?? '?'}°C / ${d.tempMin ?? '?'}°C`) : '';
     return `${d.date.getMonth()+1}月${d.date.getDate()}日(${dow[d.date.getDay()]})：${d.weather}${temp}`;
   }).join('\n');
-  const comment = buildWeatherComment(days, area.areaName);
+  const comment = buildWeatherComment(days, area.areaName, welcomeTyphoonInclude && !!welcomeTyphoonData);
   // 台風情報（チェックボックスON時のみ）
   let typhoonBlock = '';
   if (welcomeTyphoonInclude && welcomeTyphoonData) {
@@ -6729,7 +6736,7 @@ function generateWelcomeMsg() {
       let placeLabel = venueStr;
       if (ev.station) placeLabel += `（最寄：${ev.station}）`;
       const place  = placeLabel ? `\n　📍 ${placeLabel}` : '';
-      return `・${ev.title}${loc}${dt}${place}`;
+      return `・${ev.title}${dt}${place}`;
     }).join('\n');
     eventLines = `＜期間中のイベント情報＞\n${evList}\n\n${welcomeEventData.targetUrl}`;
   } else {
@@ -7287,32 +7294,34 @@ function autoCalcCk() {
   const floors= parseInt(document.getElementById('ck-floors')?.value || '2');
   const host  = document.getElementById('ck-host-type')?.value || 'absent';
   let fireAmount=0, fireReason='', spec='';
-  // 新子安実額見積もり(¥182,000・税抜)を基準に算出
+  // 新子安実額見積もり(¥182,000・税抜)を基準に算出・保険込みで税込表示
   // 共通固定費：親機16,000＋配線部材5,000＋消防申請65,000＋交通8,000＋諸経費5,000＋値引-30,000＝¥69,000
   const COMMON = 16000 + 5000 + 65000 + 8000 + 5000 - 30000;
   if (bldg==='house') {
-    const sensorCount = Math.max(2, Math.ceil(a/20));       // 戸建：寝室+水回り+階段で20㎡毎に感知器1個
+    const sensorCount = Math.max(2, Math.ceil(a/15));       // 戸建：15㎡毎に感知器1個（部屋密度・保険込み）
     const sensorCost = sensorCount * 7000;
-    const guideCount = floors >= 3 ? 2 : 1;                  // 戸建2階建以上は誘導灯1〜2台
+    const guideCount = floors >= 3 ? 3 : 2;                  // 戸建2階以上は最低2台（玄関＋階段）、3階以上は3台
     const guideCost = guideCount * 43200;
-    const fireextCount = floors;                              // 各階1本
+    const fireextCount = floors;
     const fireextCost = fireextCount * 7500;
-    const workCost = floors >= 3 ? 120000 : 90000;           // 機器取付+配線工事
+    const workCost = floors >= 3 ? 120000 : 90000;
     const vvfCost = floors >= 3 ? 3500 : 2500;
     fireAmount = COMMON + sensorCost + guideCost + fireextCost + vvfCost + workCost;
-    spec = `戸建${a||'-'}㎡・${floors}階：感知器${sensorCount}個＋誘導灯${guideCount}台＋消火器${fireextCount}本＋工事＋申請（新子安見積基準）`;
+    spec = `戸建${a||'-'}㎡・${floors}階：感知器${sensorCount}個＋誘導灯${guideCount}台＋消火器${fireextCount}本＋工事＋申請（新子安基準・保険込み税込）`;
   } else { // apartment
-    const sensorCount = a <= 25 ? 0 : Math.ceil((a-25)/25);  // マンション：25㎡以下は親機セットのみ
+    const sensorCount = a <= 25 ? 0 : Math.ceil((a-25)/25);
     const sensorCost = sensorCount * 7000;
-    const guideCost = 43200;                                  // マンション共用部要件で1台必須
+    const guideCost = 43200;
     const fireextCount = floors >= 4 ? 2 : 1;
     const fireextCost = fireextCount * 7500;
-    const workCost = floors >= 4 ? 90000 : 61000;             // 新子安実績¥61,000
+    const workCost = floors >= 4 ? 90000 : 61000;
     const vvfCost = 1000;
     fireAmount = COMMON + sensorCost + guideCost + fireextCost + vvfCost + workCost;
-    spec = `マンション${a||'-'}㎡・${floors}階：感知器${sensorCount}個＋誘導灯1台＋消火器${fireextCount}本＋工事＋申請（新子安見積基準）`;
+    spec = `マンション${a||'-'}㎡・${floors}階：感知器${sensorCount}個＋誘導灯1台＋消火器${fireextCount}本＋工事＋申請（新子安基準・保険込み税込）`;
   }
   if (host==='present')  { fireAmount=Math.round(fireAmount*0.7); spec+='／家主居住型で簡略化'; }
+  // 税込（10%加算）で保守的な予算組み
+  fireAmount = Math.round(fireAmount * 1.1);
   fireReason = `🚒 ${bldg==='house'?'戸建':'マンション'}・${a||'-'}㎡・${floors}階建・${host==='absent'?'家主不在型':'家主居住型'} → <b>${spec}</b><br>標準セット <b>¥${fireAmount.toLocaleString()}</b>（変更は下の「その他初期費用」内の項目を直接編集）`;
   const reasonEl = document.getElementById('ck-fire-reason');
   if (reasonEl) reasonEl.innerHTML = fireReason;
