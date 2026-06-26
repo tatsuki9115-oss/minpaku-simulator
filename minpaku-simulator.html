@@ -7287,16 +7287,32 @@ function autoCalcCk() {
   const floors= parseInt(document.getElementById('ck-floors')?.value || '2');
   const host  = document.getElementById('ck-host-type')?.value || 'absent';
   let fireAmount=0, fireReason='', spec='';
+  // 新子安実額見積もり(¥182,000・税抜)を基準に算出
+  // 共通固定費：親機16,000＋配線部材5,000＋消防申請65,000＋交通8,000＋諸経費5,000＋値引-30,000＝¥69,000
+  const COMMON = 16000 + 5000 + 65000 + 8000 + 5000 - 30000;
   if (bldg==='house') {
-    if (a<50)            { fireAmount=80000;  spec='特定小規模用自火報＋消火器＋防炎カーテン＋適合通知取得'; }
-    else if (a<=100)     { fireAmount=200000; spec='特定小規模用自火報＋誘導灯（所轄判断）＋消火器＋防炎品＋適合通知取得'; }
-    else                 { fireAmount=300000; spec='自動火災報知設備フル＋誘導灯＋消火器＋防炎品＋適合通知取得'; }
-    if (floors>=3)       { fireAmount=Math.round(fireAmount*1.3); spec+='（3階建てで設備強化）'; }
+    const sensorCount = Math.max(2, Math.ceil(a/20));       // 戸建：寝室+水回り+階段で20㎡毎に感知器1個
+    const sensorCost = sensorCount * 7000;
+    const guideCount = floors >= 3 ? 2 : 1;                  // 戸建2階建以上は誘導灯1〜2台
+    const guideCost = guideCount * 43200;
+    const fireextCount = floors;                              // 各階1本
+    const fireextCost = fireextCount * 7500;
+    const workCost = floors >= 3 ? 120000 : 90000;           // 機器取付+配線工事
+    const vvfCost = floors >= 3 ? 3500 : 2500;
+    fireAmount = COMMON + sensorCost + guideCost + fireextCost + vvfCost + workCost;
+    spec = `戸建${a||'-'}㎡・${floors}階：感知器${sensorCount}個＋誘導灯${guideCount}台＋消火器${fireextCount}本＋工事＋申請（新子安見積基準）`;
   } else { // apartment
-    if (floors<=3)       { fireAmount=200000; spec='自火報＋避難誘導灯＋消火器＋防炎品（共用部要件）'; }
-    else                 { fireAmount=350000; spec='フル設備＋設計費＋避難器具（高層階・特定一階段の可能性）'; }
+    const sensorCount = a <= 25 ? 0 : Math.ceil((a-25)/25);  // マンション：25㎡以下は親機セットのみ
+    const sensorCost = sensorCount * 7000;
+    const guideCost = 43200;                                  // マンション共用部要件で1台必須
+    const fireextCount = floors >= 4 ? 2 : 1;
+    const fireextCost = fireextCount * 7500;
+    const workCost = floors >= 4 ? 90000 : 61000;             // 新子安実績¥61,000
+    const vvfCost = 1000;
+    fireAmount = COMMON + sensorCost + guideCost + fireextCost + vvfCost + workCost;
+    spec = `マンション${a||'-'}㎡・${floors}階：感知器${sensorCount}個＋誘導灯1台＋消火器${fireextCount}本＋工事＋申請（新子安見積基準）`;
   }
-  if (host==='present')  { fireAmount=Math.round(fireAmount*0.6); spec+='／家主居住型で簡略化'; }
+  if (host==='present')  { fireAmount=Math.round(fireAmount*0.7); spec+='／家主居住型で簡略化'; }
   fireReason = `🚒 ${bldg==='house'?'戸建':'マンション'}・${a||'-'}㎡・${floors}階建・${host==='absent'?'家主不在型':'家主居住型'} → <b>${spec}</b><br>標準セット <b>¥${fireAmount.toLocaleString()}</b>（変更は下の「その他初期費用」内の項目を直接編集）`;
   const reasonEl = document.getElementById('ck-fire-reason');
   if (reasonEl) reasonEl.innerHTML = fireReason;
