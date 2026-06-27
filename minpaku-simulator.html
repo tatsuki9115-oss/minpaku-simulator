@@ -5796,10 +5796,6 @@ function renderMessageTab() {
         <label style="font-size:11px;font-weight:700;color:#B0ADA8;display:block;margin-bottom:4px">原因（自由記述・空欄でも可）</label>
         <input type="text" id="tr-cause" placeholder="例：台風8号「ヒーゴス」／大雨／人身事故／積雪 など" style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:10px 12px;font-size:14px;background:#FAFAF9;box-sizing:border-box">
       </div>
-      <div style="margin-bottom:10px">
-        <label style="font-size:11px;font-weight:700;color:#B0ADA8;display:block;margin-bottom:4px">影響している路線（自由記述・物件から自動入力）</label>
-        <input type="text" id="tr-lines" placeholder="例：京王線・多摩モノレール" style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:10px 12px;font-size:14px;background:#FAFAF9;box-sizing:border-box">
-      </div>
       <div style="font-size:12px;font-weight:700;color:#B0ADA8;margin-bottom:8px">含める内容</div>
       <div style="display:flex;flex-direction:column;gap:10px">
         <label style="display:flex;align-items:center;gap:8px;font-size:14px;color:#333;cursor:pointer"><input type="checkbox" id="tr-cause-show" checked style="width:18px;height:18px;cursor:pointer">原因を明記する（チェックOFFで「電車に乱れ」のみ）</label>
@@ -5920,17 +5916,6 @@ function onMsgBookingSelect() {
     const area = getWelcomeArea(b);
     const info = document.getElementById('tr-area-info');
     if (info) info.innerHTML = `📍 ${escHtml(b.guestName || 'ゲスト')}／${prop ? escHtml(prop.name) : '?'}（${escHtml(area.label)}）`;
-    // 路線名を物件から自動入力（transitNameから「運行情報」「Train Info」を除去）
-    const linesEl = document.getElementById('tr-lines');
-    if (linesEl && !linesEl.dataset.userEdited) {
-      const propName = prop ? prop.name : '';
-      let defaultLines = '';
-      if (propName.includes('ATT')) defaultLines = '京王線・多摩モノレール';
-      else if (propName.includes('新子安') || propName.includes('フィオーレ')) defaultLines = 'JR京浜東北線';
-      else defaultLines = 'このエリアの電車';
-      linesEl.value = defaultLines;
-      linesEl.addEventListener('input', ()=>{ linesEl.dataset.userEdited='1'; }, { once:true });
-    }
   } else if (msgMode !== 'welcome') {
     document.getElementById('msg-guest-name').value = b.guestName || '';
     document.getElementById('msg-checkin').value    = b.checkin   || '';
@@ -6859,7 +6844,6 @@ function generateTransitMsg() {
   if (!b) { showToast('先に予約を選択してください', 'error'); return; }
   const guestFirst = (b.guestName || '').split(/[\s　]/)[0] || '';
   const cause       = (document.getElementById('tr-cause')?.value || '').trim();
-  const lines       = (document.getElementById('tr-lines')?.value || '').trim();
   const incCause    = document.getElementById('tr-cause-show')?.checked ?? true;
   const incGmaps    = document.getElementById('tr-gmaps')?.checked ?? true;
   const incSafety   = document.getElementById('tr-safety')?.checked ?? true;
@@ -6867,8 +6851,6 @@ function generateTransitMsg() {
   const today = new Date();
   const dateJp = `${today.getMonth()+1}月${today.getDate()}日`;
   const dateEn = `${today.getMonth()+1}/${today.getDate()}`;
-  const linesJp = lines || 'このエリアの電車';
-  const linesEn = lines ? lines : 'trains in this area';
   const causePhraseJp = (incCause && cause) ? `${cause}の影響で、` : '';
   const causePhraseEn = (incCause && cause) ? `Due to ${cause}, ` : '';
 
@@ -6876,7 +6858,7 @@ function generateTransitMsg() {
   const jp = [];
   jp.push(guestFirst ? `${guestFirst}さん、こんにちは 🌧️` : 'こんにちは 🌧️');
   jp.push('');
-  jp.push(`${causePhraseJp}本日（${dateJp}）は**${linesJp}に遅延や運転見合わせ**が発生しているようです。`);
+  jp.push(`${causePhraseJp}本日（${dateJp}）は**電車に遅延や運転見合わせ**が発生しているようです。`);
   if (incGmaps) {
     jp.push('');
     jp.push('旅行者の方にとって、リアルタイムで一番確認しやすいのは **Googleマップ** です：');
@@ -6896,7 +6878,7 @@ function generateTransitMsg() {
   const en = [];
   en.push(guestFirst ? `Hi ${guestFirst} 🌧️` : 'Hello 🌧️');
   en.push('');
-  en.push(`Just a quick heads-up — ${causePhraseEn}${linesEn} ${cause?'are':'is'} currently experiencing delays and partial service suspensions today (${dateEn}).`);
+  en.push(`Just a quick heads-up — ${causePhraseEn}trains are currently experiencing delays and partial service suspensions today (${dateEn}).`);
   if (incGmaps) {
     en.push('');
     en.push('The best way to check in real time as a traveler is **Google Maps**:');
