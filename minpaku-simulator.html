@@ -7433,15 +7433,16 @@ function autoCalcCk() {
 }
 
 // その他初期費用の内訳（鍵交換・保険・消防・届出・撮影など）
+// デフォルト値は一般的な相場（物件により変動するため要見直し）
 function defaultCkOtherCosts() {
   return [
-    { name:'鍵交換', amount:0 },
-    { name:'火災保険', amount:0 },
-    { name:'保証会社保証料', amount:0 },
-    { name:'消防設備', amount:0 },
-    { name:'民泊届出', amount:0 },
-    { name:'カメラマン撮影', amount:0 },
-    { name:'契約時管理費', amount:0 },
+    { name:'鍵交換', amount:20000 },
+    { name:'火災保険', amount:15000 },
+    { name:'保証会社保証料', amount:50000 },
+    { name:'消防設備', amount:0 },           // 自動算出（autoCalcCk内で上書き）
+    { name:'民泊届出', amount:50000 },
+    { name:'カメラマン撮影', amount:40000 },
+    { name:'契約時管理費', amount:10000 },
   ];
 }
 let ckOtherCosts = defaultCkOtherCosts();
