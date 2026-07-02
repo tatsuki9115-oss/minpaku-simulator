@@ -7163,11 +7163,22 @@ const _ckReadNum = (id, def) => {
   return isNaN(n) ? def : n;
 };
 
+// クライアント側のみでリサーチURL生成（AirROI API は使用しない・課金ゼロ）
+function buildResearchUrls({ station, guests }) {
+  const encStation = encodeURIComponent(station || '');
+  return {
+    // SUUMO家賃相場（駅名検索・ユーザーが該当駅を選ぶ）
+    suumo: `https://suumo.jp/chintai/soba/tokyo/ensen/`,
+    airbnb_busy: `https://www.airbnb.jp/s/${encStation}/homes?adults=${guests}&checkin=2026-11-13&checkout=2026-11-16&room_types[]=Entire+home/apt`,
+    airbnb_slow: `https://www.airbnb.jp/s/${encStation}/homes?adults=${guests}&checkin=2026-07-10&checkout=2026-07-13&room_types[]=Entire+home/apt`,
+    hotel: `https://www.google.com/travel/search?q=${encStation}+%E3%83%9B%E3%83%86%E3%83%AB`,
+    maps_noborito: `https://www.google.com/maps/dir/${encStation}駅/登戸駅`,
+  };
+}
+
 async function runResearch() {
   const address = document.getElementById('ck-address').value.trim();
   const station = document.getElementById('ck-station').value.trim();
-  const prefecture = document.getElementById('ck-prefecture').value.trim();
-  const municipality = document.getElementById('ck-municipality').value.trim();
   const guests = parseInt(document.getElementById('ck-guests').value) || 2;
 
   if (!address || !station) {
@@ -7176,53 +7187,17 @@ async function runResearch() {
     return;
   }
 
-  const resultEl = document.getElementById('ck-research-result');
-  resultEl.innerHTML = '<div class="card" style="text-align:center;color:#888;padding:20px">📡 リサーチ中…</div>';
-
-  try {
-    const r = await fetch(PROPERTY_RESEARCH_WORKER_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ address, station, prefecture, municipality, guests })
-    });
-    const data = await r.json();
-    if (!data.ok) throw new Error(data.error || 'リサーチ失敗');
-
-    _lastResearchData = data;
-    renderResearchResult(data);
-    document.getElementById('ck-assumptions-card').style.display = 'block';
-    autoCalcCk();
-  } catch (e) {
-    resultEl.innerHTML = `<div class="card" style="color:#E53935;padding:16px">エラー: ${e.message}</div>`;
-  }
+  const urls = buildResearchUrls({ station, guests });
+  _lastResearchData = { urls };
+  renderResearchResult({ urls });
+  const assumptionsCard = document.getElementById('ck-assumptions-card');
+  if (assumptionsCard) assumptionsCard.style.display = 'block';
+  autoCalcCk();
 }
 
 function renderResearchResult(data) {
-  const { airroi, urls, cache } = data;
+  const { urls } = data;
   const el = document.getElementById('ck-research-result');
-
-  const cacheBadge = cache?.hit
-    ? `<span style="background:#D1FAE5;color:#065F46;font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;margin-left:6px;text-transform:none;letter-spacing:0">💾 キャッシュ取得（無料・24h有効）</span>`
-    : `<span style="background:#FEF3C7;color:#92400E;font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;margin-left:6px;text-transform:none;letter-spacing:0">📡 新規取得（$0.01課金）</span>`;
-
-  let airroiHtml = '';
-  if (airroi && !airroi.error) {
-    airroiHtml = `
-      <div class="card" style="margin-bottom:10px">
-        <div class="card-title">🟦 AirROI（周辺類似物件・年間データ）${cacheBadge}</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px">
-          <div>周辺類似物件数</div><div style="text-align:right;font-weight:700">${airroi.count}件</div>
-          <div>年間ADR 中央値</div><div style="text-align:right;font-weight:700">¥${(airroi.adr_median||0).toLocaleString()}</div>
-          <div>年間ADR Q3</div><div style="text-align:right;font-weight:700">¥${(airroi.adr_q3||0).toLocaleString()}</div>
-          <div>年間稼働率</div><div style="text-align:right;font-weight:700">${airroi.occupancy}%</div>
-          <div>平均滞在日数</div><div style="text-align:right;font-weight:700">${airroi.los}泊</div>
-          <div>年間収益中央値</div><div style="text-align:right;font-weight:700">¥${(airroi.revenue_median||0).toLocaleString()}</div>
-        </div>
-      </div>`;
-    // ※平均滞在(LOS)はリサーチ値で上書きしない（実運用に近い3泊固定）。AirROIのLOSは上の相場表示のみ。
-  } else {
-    airroiHtml = `<div class="card" style="color:#E53935;margin-bottom:10px">AirROIエラー: ${airroi?.error || '不明'}</div>`;
-  }
 
   const btn = (href, label, bg) => `<a href="${href}" target="_blank" style="padding:11px;background:${bg};border-radius:8px;text-align:center;text-decoration:none;color:#333;font-size:12px;font-weight:700;display:block">${label}</a>`;
 
@@ -7238,7 +7213,7 @@ function renderResearchResult(data) {
       </div>
     </div>`;
 
-  el.innerHTML = airroiHtml + linksHtml;
+  el.innerHTML = linksHtml;
 }
 
 function calcCheckV2() {
