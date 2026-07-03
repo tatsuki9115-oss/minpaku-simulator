@@ -4127,7 +4127,7 @@ function renderDashboard() {
     }
     if (alertForm.length > 0) {
       if (alertCheckinMsg.length > 0) alertRows += `<div style="height:8px"></div>`;
-      alertRows += `<div style="font-size:10px;font-weight:800;color:#E65100;letter-spacing:.5px;margin:4px 0 2px">📋 宿泊者名簿（チェックイン1週間前までに）</div>`;
+      alertRows += `<div style="font-size:10px;font-weight:800;color:#E65100;letter-spacing:.5px;margin:4px 0 2px">📋 宿泊者名簿（チェックイン1週間前までに・提出済みならクロコに「名簿チェック」で照合）</div>`;
       alertRows += alertForm.map(b => renderAlertRow(b, 'form')).join('');
     }
     if (alertClean.length > 0) {
