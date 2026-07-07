@@ -7454,22 +7454,18 @@ function savePropCheck() {
     research: _lastResearchData || null,
     summary: _ckLastResult || null,
   };
-  // 同じタイトルの既存履歴があれば上書き確認
+  // 同じタイトルの既存履歴があれば自動で上書き（更新）※ブロッキングなconfirmは廃止
   const dupIdx = propCheckHistory.findIndex(e => e.title === address);
+  let isUpdate = false;
   if (dupIdx >= 0) {
-    if (!confirm(`「${address}」の履歴が既にあります。上書きしますか？\n（キャンセルで別履歴として追加）`)) {
-      propCheckHistory.unshift(entry);
-    } else {
-      entry.id = propCheckHistory[dupIdx].id;
-      propCheckHistory.splice(dupIdx, 1);
-      propCheckHistory.unshift(entry);
-    }
-  } else {
-    propCheckHistory.unshift(entry);
+    entry.id = propCheckHistory[dupIdx].id;
+    propCheckHistory.splice(dupIdx, 1);
+    isUpdate = true;
   }
+  propCheckHistory.unshift(entry);
   savePropCheckStore();
   renderCheckHistory();
-  showToast('💾 履歴に保存しました', 'success');
+  showToast(isUpdate ? '💾 履歴を更新しました' : '💾 履歴に保存しました', 'success');
 }
 
 function renderCheckHistory() {
