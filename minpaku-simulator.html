@@ -2695,6 +2695,18 @@ function getPropMonthActualVarCosts(prop, year, month) {
 function hasActualCosts(propId, year, month) {
   return !!(actualCosts[`${propId}_${year}_${month}`]);
 }
+// ある月の固定費のうち課税分のみ合計（消費税概算表示用・getPropMonthFixedCostsと同じ按分ロジック）
+function getPropMonthTaxableFixedCosts(prop, year, month) {
+  if (!isPropertyOperating(prop, year, month)) return 0; // 営業開始前は0
+  const systemFeeShare = getSystemFeePerProp(year, month); // 全物件共通のシステム利用料（按分）
+  const key = `${prop.id}_${year}_${month}`;
+  const ac = actualCosts[key];
+  if (ac && Array.isArray(ac)) {
+    const fixedNames = new Set(prop.monthlyFixedCosts.map(c => c.name));
+    return ac.reduce((s, c) => s + (fixedNames.has(c.name) && !isNonTaxableCost(c.name) ? (c.amount || 0) : 0), 0) + systemFeeShare;
+  }
+  return prop.monthlyFixedCosts.reduce((s, c) => s + (isNonTaxableCost(c.name) ? 0 : c.amount), 0) + systemFeeShare;
+}
 function getMonthFixedCosts(year, month, propFilter) {
   const targetProps = propFilter === 'all'
     ? properties.filter(p => isPropertyOperating(p, year, month))
@@ -2973,6 +2985,8 @@ function calcInvestmentRecoveryStats() {
   const propStats = properties.map(p => {
     const initialTotal = (p.initialCosts || []).reduce((s, c) => s + c.amount, 0);
     const monthlyFixedTotal = p.monthlyFixedCosts.reduce((s, c) => s + c.amount, 0);
+    // 消費税概算用：課税分のみの月額固定費（家賃・保険料等は非課税のため除外）
+    const monthlyTaxableFixedTotal = p.monthlyFixedCosts.reduce((s, c) => s + (isNonTaxableCost(c.name) ? 0 : c.amount), 0);
 
     // 確定済み予約はすべて実績に含める（先日付も含む・Airbnb+Booking.com統合）
     const books = getAllBookings().filter(b => getBookingPropId(b) === p.id);
@@ -3012,7 +3026,7 @@ function calcInvestmentRecoveryStats() {
     const estMonthBookings = pf ? Math.round((pf.occupancy / 100 * 365 / 12) / avgNightsLocal) : 0;
     const monthForecastVar = estMonthBookings * perBookingLocal;
 
-    let totalRevenue = 0, totalVarCosts = 0, totalFixedCosts = 0;
+    let totalRevenue = 0, totalVarCosts = 0, totalFixedCosts = 0, totalTaxableFixedCosts = 0;
     let pastActualProfit = 0;     // 過去月の実績利益（純粋な実績）
     let futureForecastProfit = 0; // 未来月の利益（実績予約＋PriceLabs予測補填）
     const futureMonthProfits = []; // 未来月の利益（回収月数計算用）
@@ -3030,6 +3044,7 @@ function calcInvestmentRecoveryStats() {
         const hasBooking = bookedMonthKeys.has(monthKey);
         const monthFixed = getPropMonthFixedCosts(p, _cy, _cm);
         totalFixedCosts += monthFixed;
+        totalTaxableFixedCosts += getPropMonthTaxableFixedCosts(p, _cy, _cm);
         // 予約ベースの売上・変動費
         const bookedRev = monthBooks.reduce((s,b)=>s+b.revenue,0);
         const bookedVar = hasBooking
@@ -3070,6 +3085,7 @@ function calcInvestmentRecoveryStats() {
       }
     } else {
       totalFixedCosts = monthlyFixedTotal * months;
+      totalTaxableFixedCosts = monthlyTaxableFixedTotal * months;
     }
 
     const cumulativeProfit = totalRevenue - totalFixedCosts - totalVarCosts;
@@ -3108,7 +3124,7 @@ function calcInvestmentRecoveryStats() {
     const pct = initialTotal > 0 ? Math.round(cumulativeProfit / initialTotal * 100) : 0;
     const monthsNeeded = avgMonthlyProfit > 0 && remaining > 0 ? Math.ceil(remaining / avgMonthlyProfit) : null;
 
-    return { prop: p, initialTotal, cumulativeProfit, totalFixedCosts, totalRevenue, months, remaining, pct, avgMonthlyProfit, monthsNeeded, futureBookedMonths, yearEndProfit, yearEndPct, pastActualProfit, futureForecastProfit };
+    return { prop: p, initialTotal, cumulativeProfit, totalFixedCosts, totalTaxableFixedCosts, totalVarCosts, totalRevenue, months, remaining, pct, avgMonthlyProfit, monthsNeeded, futureBookedMonths, yearEndProfit, yearEndPct, pastActualProfit, futureForecastProfit };
   });
 
   return { propStats, recPeriodLabel, nowY, nowM };
@@ -3125,6 +3141,11 @@ function renderInvestmentRecovery() {
   const totalRemaining = Math.max(totalInitial - totalProfit, 0);
   const totalPct = totalInitial > 0 ? Math.min(Math.round(totalProfit / totalInitial * 100), 100) : 0;
   const netPos = totalProfit - totalInitial;
+  // 消費税の概算（参考表示用・回収額の計算には未反映）
+  const totalRevenueForTax = propStats.reduce((s, x) => s + x.totalRevenue, 0);
+  // 清掃費・リネン（変動費）も課税仕入なので控除対象に含める
+  const totalTaxableForTax = propStats.reduce((s, x) => s + x.totalTaxableFixedCosts + (x.totalVarCosts || 0), 0);
+  const consumptionTaxTotal = calcConsumptionTax(totalRevenueForTax, totalTaxableForTax);
 
   let html = `<div class="recovery-card">
     <div class="recovery-header">
@@ -3317,6 +3338,10 @@ function renderInvestmentRecovery() {
       <span style="color:${netActualBase>=0?'#1C9A52':'#E53935'}">${netActualBase>=0?'':'▲'}${fmtS(Math.abs(netActualBase))}</span>
     </div>
     <div class="recovery-total-row" style="border-top:1px dashed #e0e0e0;padding-top:6px;margin-top:2px"><span style="color:#7b1fa2;font-weight:700">純損益（予測込み）</span><span style="font-weight:700;color:${netWithForecast>=0?'#1C9A52':'#E53935'}">${netWithForecast>=0?'':'▲'}${fmtS(Math.abs(netWithForecast))}</span></div>
+    <div style="font-size:10px;color:#B0ADA8;margin-top:6px;text-align:right;line-height:1.5">
+      ※消費税控除前 ／ うち消費税 約${fmtS(consumptionTaxTotal.honsoku)}（本則課税）<br>
+      初期投資に含まれる消費税は仕入税額控除で還付されるため、回収月数はほぼ変わりません
+    </div>
   </div>
   </div></div>`;
 
@@ -3827,6 +3852,19 @@ function getPerBookingTotal(booking, prop) {
   const otherFeeOff = chk.otherFeeOff != null ? (parseInt(chk.otherFeeOff) || 0) : 0;
 
   return cleaningFee + laundryFee + suppliesFee + otherFee + otherFeeOff;
+}
+
+// ===== 消費税の概算（参考表示用・利益計算には未反映） =====
+// 家賃・保険料は非課税仕入＝消費税を払っていないので控除できない
+function isNonTaxableCost(name) {
+  return /家賃|共益費|保険/.test(name || '');
+}
+// 本則課税: (税込受取 − 課税経費) × 10/110
+// ※2025年分の消費税は28,000円（未払消費税より確認）＝本則課税で確定。
+//   簡易課税は選択届出書を出さない限り適用されないため、以後も本則の前提でよい。
+function calcConsumptionTax(revenue, taxableCosts) {
+  const honsoku = Math.max(0, Math.round((revenue - taxableCosts) * 10 / 110));
+  return { honsoku };
 }
 
 function calcAirbnbProfit(b) {
@@ -4411,6 +4449,7 @@ function renderAnnual() {
     if (mBooks.length === 0 && operatingProps.length === 0) return null;
 
     const monthFixedCosts = operatingProps.reduce((s, p) => s + getPropMonthFixedCosts(p, mYear, m), 0);
+    const monthTaxableFixedCosts = operatingProps.reduce((s, p) => s + getPropMonthTaxableFixedCosts(p, mYear, m), 0);
     const isActual = operatingProps.some(p => hasActualCosts(p.id, mYear, m));
 
     let rev = 0, varCosts = 0, nights = 0, adrRev = 0, adrBookings = 0, leadSum = 0, leadCnt = 0, leadSumL = 0, leadCntL = 0, revAirbnb = 0, revBooking = 0;
@@ -4445,7 +4484,7 @@ function renderAnnual() {
     const dim = getDaysInMonth(mYear, m);
     const activePropCount = Math.max(operatingProps.length, 1);
     const maxNights = dim * activePropCount;
-    return { month: m, year: mYear, revenue: rev, profit, nights, adrRev, adrBookings, leadSum, leadCnt, leadSumL, leadCntL, revAirbnb, revBooking, bookings: mBooks.length, daysInMonth: dim, maxNights, occRate: Math.min(Math.round(nights / maxNights * 100), 100), monthFixedCosts, varCosts, isActual, operatingProps };
+    return { month: m, year: mYear, revenue: rev, profit, nights, adrRev, adrBookings, leadSum, leadCnt, leadSumL, leadCntL, revAirbnb, revBooking, bookings: mBooks.length, daysInMonth: dim, maxNights, occRate: Math.min(Math.round(nights / maxNights * 100), 100), monthFixedCosts, monthTaxableFixedCosts, varCosts, isActual, operatingProps };
   });
 
   const validMonths = monthlyStats.filter(Boolean);
@@ -4573,6 +4612,7 @@ function renderAnnual() {
           const totalGP = getGuestPayment(ms.revenue);
           const isTP = ms.profit >= 0;
           const totalMargin = ms.revenue > 0 ? Math.round(ms.profit/ms.revenue*100) : null;
+          const monthTax = calcConsumptionTax(ms.revenue, ms.monthTaxableFixedCosts + ms.varCosts);
           return `<div class="kpi-grid-4-flat" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0;border-top:2px solid #F2F1EE;background:#FAFAF9">
             <div style="padding:10px 14px;border-right:1px solid #F2F1EE">
               <div style="font-size:10px;font-weight:700;color:#C8C5C0;margin-bottom:3px">合計 ゲスト支払</div>
@@ -4590,6 +4630,9 @@ function renderAnnual() {
               <div style="font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:3px">合計 利益率</div>
               <div style="font-size:14px;font-weight:800;color:${isTP?'#1C9A52':'#E53935'}">${totalMargin!==null?(isTP?'':'▲')+Math.abs(totalMargin)+'%':'—'}</div>
             </div>
+          </div>
+          <div style="font-size:10px;color:#B0ADA8;padding:6px 14px 4px">
+            ※消費税控除前（税込）　うち消費税 約${fmt(monthTax.honsoku)}円
           </div>`;
         })() : ''}
       </div>`;
@@ -4623,6 +4666,10 @@ function renderAnnual() {
   const chAirbnbPct = chRevTotal > 0 ? Math.round(totalRevAirbnb / chRevTotal * 100) : 0;
   const bestMonth = validMonths.length > 0 ? validMonths.reduce((a, b) => b.profit > a.profit ? b : a) : null;
   const isAP = totalProfit >= 0;
+  // 消費税の概算（参考表示用・利益計算には未反映）
+  const totalTaxableFixedCosts = validMonths.reduce((s, m) => s + m.monthTaxableFixedCosts, 0);
+  const totalVarCostsForTax = validMonths.reduce((s, m) => s + m.varCosts, 0);
+  const consumptionTaxYear = calcConsumptionTax(totalRevenue, totalTaxableFixedCosts + totalVarCostsForTax);
 
   let html = '';
 
@@ -4705,6 +4752,19 @@ function renderAnnual() {
         <div style="font-size:10px;color:#C8C5C0;margin-top:2px">利益÷受取</div>
       </div>
     </div>
+    <div style="font-size:10px;color:#B0ADA8;padding-top:2px;padding-bottom:4px">
+      ※消費税控除前（税込）　うち消費税 約${fmtShort(consumptionTaxYear.honsoku)}円
+    </div>
+    <details style="margin-bottom:4px">
+      <summary style="font-size:10px;color:#B0ADA8;cursor:pointer">消費税の概算について</summary>
+      <div style="font-size:10px;color:#B0ADA8;line-height:1.6;margin-top:4px;padding-left:4px">
+        ・本則課税＝（税込受取 − 課税経費）× 10/110<br>
+        ・家賃と保険料は非課税仕入のため控除できません（その分だけ納税額が増えます）<br>
+        ・2025年分の消費税28,000円から本則課税と確認済（簡易課税なら約40万円になるため）<br>
+        ・初期投資に含まれる消費税は還付されるので、投資回収の月数には影響しません<br>
+        ・この金額は利益から差し引かれていません（表示のみ）
+      </div>
+    </details>
     <div style="display:flex;gap:16px;padding-top:8px;border-top:1px solid #F2F1EE;flex-wrap:wrap">
       <div style="font-size:11px;color:#B0ADA8">${totalBookings}件・${totalNights}泊</div>
       <div style="font-size:11px;color:#B0ADA8">ADR <span style="font-weight:700;color:#666">受取¥${fmt(totalADR.host)}</span> <span style="color:#C8C5C0">/ ゲスト¥${fmt(totalADR.guest)}</span> <span style="font-size:10px;color:#C8C5C0">(/泊)</span></div>
@@ -7273,6 +7333,12 @@ function calcCheckV2() {
   const paybackMonths = annualProfit > 0 ? initialTotal / (annualProfit / 12) : Infinity;
   _ckLastResult = { annualProfit: Math.round(annualProfit), annualRev: Math.round(annualRev), initialTotal: Math.round(initialTotal), paybackMonths: isFinite(paybackMonths) ? Math.round(paybackMonths) : null };
 
+  // 消費税の概算（参考表示用・利益計算には未反映）
+  // ※この物件候補タブでは家賃は税込入力＝課税仕入として控除対象に含める（実績タブのATT・新子安の家賃は非課税のため扱いが異なる）
+  const annualVarForTax = busy.var * 5 + norm.var * 5 + slow.var * 2;
+  const annualTaxableCosts = (rent + fixedOther) * 12 + annualVarForTax;
+  const consumptionTaxCk = calcConsumptionTax(annualRev, annualTaxableCosts);
+
   const isProfit = annualProfit > 0;
   const profitColor = isProfit ? '#1C9A52' : '#E53935';
   const seasonRow = (label, color, days, adr, profit) => `
@@ -7303,6 +7369,10 @@ function calcCheckV2() {
         <div>年間稼働日数</div><div style="text-align:right;color:#333">${annualDays}日</div>
         <div>年間売上(手数料後)</div><div style="text-align:right;color:#333">¥${Math.round(annualRev).toLocaleString()}</div>
         <div>月平均利益</div><div style="text-align:right;font-weight:700;color:${profitColor}">¥${Math.round(annualProfit/12).toLocaleString()}</div>
+      </div>
+      <div style="font-size:10px;color:#B0ADA8;margin-top:8px;padding-top:8px;border-top:1px solid #F0EDE9;line-height:1.6">
+        ※消費税控除前（税込）　うち消費税 約¥${Math.round(consumptionTaxCk.honsoku).toLocaleString()}／年（本則課税）<br>
+        ※事業用家賃（税込）は控除対象として計算。初期費用の消費税は還付されるため回収月数には影響しません
       </div>
     </div>
 
