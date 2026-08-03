@@ -1984,6 +1984,9 @@ function renderCalendarTab() {
         const dispSupplies = (chk.suppliesFee != null && chk.suppliesFee !== 0 && chk.suppliesFee !== '0') ? chk.suppliesFee : '';
         const dispOtherFee = (chk.otherFee != null && chk.otherFee !== 0 && chk.otherFee !== '0') ? chk.otherFee : '';
         const dispOtherFeeOff = (chk.otherFeeOff != null && chk.otherFeeOff !== 0 && chk.otherFeeOff !== '0') ? chk.otherFeeOff : '';
+        // 2人目スタッフ（ダブルチェック・駆けつけ等・急遽発生時のみ使用）
+        const dispStaff2Fee = (chk.staff2Fee != null && chk.staff2Fee !== 0 && chk.staff2Fee !== '0') ? chk.staff2Fee : '';
+        const STAFF2_TYPES = ['清掃2人目', '駆けつけ', 'メッセージボード作成', 'その他'];
 
         // チェックアウト日付計算（清掃直前連絡・ゴミ依頼アラートで使用）
         const coParts = coStr ? coStr.split('/').map(Number) : null;
@@ -2059,6 +2062,25 @@ function renderCalendarTab() {
                 <span style="font-size:11px;color:#555">🧹 清掃費</span>
                 <input type="text" inputmode="numeric" pattern="[0-9]*" value="${dispCleaning}" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','cleaningFee',this.value)" onblur="saveBookingChecks()">
                 <span style="font-size:11px;color:#999">円</span>
+                <!-- 2人目スタッフ：ダブルチェック・駆けつけ等（急遽発生した時だけ入力） -->
+                <div style="grid-column:1/4;margin-top:5px;padding-top:5px;border-top:1px dashed #e8e8e8;font-size:10px;font-weight:800;color:#B0ADA8">👥 2人目スタッフ（任意）</div>
+                <div style="grid-column:1/4;display:grid;grid-template-columns:auto 1fr;gap:5px 6px;align-items:center">
+                  <span style="font-size:11px;color:#555">👤 担当</span>
+                  <select style="padding:4px 6px;border:1.5px solid ${chk.staff2Name?'#0284c7':'#e0e0e0'};border-radius:7px;font-size:12px;color:#333;background:white;box-sizing:border-box;width:100%" onchange="updateBookingCost('${b.code}','staff2Name',this.value);saveBookingChecks()">
+                    <option value="">なし</option>
+                    ${staffList.map(s => `<option value="${escHtml(s.name)}" ${chk.staff2Name===s.name?'selected':''}>${escHtml(s.name)}</option>`).join('')}
+                  </select>
+                  <span style="font-size:11px;color:#555">📋 業務</span>
+                  <select style="padding:4px 6px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;color:#333;background:white;box-sizing:border-box;width:100%" onchange="updateBookingCost('${b.code}','staff2Type',this.value);saveBookingChecks()">
+                    <option value="">—</option>
+                    ${STAFF2_TYPES.map(t => `<option value="${t}" ${chk.staff2Type===t?'selected':''}>${t}</option>`).join('')}
+                  </select>
+                </div>
+                <span style="font-size:11px;color:#555">💴 2人目の料金</span>
+                <input type="text" inputmode="numeric" pattern="[0-9]*" value="${dispStaff2Fee}" placeholder="0" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','staff2Fee',this.value)" onblur="saveBookingChecks()">
+                <span style="font-size:11px;color:#999">円</span>
+                <input type="text" value="${escHtml(String(chk.staff2Memo||''))}" placeholder="2人目のメモ（支払明細に記載）" style="grid-column:1/4;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;color:#333;box-sizing:border-box;width:100%;margin-top:1px" oninput="updateBookingCost('${b.code}','staff2Memo',this.value)" onblur="saveBookingChecks()">
+                <div style="grid-column:1/4;margin-bottom:4px;padding-bottom:4px;border-bottom:1px dashed #e8e8e8"></div>
                 <span style="font-size:11px;color:#555">🌀 コインランドリー</span>
                 <input type="text" inputmode="numeric" pattern="[0-9]*" value="${dispLaundry}" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','laundryFee',this.value)" onblur="saveBookingChecks()">
                 <span style="font-size:11px;color:#999">円</span>
@@ -3389,12 +3411,15 @@ function showActualCostModal(year, month, propId) {
     calSum['清掃費']            += chk.cleaningFee  != null ? (parseInt(chk.cleaningFee)  || 0) : defCleaning;
     calSum['コインランドリー']  += chk.laundryFee   != null ? (parseInt(chk.laundryFee)   || 0) : 1400;
     calSum['消耗品']            += chk.suppliesFee  != null ? (parseInt(chk.suppliesFee)  || 0) : 0;
-    calSum['その他（明細あり）'] += chk.otherFee    != null ? (parseInt(chk.otherFee)    || 0) : 0;
+    // 2人目スタッフ（ダブルチェック・駆けつけ等）は「その他（明細あり）」に合算
+    const _staff2Fee = chk.staff2Fee != null ? (parseInt(chk.staff2Fee) || 0) : 0;
+    calSum['その他（明細あり）'] += (chk.otherFee != null ? (parseInt(chk.otherFee) || 0) : 0) + _staff2Fee;
     calSum['その他（明細なし）'] += chk.otherFeeOff != null ? (parseInt(chk.otherFeeOff) || 0) : 0;
 
     const parts = b.checkin.split('/');
     const dateLabel = `${parseInt(parts[1])}/${parseInt(parts[2])}`;
     if (chk.otherMemo)    memoLines.push(`${dateLabel} ${b.guestName || ''}：${chk.otherMemo}`);
+    if (_staff2Fee > 0)   memoLines.push(`${dateLabel} ${b.guestName || ''}：2人目 ${chk.staff2Type || 'その他'}（${chk.staff2Name || '担当未設定'}）${_staff2Fee.toLocaleString('ja-JP')}円${chk.staff2Memo ? ' ' + chk.staff2Memo : ''}`);
     if (chk.otherMemoOff) memoLines.push(`${dateLabel} ${b.guestName || ''}：${chk.otherMemoOff}（非公開）`);
   });
 
@@ -3851,7 +3876,10 @@ function getPerBookingTotal(booking, prop) {
   const otherFee    = chk.otherFee    != null ? (parseInt(chk.otherFee)    || 0) : 0;
   const otherFeeOff = chk.otherFeeOff != null ? (parseInt(chk.otherFeeOff) || 0) : 0;
 
-  return cleaningFee + laundryFee + suppliesFee + otherFee + otherFeeOff;
+  // 2人目スタッフ（ダブルチェック・駆けつけ等）の料金も変動費に含める
+  const staff2Fee = chk.staff2Fee != null ? (parseInt(chk.staff2Fee) || 0) : 0;
+
+  return cleaningFee + laundryFee + suppliesFee + otherFee + otherFeeOff + staff2Fee;
 }
 
 // ===== 消費税の概算（参考表示用・利益計算には未反映） =====
@@ -5496,8 +5524,8 @@ function toggleCheckStaffFromList(code, staffName) {
 // oninputで値をメモリに保持 → onblurでsaveBookingChecks()を呼んで保存
 function updateBookingCost(code, field, val) {
   if (!bookingChecks[code]) bookingChecks[code] = {};
-  // メモ欄はテキストのまま保存
-  if (field === 'otherMemo' || field === 'otherMemoOff') {
+  // メモ欄・2人目スタッフの名前/業務種別はテキストのまま保存
+  if (field === 'otherMemo' || field === 'otherMemoOff' || field === 'staff2Name' || field === 'staff2Type' || field === 'staff2Memo') {
     bookingChecks[code][field] = String(val);
     return;
   }
@@ -5528,11 +5556,37 @@ function savePayeeHistory(name) {
   localStorage.setItem(PAYEE_HISTORY_KEY, JSON.stringify(hist));
 }
 
-function showPaymentStatementModal(code) {
+function showPaymentStatementModal(code, which) {
   const b = findBookingByCode(code);
   if (!b) return;
   const chk = bookingChecks[code] || {};
   if (!chk.cleaningStaffName) { showToast('担当スタッフが設定されていません', 'error'); return; }
+
+  // 2人目スタッフがいる場合は、どちらの支払明細を作るか先に選ぶ
+  const _s2fee = chk.staff2Fee != null ? (parseInt(chk.staff2Fee) || 0) : 0;
+  if (!which && chk.staff2Name && _s2fee > 0) {
+    const pick = document.createElement('div');
+    pick.setAttribute('data-paysmt-pick', '1');
+    pick.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    const _close = `document.body.removeChild(document.querySelector('[data-paysmt-pick]'))`;
+    pick.innerHTML = `
+      <div style="background:white;border-radius:16px;padding:20px;width:100%;max-width:340px;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+        <div style="font-size:15px;font-weight:700;color:#333;margin-bottom:4px">📄 どちらの支払明細を作りますか？</div>
+        <div style="font-size:11px;color:#aaa;margin-bottom:16px">この予約には2人のスタッフが登録されています</div>
+        <button onclick="${_close};showPaymentStatementModal('${code}',1)" style="width:100%;padding:12px;margin-bottom:8px;border:1.5px solid #4a7fc1;border-radius:10px;background:white;color:#4a7fc1;font-size:13px;font-weight:700;cursor:pointer;text-align:left">
+          👤 ${escHtml(chk.cleaningStaffName)}<br><span style="font-size:11px;font-weight:400;color:#888">清掃代金＋立替費用</span>
+        </button>
+        <button onclick="${_close};showPaymentStatementModal('${code}',2)" style="width:100%;padding:12px;margin-bottom:16px;border:1.5px solid #0284c7;border-radius:10px;background:white;color:#0284c7;font-size:13px;font-weight:700;cursor:pointer;text-align:left">
+          👥 ${escHtml(chk.staff2Name)}（2人目）<br><span style="font-size:11px;font-weight:400;color:#888">${escHtml(chk.staff2Type || '追加業務')} ${_s2fee.toLocaleString('ja-JP')}円</span>
+        </button>
+        <div style="text-align:right"><button onclick="${_close}" style="padding:9px 16px;border:1.5px solid #eee;border-radius:8px;font-weight:700;background:white;color:#888;font-size:13px;cursor:pointer">キャンセル</button></div>
+      </div>`;
+    document.body.appendChild(pick);
+    return;
+  }
+  which = which === 2 ? 2 : 1;
+  const _targetName = which === 2 ? chk.staff2Name : chk.cleaningStaffName;
+  const _targetSub  = which === 2 ? `（2人目・${chk.staff2Type || '追加業務'}）` : '';
 
   const hist = getPayeeHistory();
   const today = new Date();
@@ -5544,7 +5598,7 @@ function showPaymentStatementModal(code) {
   overlay.innerHTML = `
     <div style="background:white;border-radius:16px;padding:20px;width:100%;max-width:340px;box-shadow:0 8px 32px rgba(0,0,0,.2)">
       <div style="font-size:15px;font-weight:700;color:#333;margin-bottom:4px">📄 支払明細書を作成</div>
-      <div style="font-size:11px;color:#aaa;margin-bottom:16px">${chk.cleaningStaffName} 担当分</div>
+      <div style="font-size:11px;color:#aaa;margin-bottom:16px">${escHtml(_targetName || '')}${_targetSub} 担当分</div>
 
       <div style="margin-bottom:12px">
         <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:4px">支払先</label>
@@ -5571,7 +5625,7 @@ function showPaymentStatementModal(code) {
       <div style="display:flex;gap:8px;justify-content:flex-end">
         <button onclick="document.body.removeChild(document.querySelector('[data-paysmt-modal]'))"
           style="padding:9px 16px;border:1.5px solid #eee;border-radius:8px;font-weight:700;background:white;color:#888;font-size:13px;cursor:pointer">キャンセル</button>
-        <button onclick="generatePaymentStatement('${code}')"
+        <button onclick="generatePaymentStatement('${code}',${which})"
           style="padding:9px 20px;border:none;border-radius:8px;font-weight:700;background:#4a7fc1;color:white;font-size:13px;cursor:pointer">作成</button>
       </div>
     </div>`;
@@ -5579,7 +5633,8 @@ function showPaymentStatementModal(code) {
   document.getElementById('paysmt-payee').focus();
 }
 
-function generatePaymentStatement(code) {
+function generatePaymentStatement(code, which) {
+  which = which === 2 ? 2 : 1;
   const payee = (document.getElementById('paysmt-payee')?.value || '').trim();
   const payDate = document.getElementById('paysmt-date')?.value || '';
   const memo = (document.getElementById('paysmt-memo')?.value || '').trim();
@@ -5596,10 +5651,21 @@ function generatePaymentStatement(code) {
   const staff = prop ? (prop.cleaningStaff || []).find(s => s.name === chk.cleaningStaffName) : null;
 
   // 金額
-  const cleaningFee = (staff && staff.fee != null && staff.fee !== '') ? (parseInt(staff.fee) || 0) : (prop?.perBookingCosts.find(c => c.name === '清掃費')?.amount || 0);
-  const laundryFee  = chk.laundryFee  != null ? (parseInt(chk.laundryFee)  || 0) : 1400;
-  const suppliesFee = chk.suppliesFee != null ? (parseInt(chk.suppliesFee) || 0) : 0;
-  const otherFee    = chk.otherFee    != null ? (parseInt(chk.otherFee)    || 0) : 0;
+  // 【1人目】カードで手入力した清掃費を最優先（未入力ならスタッフ登録料金→物件デフォルトの順）
+  const _defCleaningFee = (staff && staff.fee != null && staff.fee !== '')
+    ? (parseInt(staff.fee) || 0)
+    : (prop?.perBookingCosts.find(c => c.name === '清掃費')?.amount || 0);
+  const _cleaningFee1 = chk.cleaningFee != null ? (parseInt(chk.cleaningFee) || 0) : _defCleaningFee;
+  // 【2人目】ダブルチェック・駆けつけ等。立替費用は1人目側に計上するため役務のみ
+  const _staff2Fee = chk.staff2Fee != null ? (parseInt(chk.staff2Fee) || 0) : 0;
+
+  const isSecond    = which === 2;
+  const serviceName = isSecond ? (chk.staff2Type || '追加業務') : '清掃代金';
+  const serviceNote = isSecond ? (chk.staff2Memo || '2人目対応分') : '税込固定';
+  const cleaningFee = isSecond ? _staff2Fee : _cleaningFee1;
+  const laundryFee  = isSecond ? 0 : (chk.laundryFee  != null ? (parseInt(chk.laundryFee)  || 0) : 1400);
+  const suppliesFee = isSecond ? 0 : (chk.suppliesFee != null ? (parseInt(chk.suppliesFee) || 0) : 0);
+  const otherFee    = isSecond ? 0 : (chk.otherFee    != null ? (parseInt(chk.otherFee)    || 0) : 0);
   const otherMemo   = chk.otherMemo   || '';
   const expenseTotal = laundryFee + suppliesFee + otherFee;
   const total = cleaningFee + expenseTotal;
@@ -5641,7 +5707,7 @@ function generatePaymentStatement(code) {
       .print-btn{display:block;margin:0 auto;padding:12px 40px;font-size:15px;font-weight:700;background:#1a365d;color:white;border:none;border-radius:10px;cursor:pointer}
       @media print{.no-print{display:none !important}body{padding:20px 28px}}
     </style></head><body>
-    <h2>支払明細書（清掃費用・税込表記）</h2>
+    <h2>支払明細書（${isSecond ? '追加業務' : '清掃費用'}・税込表記）</h2>
     <table class="meta">
       <tr><td>支払日</td><td>${payDate}</td></tr>
       <tr><td>支払先</td><td><strong>${escHtml(payee)}</strong>　様</td></tr>
@@ -5650,7 +5716,7 @@ function generatePaymentStatement(code) {
     <table class="items">
       <thead><tr><th>区分</th><th>項目</th><th>金額（税込）</th><th>備考</th></tr></thead>
       <tbody>
-        <tr><td>役務提供</td><td>清掃代金</td><td class="num">${cleaningFee.toLocaleString('ja-JP')}円</td><td>税込固定</td></tr>
+        <tr><td>役務提供</td><td>${escHtml(serviceName)}</td><td class="num">${cleaningFee.toLocaleString('ja-JP')}円</td><td>${escHtml(serviceNote)}</td></tr>
         ${expenseRow}
         <tr class="total-row">
           <td colspan="2" style="text-align:right">合計支払額（税込）</td>
