@@ -1970,6 +1970,10 @@ function renderCalendarTab() {
         const coStr = getCheckout(b);
         const fmtD = s => { if (!s) return '?'; const p = s.split('/'); return `${parseInt(p[1])}/${parseInt(p[2])}`; };
         const staffList = prop ? (prop.cleaningStaff || []) : [];
+        // 退職者は新しい予約の選択肢から外す。ただし既にその予約へ割り当て済みなら選択肢に残す
+        // （消してしまうと担当者が未選択に見え、金額の参照先も失われるため）
+        const staffOpts  = staffList.filter(s => !s.retired || s.name === chk.cleaningStaffName);
+        const staffOpts2 = staffList.filter(s => !s.retired || s.name === chk.staff2Name);
         const cinParts = b.checkin ? b.checkin.split('/').map(Number) : null;
         const cinDate = cinParts ? new Date(cinParts[0], cinParts[1]-1, cinParts[2]) : null;
         const daysToCI = cinDate ? Math.round((cinDate - nowForCal) / 86400000) : 999;
@@ -2010,7 +2014,7 @@ function renderCalendarTab() {
         const cleanBg = chk.cleaningDone ? '#e0f2fe' : cleanAlert ? '#FFF3E0' : '#f5f5f5';
         const cleanColor = chk.cleaningDone ? '#0369a1' : cleanAlert ? '#E65100' : '#999';
         const cleanBorder = chk.cleaningDone ? '#0284c7' : cleanAlert ? '#f97316' : '#ddd';
-        const noStaffSelected = staffList.length > 0 && !chk.cleaningStaffName;
+        const noStaffSelected = staffOpts.length > 0 && !chk.cleaningStaffName;
 
         const diffLabel = daysToCI < 0 ? `${-daysToCI}日超過` : daysToCI === 0 ? '今日' : `あと${daysToCI}日`;
         const diffColor = daysToCI < 0 ? '#D32F2F' : daysToCI <= 3 ? '#E65100' : daysToCI <= 7 ? '#F59E0B' : '#B0ADA8';
@@ -2044,9 +2048,9 @@ function renderCalendarTab() {
           </div>
           <!-- 下段: スタッフ▼ | 清掃✓ | 清掃直前連絡 | LINE生成 -->
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px">
-            ${staffList.length > 0 ? `<select style="font-size:10px;border:1.5px solid ${noStaffSelected?'#f97316':chk.cleaningDone?'#0284c7':'#e8e8e8'};border-radius:9px;padding:4px 2px;background:${noStaffSelected?'#FFF3E0':'white'};color:${noStaffSelected?'#E65100':'#555'};font-weight:${noStaffSelected?'700':'400'};text-align:center;cursor:pointer" onchange="toggleCheckStaffFromList('${b.code}',this.value)">
+            ${staffOpts.length > 0 ? `<select style="font-size:10px;border:1.5px solid ${noStaffSelected?'#f97316':chk.cleaningDone?'#0284c7':'#e8e8e8'};border-radius:9px;padding:4px 2px;background:${noStaffSelected?'#FFF3E0':'white'};color:${noStaffSelected?'#E65100':'#555'};font-weight:${noStaffSelected?'700':'400'};text-align:center;cursor:pointer" onchange="toggleCheckStaffFromList('${b.code}',this.value)">
               <option value="">${noStaffSelected?'⚠️ 選択':'👤 スタッフ'}</option>
-              ${staffList.map(s => `<option value="${escHtml(s.name)}" ${chk.cleaningStaffName===s.name?'selected':''}>${escHtml(s.name)}</option>`).join('')}
+              ${staffOpts.map(s => `<option value="${escHtml(s.name)}" ${chk.cleaningStaffName===s.name?'selected':''}>${escHtml(s.name)}${s.retired?'（退職）':''}</option>`).join('')}
             </select>` : `<div style="border-radius:9px;border:1.5px solid #e8e8e8;padding:4px 2px;font-size:10px;color:#bbb;text-align:center;display:flex;align-items:center;justify-content:center">👤 −</div>`}
             <button onclick="toggleCheckFromList('${b.code}','cleaningDone')" style="font-size:11px;font-weight:800;padding:7px 4px;border-radius:9px;border:2px solid ${noStaffSelected?'#ddd':cleanBorder};cursor:${noStaffSelected?'not-allowed':'pointer'};background:${noStaffSelected?'#f5f5f5':cleanBg};color:${noStaffSelected?'#bbb':cleanColor};opacity:${noStaffSelected?'0.5':'1'};line-height:1.3">🧹 ${chk.cleaningDone?'清掃✓済':noStaffSelected?'先に選択':'清掃'}</button>
             <button onclick="toggleCheckFromList('${b.code}','cleaningReminderDone')" style="padding:7px 4px;font-size:11px;font-weight:800;border-radius:9px;border:2px solid ${chk.cleaningReminderDone?'#92400e':cleaningReminderAlert?'#E53935':'#FF6D00'};background:${chk.cleaningReminderDone?'#fef3c7':cleaningReminderAlert?'#FFEBEE':'#fff8f0'};color:${chk.cleaningReminderDone?'#78350f':cleaningReminderAlert?'#D32F2F':'#b34400'};cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;box-sizing:border-box"><span>🧹</span><span>${chk.cleaningReminderDone?'直前✓済':'清掃直前連絡'}</span></button>
@@ -2068,7 +2072,7 @@ function renderCalendarTab() {
                   <span style="font-size:11px;color:#555">👤 担当</span>
                   <select style="padding:4px 6px;border:1.5px solid ${chk.staff2Name?'#0284c7':'#e0e0e0'};border-radius:7px;font-size:12px;color:#333;background:white;box-sizing:border-box;width:100%" onchange="updateBookingCost('${b.code}','staff2Name',this.value);saveBookingChecks()">
                     <option value="">なし</option>
-                    ${staffList.map(s => `<option value="${escHtml(s.name)}" ${chk.staff2Name===s.name?'selected':''}>${escHtml(s.name)}</option>`).join('')}
+                    ${staffOpts2.map(s => `<option value="${escHtml(s.name)}" ${chk.staff2Name===s.name?'selected':''}>${escHtml(s.name)}${s.retired?'（退職）':''}</option>`).join('')}
                   </select>
                   <span style="font-size:11px;color:#555">📋 業務</span>
                   <select style="padding:4px 6px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;color:#333;background:white;box-sizing:border-box;width:100%" onchange="updateBookingCost('${b.code}','staff2Type',this.value);saveBookingChecks()">
@@ -2352,9 +2356,10 @@ function renderSettings() {
         <div class="cost-section-title" style="color:#1C9A52">🧹 清掃スタッフ（物件ごとに登録）</div>
         <div style="font-size:11px;color:#bbb;margin-bottom:8px">チェックイン後の清掃を担当するスタッフ候補を登録してください</div>
         ${(p.cleaningStaff||[]).map((s,si) => `
-          <div style="margin-bottom:10px;padding:8px 10px;background:#f7f7f7;border-radius:10px;border:1px solid #ebebeb">
+          <div style="margin-bottom:10px;padding:8px 10px;background:${s.retired?'#fafafa':'#f7f7f7'};border-radius:10px;border:1px solid #ebebeb;opacity:${s.retired?'0.65':'1'}">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
               <input class="cost-name" type="text" value="${escHtml(s.name)}" placeholder="スタッフ名（例: 田中さん）" style="flex:1" oninput="updateCleaningStaff(${pi},${si},'name',this.value)" onblur="saveData()">
+              ${s.retired ? `<span style="font-size:10px;font-weight:800;color:#888;background:#eee;border-radius:5px;padding:2px 6px;white-space:nowrap">退職</span>` : ''}
               <button class="btn-remove-row" onclick="removeCleaningStaff(${pi},${si})">×</button>
             </div>
             <div style="display:flex;align-items:center;gap:6px">
@@ -2364,6 +2369,10 @@ function renderSettings() {
                 <span style="font-size:11px;color:#999;white-space:nowrap">円</span>
               </div>
             </div>
+            <label style="display:flex;align-items:center;gap:5px;margin-top:6px;cursor:pointer">
+              <input type="checkbox" ${s.retired?'checked':''} onchange="updateCleaningStaff(${pi},${si},'retired',this.checked);saveData();renderSettingsKeepOpen()" style="width:15px;height:15px;cursor:pointer;flex-shrink:0">
+              <span style="font-size:11px;color:#888">退職（今後の予約では選べなくする／過去の記録と金額はそのまま残ります）</span>
+            </label>
           </div>`).join('')}
         <button class="btn-add-row" onclick="addCleaningStaff(${pi})">＋ スタッフを追加</button>
         <div class="divider"></div>
@@ -2446,11 +2455,30 @@ function updateCleaningStaff(pi, si, field, val) {
 }
 function addCleaningStaff(pi) {
   if (!properties[pi].cleaningStaff) properties[pi].cleaningStaff = [];
-  properties[pi].cleaningStaff.push({ name: '', phone: '', fee: null });
+  properties[pi].cleaningStaff.push({ name: '', phone: '', fee: null, retired: false });
   saveData();
   renderSettingsKeepOpen();
 }
+// このスタッフが担当している予約の件数（過去分含む）
+function countBookingsForStaff(name) {
+  if (!name) return 0;
+  return Object.keys(bookingChecks).filter(c => {
+    const k = bookingChecks[c] || {};
+    return k.cleaningStaffName === name || k.staff2Name === name;
+  }).length;
+}
 function removeCleaningStaff(pi, si) {
+  const s = properties[pi].cleaningStaff[si] || {};
+  const used = countBookingsForStaff(s.name);
+  // 過去の予約で使われている場合のみ確認する（未使用ならそのまま削除）
+  // 削除すると清掃料金の参照先が消え、金額を手入力していない予約の経費が
+  // 物件デフォルトに変わってしまうため
+  if (used > 0 && !confirm(
+    `「${s.name}」は ${used}件の予約で担当になっています。\n\n` +
+    `削除すると、清掃費を手入力していない予約の金額が物件のデフォルト清掃費に変わり、\n過去の月の経費・利益がずれてしまいます。\n\n` +
+    `代わりに「退職」にチェックを入れると、今後の予約では選べなくなり、過去の記録と金額はそのまま残ります。\n\n` +
+    `それでも削除しますか？`
+  )) return;
   properties[pi].cleaningStaff.splice(si, 1);
   saveData();
   renderSettingsKeepOpen();
