@@ -6600,20 +6600,31 @@ async function fetchYokohamaEvents() {
       if (matched.length === 0) return true; // 日付抽出できない場合は表示
       return matched.some(d => d >= stayS && d <= stayE);
     }
-    const filteredEvents = events.filter(ev => hasDatesInStay(ev.dates));
+    // ゲスト向けでないイベントを除外する
+    // 実例：2026-08にEricさん宛の案内へ「（講師募集）たちかわワークショップフェスタ」
+    // （＝講師の募集告知で参加イベントですらない）が入ってしまった
+    const NG_TITLE = /募集|セミナー|シンポジウム|講演会|研修|説明会|勉強会|採用|求人|総会|商談|相談会|会員限定|入札|パブリックコメント|献血/;
+    // 観光客が喜ぶイベント（祭り・花火など）を優先的に上位へ
+    // ひらがな表記（えんにち・はなび等）も拾えるようにしておく
+    const PRIORITY_TITLE = /まつり|祭り|祭|花火|はなび|フェス|マルシェ|縁日|えんにち|盆踊|ぼんおどり|ライトアップ|イルミネーション|屋台|夜店/;
+    const pri = ev => PRIORITY_TITLE.test(ev.title || '') ? 1 : 0;
+    const filteredEvents = events
+      .filter(ev => hasDatesInStay(ev.dates))
+      .filter(ev => !NG_TITLE.test(ev.title || ''))
+      .sort((a, b) => pri(b) - pri(a));
     welcomeEventData = { events: filteredEvents, startDate, endDate, fetchedAt: new Date(), targetUrl };
-    // プレビュー表示
-    if (events.length === 0) {
+    // プレビュー表示（除外後のリストを表示＝生成される文面と一致させる）
+    if (filteredEvents.length === 0) {
       if (preview) preview.innerHTML = `<div style="font-size:12px;color:#aaa;padding:8px">この期間のイベント情報はありませんでした</div>`;
     } else {
-      const rows = events.map(ev => `
+      const rows = filteredEvents.map(ev => `
         <div style="padding:7px 0;border-bottom:1px solid #E8E6E1">
           <div style="font-size:13px;font-weight:700;color:#333;line-height:1.4">${ev.title}</div>
           ${ev.dates  ? `<div style="font-size:11px;color:#888;margin-top:2px">📅 ${formatEventDatesForStay(ev.dates, startDate, endDate)}</div>` : ''}
           ${(ev.venue||ev.area) ? `<div style="font-size:11px;color:#888;margin-top:1px">📍 ${ev.venue||ev.area}</div>` : ''}
         </div>`).join('');
       if (preview) preview.innerHTML = `
-        <div style="font-size:11px;color:#aaa;margin-bottom:6px">✅ ${events.length}件取得（${startDate} 〜 ${endDate}）</div>
+        <div style="font-size:11px;color:#aaa;margin-bottom:6px">✅ ${filteredEvents.length}件（${startDate} 〜 ${endDate}／募集・セミナー等は除外済み）</div>
         <div style="background:#F5F5F4;border-radius:8px;padding:8px 12px">${rows}</div>
         <div style="font-size:10px;color:#aaa;margin-top:6px;text-align:right">
           <a href="${targetUrl}" target="_blank" style="color:#4a7fc1">横浜市サイトで確認 →</a>
@@ -6685,6 +6696,9 @@ async function fetchWelcomeWeather() {
     const wArea = findArea(weatherSeries.areas);
     const weathers = wArea?.weathers
       || (wArea?.weatherCodes || []).map(c => jmaCodeToText(c));
+    // 降水確率（週間予報のpops）。天気の文言が「くもり時々晴れ」でも
+    // 降水確率30%以上の日があれば傘を案内するために使う
+    const pops = wArea?.pops || [];
     let tempsMax = [], tempsMin = [];
     if (tempSeries) {
       const tArea = findArea(tempSeries.areas);
@@ -6699,6 +6713,7 @@ async function fetchWelcomeWeather() {
         weather: (weathers[i] || '').replace(/[　\s]+/g, '').trim(),
         tempMax: (tempsMax[i] !== '' && tempsMax[i] != null) ? String(tempsMax[i]) : (sup.max || null),
         tempMin: (tempsMin[i] !== '' && tempsMin[i] != null) ? String(tempsMin[i]) : (sup.min || null),
+        pop: (pops[i] !== '' && pops[i] != null) ? parseInt(pops[i]) : null,
       };
     }).filter(d => d.weather);
     welcomeWeatherData = { area, days, fetchedAt: new Date() };
@@ -6823,6 +6838,10 @@ function buildWeatherComment(days, areaName, hasTyphoon = false) {
   const minMax = Math.min(...maxArr), maxMax = Math.max(...maxArr);
   const avgMax = Math.round(maxArr.reduce((a,b)=>a+b,0)/maxArr.length);
   const hasRain = days.some(d => d.weather.includes('雨'));
+  // 天気の文言が「くもり時々晴れ」でも降水確率が高い日はある。
+  // 文言だけ見て「雨の心配なし」と案内してしまうのを防ぐため降水確率も見る
+  const popDays = days.filter(d => d.pop != null && d.pop >= 30);
+  const maxPop  = popDays.length ? Math.max(...popDays.map(d => d.pop)) : 0;
   // 梅雨判定（6月・7月20日以前）
   const firstDate = days[0]?.date;
   const isTsuyu = firstDate && (firstDate.getMonth() === 5 || (firstDate.getMonth() === 6 && firstDate.getDate() <= 20));
@@ -6832,7 +6851,15 @@ function buildWeatherComment(days, areaName, hasTyphoon = false) {
   else if (avgMax >= 23)      c += `日中${minMax}〜${maxMax}°Cまで上がり、初夏の陽気です。紫外線対策もお忘れなく。`;
   else if (avgMax >= 18)      c += `日中${minMax}〜${maxMax}°Cまで上がります。${minMin < 12 ? '朝晩はひんやりするので' : ''}長袖シャツや薄手のジャケットがちょうどよい気候です。`;
   else                        c += `日中も${minMax}〜${maxMax}°C程度とかなりひんやりします。暖かい服装でお越しください。`;
-  if (hasRain && !hasTyphoon) c += '\n折りたたみ傘を持っておくと便利です。';
+  if (!hasTyphoon) {
+    if (hasRain) {
+      c += '\n折りたたみ傘を持っておくと便利です。';
+    } else if (popDays.length >= Math.max(2, Math.ceil(days.length / 2))) {
+      c += `\nまた、期間中は毎日${maxPop}%ほどの降水確率が出ていますので、折りたたみ傘があると安心です。`;
+    } else if (popDays.length > 0) {
+      c += `\nまた、一部の日は降水確率が${maxPop}%ほどありますので、折りたたみ傘があると安心です。`;
+    }
+  }
   c += closing;
   return c;
 }
