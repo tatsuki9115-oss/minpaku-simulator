@@ -4509,6 +4509,8 @@ function renderAnnual() {
     const isActual = operatingProps.some(p => hasActualCosts(p.id, mYear, m));
 
     let rev = 0, varCosts = 0, nights = 0, adrRev = 0, adrBookings = 0, leadSum = 0, leadCnt = 0, leadSumL = 0, leadCntL = 0, revAirbnb = 0, revBooking = 0;
+    // 長期滞在（28泊以上＝定期借家）の集計。ADR・稼働の計算には入れず参考表示のみに使う
+    let longNights = 0, longRev = 0, longBookings = 0;
     mBooks.forEach(b => {
       if (!b.revenue || b.revenue === 0) return; // ¥0予約はスキップ
       rev += b.revenue;
@@ -4532,6 +4534,7 @@ function renderAnnual() {
       }
       // 【28泊以上】リスティング（定期借家契約）は稼働日数・ADRにカウントしない
       if (!isLongStayListing(b)) { nights += b.nights; adrRev += b.revenue; adrBookings++; }
+      else { longNights += b.nights; longRev += b.revenue; longBookings++; }
     });
     // 実費保存済み物件の変動費を月単位で加算
     operatingProps.forEach(p => { varCosts += getPropMonthActualVarCosts(p, mYear, m); });
@@ -4540,7 +4543,7 @@ function renderAnnual() {
     const dim = getDaysInMonth(mYear, m);
     const activePropCount = Math.max(operatingProps.length, 1);
     const maxNights = dim * activePropCount;
-    return { month: m, year: mYear, revenue: rev, profit, nights, adrRev, adrBookings, leadSum, leadCnt, leadSumL, leadCntL, revAirbnb, revBooking, bookings: mBooks.length, daysInMonth: dim, maxNights, occRate: Math.min(Math.round(nights / maxNights * 100), 100), monthFixedCosts, monthTaxableFixedCosts, varCosts, isActual, operatingProps };
+    return { month: m, year: mYear, revenue: rev, profit, nights, adrRev, adrBookings, leadSum, leadCnt, leadSumL, leadCntL, revAirbnb, revBooking, bookings: mBooks.length, daysInMonth: dim, maxNights, occRate: Math.min(Math.round(nights / maxNights * 100), 100), monthFixedCosts, monthTaxableFixedCosts, varCosts, isActual, operatingProps, longNights, longRev, longBookings };
   });
 
   const validMonths = monthlyStats.filter(Boolean);
@@ -4704,6 +4707,9 @@ function renderAnnual() {
   const totalBookings = validMonths.reduce((s, m) => s + m.bookings, 0);
   const totalAdrRev = validMonths.reduce((s, m) => s + (m.adrRev || 0), 0);
   const totalADR = adrPair(totalAdrRev, totalNights);
+  // 長期滞在（28泊以上）の年間合計。参考表示のみでADR・稼働・RevPARには含めない
+  const totalLongNights = validMonths.reduce((s, m) => s + (m.longNights || 0), 0);
+  const totalLongRev    = validMonths.reduce((s, m) => s + (m.longRev || 0), 0);
   const avgPerNight = totalNights > 0 ? Math.round(totalRevenue / totalNights) : 0;
   // 追加KPI：RevPAR・平均滞在日数(LOS)・リードタイム・チャネル構成比
   const totalMaxNights = validMonths.reduce((s, m) => s + (m.maxNights || 0), 0);
@@ -4848,7 +4854,7 @@ function renderAnnual() {
       <div style="height:1px;background:#f0f0f0;margin:14px 0 12px"></div>
       <div class="month-table-wrap">
       <table class="month-table">
-        <thead><tr><th>月</th><th>件</th><th style="color:#C8C5C0">ゲスト</th><th>受取</th><th>ADR<br><span style="font-size:9px;font-weight:400;color:#C8C5C0">受取/ゲスト</span></th><th>RevPAR</th><th>利益</th><th>利益率</th><th>稼働</th></tr></thead>
+        <thead><tr><th>月</th><th>件</th><th style="color:#C8C5C0">ゲスト</th><th>受取</th><th>ADR<br><span style="font-size:9px;font-weight:400;color:#C8C5C0">受取/ゲスト</span><br><span style="font-size:8.5px;font-weight:400;color:#4a7fc1">長=長期(計算外)</span></th><th>RevPAR</th><th>利益</th><th>利益率</th><th>稼働</th></tr></thead>
         <tbody>
           ${monthlyStats.map((ms, i) => {
             const mo = fyMonthOrder[i];
@@ -4857,12 +4863,17 @@ function renderAnnual() {
             const gp = getGuestPayment(ms.revenue);
             const mMargin = ms.revenue > 0 ? Math.round(ms.profit/ms.revenue*100) : null;
             const adr = adrPair(ms.adrRev, ms.nights);
+            // 長期滞在（28泊以上）のADRは計算に入れず、参考値として青字で併記する
+            const longAdr = ms.longNights > 0 ? Math.round(ms.longRev / ms.longNights) : 0;
+            const longCell = longAdr > 0
+              ? `<br><span style="font-size:9.5px;color:#4a7fc1;font-weight:700" title="長期滞在${ms.longNights}泊（定期借家扱い・ADR/稼働の計算には含めていません）">長 ${fmtShort(longAdr)}</span>`
+              : '';
             return `<tr style="cursor:pointer" onclick="document.getElementById('mcard-${ms.month}').scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>{var body=document.getElementById('mcard-${ms.month}').querySelector('.month-detail-body');if(!body.classList.contains('open')){body.classList.add('open');var ch=document.getElementById('mcard-${ms.month}').querySelector('.mchev');if(ch)ch.style.transform='rotate(180deg)';}},300)">
               <td>${ms.month}月</td>
               <td>${ms.bookings}</td>
               <td style="color:#C8C5C0;font-size:11px">${fmtShort(gp)}</td>
               <td>${fmtShort(ms.revenue)}</td>
-              <td style="font-size:11px">${adr.host>0?fmtShort(adr.host):'—'}<br><span style="font-size:10px;color:#C8C5C0">${adr.guest>0?fmtShort(adr.guest):''}</span></td>
+              <td style="font-size:11px">${adr.host>0?fmtShort(adr.host):'—'}<br><span style="font-size:10px;color:#C8C5C0">${adr.guest>0?fmtShort(adr.guest):''}</span>${longCell}</td>
               <td style="font-size:11px">${ms.maxNights>0&&ms.adrRev>0?fmtShort(Math.round(ms.adrRev/ms.maxNights)):'—'}</td>
               <td class="td-profit ${isMP?'profit':'loss'}">${isMP?'':'▲'}${fmtShort(Math.abs(ms.profit))}</td>
               <td class="td-profit ${isMP?'profit':'loss'}">${mMargin!==null?(isMP?'':'▲')+Math.abs(mMargin)+'%':'—'}</td>
@@ -4873,7 +4884,7 @@ function renderAnnual() {
             <td>合計</td><td>${totalBookings}件</td>
             <td style="color:#C8C5C0;font-size:11px">${fmtShort(totalGuestPayment)}</td>
             <td>${fmtShort(totalRevenue)}</td>
-            <td style="font-size:11px">${totalADR.host>0?fmtShort(totalADR.host):'—'}<br><span style="font-size:10px;color:#C8C5C0">${totalADR.guest>0?fmtShort(totalADR.guest):''}</span></td>
+            <td style="font-size:11px">${totalADR.host>0?fmtShort(totalADR.host):'—'}<br><span style="font-size:10px;color:#C8C5C0">${totalADR.guest>0?fmtShort(totalADR.guest):''}</span>${totalLongNights>0?`<br><span style="font-size:9.5px;color:#4a7fc1;font-weight:700" title="長期滞在の合計${totalLongNights}泊（ADR/稼働の計算には含めていません）">長 ${fmtShort(Math.round(totalLongRev/totalLongNights))}</span>`:''}</td>
             <td style="font-size:11px">${totalRevPAR>0?fmtShort(totalRevPAR):'—'}</td>
             <td class="td-profit ${isAP?'profit':'loss'}">${isAP?'':'▲'}${fmtShort(Math.abs(totalProfit))}</td>
             <td class="td-profit ${isAP?'profit':'loss'}">${totalRevenue>0?(isAP?'':'▲')+Math.abs(Math.round(totalProfit/totalRevenue*100))+'%':'—'}</td>
