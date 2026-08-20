@@ -5406,7 +5406,7 @@ function showLineMessageModal(title, msg) {
         <button onclick="document.body.removeChild(document.querySelector('[data-line-modal]'))" style="background:none;border:none;font-size:24px;color:#bbb;cursor:pointer;line-height:1;padding:0 4px">×</button>
       </div>
       <textarea id="line-msg-area" readonly style="flex:1;min-height:220px;border:1.5px solid #eee;border-radius:12px;padding:14px;font-size:14px;line-height:1.8;color:#333;resize:none;font-family:inherit;background:#f8f8f8;white-space:pre">${escHtml(msg)}</textarea>
-      <button onclick="(function(){const t=document.getElementById('line-msg-area');if(navigator.clipboard){navigator.clipboard.writeText(t.value).then(()=>showToast('コピーしました！LINEに貼り付けてください','success')).catch(()=>{t.select();document.execCommand('copy');showToast('コピーしました！','success')});}else{t.select();document.execCommand('copy');showToast('コピーしました！','success');}})()" style="margin-top:12px;flex-shrink:0;width:100%;padding:15px;background:#00B900;border:none;border-radius:12px;color:white;font-size:15px;font-weight:800;cursor:pointer;letter-spacing:.5px">
+      <button onclick="copyLineMsg(this)" style="margin-top:12px;flex-shrink:0;width:100%;padding:15px;background:#00B900;border:none;border-radius:12px;color:white;font-size:15px;font-weight:800;cursor:pointer;letter-spacing:.5px">
         📋 コピーしてLINEに貼り付け
       </button>
     </div>`;
@@ -6041,7 +6041,7 @@ function renderMessageTab() {
       <div class="card-title">${msgMode === 'welcome' ? 'ウェルカムメッセージ' : msgMode === 'emergency' ? '緊急時メッセージ' : msgMode === 'transit' ? '運行情報乱れメッセージ' : '生成されたプロンプト'}</div>
       <textarea id="msg-prompt-area" readonly style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:12px;font-size:13px;line-height:1.7;min-height:300px;background:#F5F5F4;font-family:'Noto Sans JP',sans-serif;box-sizing:border-box;color:#333;resize:none"></textarea>
       <div style="display:grid;grid-template-columns:${(msgMode === 'welcome' || msgMode === 'emergency' || msgMode === 'transit') ? '1fr' : '1fr 1fr'};gap:10px;margin-top:12px">
-        <button onclick="copyMsgPrompt()" style="padding:14px;background:#1C1C1E;border:none;border-radius:12px;color:white;font-size:14px;font-weight:800;cursor:pointer">
+        <button onclick="copyMsgPrompt(this)" style="padding:14px;background:#1C1C1E;border:none;border-radius:12px;color:white;font-size:14px;font-weight:800;cursor:pointer">
           📋 コピー
         </button>
         ${(msgMode !== 'welcome' && msgMode !== 'emergency' && msgMode !== 'transit') ? `<a href="https://claude.ai/project/019d7f68-1586-74f9-881a-40589cd54489" target="_blank" style="padding:14px;background:#7c3aed;border:none;border-radius:12px;color:white;font-size:14px;font-weight:800;cursor:pointer;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:4px">🤖 民泊botを開く</a>` : ''}
@@ -7385,17 +7385,81 @@ Step 1の整理 → Step 2の判断 → （必要なら）Step 3の作成、の�
   showToast('プロンプトを生成しました！', 'success');
 }
 
-function copyMsgPrompt() {
-  const ta = document.getElementById('msg-prompt-area');
+// テキストをクリップボードへコピーする共通処理。成功したかどうかを返す
+// ・iOS Safari は readonly の textarea に select() しても選択できず
+//   execCommand('copy') が黙って失敗する → readonly を一時的に外し
+//   setSelectionRange で範囲指定してからコピーする
+// ・navigator.clipboard は https（secure context）でしか使えないので
+//   file:// で開いた場合などはフォールバックへ回す
+async function copyTextToClipboard(text, el) {
+  if (!text) return false;
+  // 1) 標準API
+  if (navigator.clipboard && window.isSecureContext) {
+    try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* 2)へ */ }
+  }
+  // 2) フォールバック：選択して execCommand
+  let target = el, temp = false;
+  if (!target || typeof target.value !== 'string') {
+    target = document.createElement('textarea');
+    target.value = text;
+    target.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;border:0;padding:0';
+    document.body.appendChild(target);
+    temp = true;
+  }
+  const wasReadonly = target.hasAttribute('readonly');
+  try {
+    if (wasReadonly) target.removeAttribute('readonly'); // iOS対策
+    target.focus();
+    target.select();
+    if (target.setSelectionRange) target.setSelectionRange(0, target.value.length); // iOS対策
+    return document.execCommand('copy') === true;
+  } catch (e) {
+    return false;
+  } finally {
+    if (wasReadonly) target.setAttribute('readonly', '');
+    if (temp) target.remove();
+    else { target.blur(); window.getSelection?.().removeAllRanges(); }
+  }
+}
+
+// コピー成功をボタン上でも知らせる（トーストを見落としても分かるように）
+// 元のラベルは dataset に1度だけ保存する。連打で「✅ コピーしました」を
+// 元ラベルとして覚えてしまい、表示が戻らなくなるのを防ぐため
+function flashCopied(btn) {
+  if (!btn) return;
+  if (!btn.dataset.copyLabel) btn.dataset.copyLabel = btn.innerHTML;
+  btn.innerHTML = '✅ コピーしました';
+  clearTimeout(btn._copyTimer);
+  btn._copyTimer = setTimeout(() => { btn.innerHTML = btn.dataset.copyLabel; }, 1600);
+}
+
+// コピーに失敗したときは「✅」表示を残さない（直前の成功表示が誤解を招くため）
+function clearCopiedFlash(btn) {
+  if (!btn || !btn.dataset.copyLabel) return;
+  clearTimeout(btn._copyTimer);
+  btn.innerHTML = btn.dataset.copyLabel;
+}
+
+async function copyLineMsg(btn) {
+  const ta = document.getElementById('line-msg-area');
   if (!ta || !ta.value) return;
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(ta.value)
-      .then(() => showToast('コピーしました！民泊botに貼り付けてください', 'success'))
-      .catch(() => { ta.select(); document.execCommand('copy'); showToast('コピーしました！', 'success'); });
+  const ok = await copyTextToClipboard(ta.value, ta);
+  if (ok) { showToast('コピーしました！LINEに貼り付けてください', 'success'); flashCopied(btn); }
+  else    { clearCopiedFlash(btn); showToast('コピーできませんでした。文面を長押し→全選択してコピーしてください', 'error'); }
+}
+
+async function copyMsgPrompt(btn) {
+  const ta = document.getElementById('msg-prompt-area');
+  if (!ta || !ta.value) { showToast('先にメッセージを生成してください', 'error'); return; }
+  const ok = await copyTextToClipboard(ta.value, ta);
+  if (ok) {
+    // ゲストへ送る文面と、民泊botへ渡すプロンプトで貼り付け先が違う
+    const isGuestMsg = msgMode === 'welcome' || msgMode === 'emergency' || msgMode === 'transit';
+    showToast(isGuestMsg ? 'コピーしました！メッセージに貼り付けてください' : 'コピーしました！民泊botに貼り付けてください', 'success');
+    flashCopied(btn);
   } else {
-    ta.select();
-    document.execCommand('copy');
-    showToast('コピーしました！', 'success');
+    clearCopiedFlash(btn);
+    showToast('コピーできませんでした。文面を長押し→全選択してコピーしてください', 'error');
   }
 }
 
