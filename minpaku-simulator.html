@@ -6367,6 +6367,21 @@ const YOKOHAMA_VENUE_ACCESS = {
   'バンテリンドーム':     '関内駅（JR・市営地下鉄）徒歩3分',
   '日産スタジアム':       '小机駅（JR横浜線）徒歩5分',
   '横浜アリーナ':         '新横浜駅（JR・市営地下鉄）徒歩5分',
+  // ↓ みなとみらい以外の会場。金沢区・西区など離れた会場ほど最寄り駅の案内が効く
+  '臨港パーク':           'みなとみらい駅（みなとみらい線）徒歩8分',
+  'カップヌードルミュージアム': 'みなとみらい駅（みなとみらい線）徒歩8分',
+  '山下公園':             '元町・中華街駅（みなとみらい線）徒歩3分',
+  '中華街':               '元町・中華街駅（みなとみらい線）すぐ',
+  '大さん橋':             '日本大通り駅（みなとみらい線）徒歩7分',
+  '掃部山':               '桜木町駅（JR・市営地下鉄）徒歩10分',
+  '野毛山':               '桜木町駅（JR・市営地下鉄）徒歩15分',
+  '三溪園':               '根岸駅（JR根岸線）からバス10分',
+  '横浜髙島屋':           '横浜駅（各線）直結',
+  '横浜高島屋':           '横浜駅（各線）直結',
+  'そごう横浜':           '横浜駅（各線）徒歩3分',
+  '海の公園':             '海の公園柴口駅（シーサイドライン）徒歩2分',
+  '八景島':               '八景島駅（シーサイドライン）すぐ',
+  'ズーラシア':           '鶴ヶ峰駅（相鉄線）からバス15分',
 };
 function getVenueAccess(venue) {
   if (!venue) return null;
@@ -6530,8 +6545,15 @@ async function fetchYokohamaEvents() {
   const area = getWelcomeArea(b);
   if (!area.eventBaseUrl) { showToast('このエリアはイベント取得非対応です', 'error'); return; }
   const toIso = s => { const [y,m,d] = s.split('/'); return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`; };
+  // チェックアウト日は午前中に退去するのでイベント案内の対象外。最終宿泊日までとする
+  // （いまたま側 fetchImatamaEvents も cout-1日 を使っており、そちらと定義を揃える）
+  const toIsoMinus1 = s => {
+    const [y,m,d] = s.split('/').map(Number);
+    const dt = new Date(y, m - 1, d - 1);
+    return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+  };
   const startDate = toIso(b.checkin || '');
-  const endDate   = toIso(getCheckout(b) || '');
+  const endDate   = toIsoMinus1(getCheckout(b) || '');
   const targetUrl = `${area.eventBaseUrl}?start_date=${startDate}&end_date=${endDate}`;
   const btn     = document.getElementById('welcome-event-btn');
   const preview = document.getElementById('welcome-event-preview');
@@ -6576,19 +6598,30 @@ async function fetchYokohamaEvents() {
         if (label === '開催日程') dates  = text;
         if (label === '住所')    address = text;
       });
-      if (title) events.push({ title, href, area: area2, dates, address, venue: '', access: null });
+      if (title) events.push({ title, href, area: area2, dates, address, venue: '', station: null });
     });
-    // 詳細ページを並列フェッチ（上位5件のみ）→ フル日程・会場・アクセスを補完
+    // ゲスト向けでないイベントを除外する
+    // 実例：2026-08にEricさん宛の案内へ「（講師募集）たちかわワークショップフェスタ」
+    // （＝講師の募集告知で参加イベントですらない）が入ってしまった
+    // 詳細ページ取得より先に除外する。案内候補にだけ会場・最寄り駅を補完するため
+    const NG_TITLE = /募集|セミナー|シンポジウム|講演会|研修|説明会|勉強会|採用|求人|総会|商談|相談会|会員限定|入札|パブリックコメント|献血/;
+    const candidates = events.filter(ev => !NG_TITLE.test(ev.title || ''));
+    // 詳細ページを並列フェッチ（上位8件）→ フル日程・会場・最寄り駅を補完
+    // 掲載枠は5件だが、日付フィルターで脱落する分を見込んで多めに取る
     if (btn) btn.textContent = '⏳ 詳細情報取得中...';
+    const detailTargets = candidates.slice(0, 8);
     const detailResults = await Promise.allSettled(
-      events.slice(0, 5).map(ev => ev.href ? fetchEventDetailInfo(ev.href, proxyFnUsed || (u => u)) : Promise.resolve(null))
+      detailTargets.map(ev => ev.href ? fetchEventDetailInfo(ev.href, proxyFnUsed || (u => u)) : Promise.resolve(null))
     );
     detailResults.forEach((r, i) => {
       if (r.status === 'fulfilled' && r.value) {
-        if (r.value.dates) events[i].dates  = r.value.dates;
+        if (r.value.dates) detailTargets[i].dates = r.value.dates;
         if (r.value.venue) {
-          events[i].venue  = r.value.venue;
-          events[i].access = getVenueAccess(r.value.venue);
+          detailTargets[i].venue   = r.value.venue;
+          // 表示側は ev.station を見るので station に入れる（access に入れると出ない）
+          // 駅は「実際に表示する会場名（短縮後）」から引く。複数会場の羅列で
+          // 画面に出ていない会場の駅を案内してしまうのを防ぐ
+          detailTargets[i].station = getVenueAccess(shortenVenue(r.value.venue));
         }
       }
     });
@@ -6611,19 +6644,20 @@ async function fetchYokohamaEvents() {
       if (matched.length === 0) return true; // 日付抽出できない場合は表示
       return matched.some(d => d >= stayS && d <= stayE);
     }
-    // ゲスト向けでないイベントを除外する
-    // 実例：2026-08にEricさん宛の案内へ「（講師募集）たちかわワークショップフェスタ」
-    // （＝講師の募集告知で参加イベントですらない）が入ってしまった
-    const NG_TITLE = /募集|セミナー|シンポジウム|講演会|研修|説明会|勉強会|採用|求人|総会|商談|相談会|会員限定|入札|パブリックコメント|献血/;
     // 観光客が喜ぶイベント（祭り・花火など）を優先的に上位へ
     // ひらがな表記（えんにち・はなび等）も拾えるようにしておく
     const PRIORITY_TITLE = /まつり|祭り|祭|花火|はなび|フェス|マルシェ|縁日|えんにち|盆踊|ぼんおどり|ライトアップ|イルミネーション|屋台|夜店/;
     const pri = ev => PRIORITY_TITLE.test(ev.title || '') ? 1 : 0;
-    const filteredEvents = events
-      .filter(ev => hasDatesInStay(ev.dates))
-      .filter(ev => !NG_TITLE.test(ev.title || ''))
-      .sort((a, b) => pri(b) - pri(a));
-    welcomeEventData = { events: filteredEvents, startDate, endDate, fetchedAt: new Date(), targetUrl };
+    const inStayEvents = candidates.filter(ev => hasDatesInStay(ev.dates));
+    // 掲載枠（5件）は優先度で選び、選んだ5件は日付順に並べ替えて案内する
+    // （日付がバラバラの順で並ぶと滞在中の予定を立てにくいため）
+    // プレビューと文面を一致させるため、ここで最終的な表示順まで確定させる
+    const filteredEvents = inStayEvents
+      .slice()
+      .sort((a, b) => pri(b) - pri(a))
+      .slice(0, 5)
+      .sort((a, b) => eventStartTime(a.dates, stayS, stayE) - eventStartTime(b.dates, stayS, stayE));
+    welcomeEventData = { events: filteredEvents, startDate, endDate, totalCount: inStayEvents.length, fetchedAt: new Date(), targetUrl };
     // プレビュー表示（除外後のリストを表示＝生成される文面と一致させる）
     if (filteredEvents.length === 0) {
       if (preview) preview.innerHTML = `<div style="font-size:12px;color:#aaa;padding:8px">この期間のイベント情報はありませんでした</div>`;
@@ -6632,10 +6666,10 @@ async function fetchYokohamaEvents() {
         <div style="padding:7px 0;border-bottom:1px solid #E8E6E1">
           <div style="font-size:13px;font-weight:700;color:#333;line-height:1.4">${ev.title}</div>
           ${ev.dates  ? `<div style="font-size:11px;color:#888;margin-top:2px">📅 ${formatEventDatesForStay(ev.dates, startDate, endDate)}</div>` : ''}
-          ${(ev.venue||ev.area) ? `<div style="font-size:11px;color:#888;margin-top:1px">📍 ${ev.venue||ev.area}</div>` : ''}
+          ${(ev.venue||ev.area) ? `<div style="font-size:11px;color:#888;margin-top:1px">📍 ${shortenVenue(ev.venue||ev.area)}${ev.station ? `（最寄：${ev.station}）` : ''}</div>` : ''}
         </div>`).join('');
       if (preview) preview.innerHTML = `
-        <div style="font-size:11px;color:#aaa;margin-bottom:6px">✅ ${filteredEvents.length}件（${startDate} 〜 ${endDate}／募集・セミナー等は除外済み）</div>
+        <div style="font-size:11px;color:#aaa;margin-bottom:6px">✅ ${inStayEvents.length}件中${filteredEvents.length}件を掲載（${startDate} 〜 ${endDate}／募集・セミナー等は除外済み）</div>
         <div style="background:#F5F5F4;border-radius:8px;padding:8px 12px">${rows}</div>
         <div style="font-size:10px;color:#aaa;margin-top:6px;text-align:right">
           <a href="${targetUrl}" target="_blank" style="color:#4a7fc1">横浜市サイトで確認 →</a>
@@ -6731,7 +6765,7 @@ async function fetchWelcomeWeather() {
     // プレビュー表示
     const dow = ['日','月','火','水','木','金','土'];
     const rows = days.map(d => {
-      const temp = (d.tempMax || d.tempMin) ? `${d.tempMax ?? '?'}°C / ${d.tempMin ?? '?'}°C` : '―';
+      const temp = formatDayTemp(d) || '―';
       return `<tr><td style="padding:5px 8px;font-size:12px;white-space:nowrap">${d.date.getMonth()+1}/${d.date.getDate()}(${dow[d.date.getDay()]})</td><td style="padding:5px 8px;font-size:12px">${d.weather}</td><td style="padding:5px 8px;font-size:12px;text-align:right;white-space:nowrap">${temp}</td></tr>`;
     }).join('');
     if (preview) preview.innerHTML = `<div style="font-size:11px;color:#aaa;margin-bottom:6px">✅ 取得完了（${area.label}）</div><table style="width:100%;border-collapse:collapse;background:#F5F5F4;border-radius:8px;overflow:hidden">${rows}</table>`;
@@ -6833,7 +6867,7 @@ function renderTyphoonBox() {
     </div>`;
 }
 
-function buildWeatherComment(days, areaName, hasTyphoon = false) {
+function buildWeatherComment(days, areaName, hasTyphoon = false, periodPrefix = '今週の') {
   const valid = days.filter(d => d.tempMax !== null && d.tempMin !== null);
   const closing = hasTyphoon
     ? `\nどうぞ安全にお過ごしください。お気をつけて。`
@@ -6856,7 +6890,7 @@ function buildWeatherComment(days, areaName, hasTyphoon = false) {
   // 梅雨判定（6月・7月20日以前）
   const firstDate = days[0]?.date;
   const isTsuyu = firstDate && (firstDate.getMonth() === 5 || (firstDate.getMonth() === 6 && firstDate.getDate() <= 20));
-  let c = `今週の${areaName}は、朝晩${minMin}〜${maxMin}°C、`;
+  let c = `${periodPrefix}${areaName}は、朝晩${minMin}〜${maxMin}°C、`;
   if (avgMax >= 28)           c += `日中${minMax}〜${maxMax}°Cまで上がりかなり暑くなります。熱中症対策・こまめな水分補給をお忘れなく。`;
   else if (avgMax >= 23 && isTsuyu) c += `日中${minMax}〜${maxMax}°Cまで上がる蒸し暑い梅雨の時期です。汗拭きタオルや着替えがあると快適に過ごせます。`;
   else if (avgMax >= 23)      c += `日中${minMax}〜${maxMax}°Cまで上がり、初夏の陽気です。紫外線対策もお忘れなく。`;
@@ -6873,6 +6907,47 @@ function buildWeatherComment(days, areaName, hasTyphoon = false) {
   }
   c += closing;
   return c;
+}
+
+// イベントの並べ替えキー：滞在期間に該当する最も早い日付（無ければ全体の最初の日付）
+function eventStartTime(datesStr, stayS, stayE) {
+  if (!datesStr) return Infinity;
+  const re = /(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日/g;
+  const dates = []; let m; let lastYear = stayS.getFullYear();
+  while ((m = re.exec(datesStr)) !== null) {
+    const y = m[1] ? parseInt(m[1]) : lastYear; lastYear = y;
+    dates.push(new Date(y, parseInt(m[2]) - 1, parseInt(m[3])));
+  }
+  if (!dates.length) return Infinity;
+  const inStay = dates.filter(d => d >= stayS && d <= stayE);
+  const use = inStay.length ? inStay : dates;
+  return Math.min(...use.map(d => d.getTime()));
+}
+
+// 会場名が長すぎる（複数会場の羅列）と1行が読めなくなるので区切りで丸める
+// 例：「みなとみらい21地区 臨港パーク、カップヌードルミュージアムパーク、横浜ハンマーヘッド（9号岸壁、パーク）、耐震バース他」
+function shortenVenue(str, max = 34) {
+  if (!str) return '';
+  let s = String(str).replace(/[\r\n]+/g, ' ').replace(/[　\s]+/g, ' ').trim();
+  if (s.length <= max) return s;
+  const cut = s.slice(0, max);
+  const sep = Math.max(cut.lastIndexOf('、'), cut.lastIndexOf('，'));
+  let base = sep >= 8 ? cut.slice(0, sep) : cut;
+  // 括弧の途中で切れると「（9号岸壁 ほか」のように壊れるので括弧手前まで戻す
+  if (base.lastIndexOf('（') > base.lastIndexOf('）')) base = base.slice(0, base.lastIndexOf('（'));
+  base = base.replace(/[、，\s]+$/, '');
+  return base ? `${base} ほか` : s.slice(0, max);
+}
+
+// 1日分の気温表示。最高・最低の片方しか無い日（当日予報・APIデータ不備）は
+// どちらの値か分からなくなるのでラベルを付ける
+function formatDayTemp(d) {
+  const max = d.tempMax, min = d.tempMin;
+  const same = max != null && min != null && String(max) === String(min);
+  if (same || (max != null && min == null)) return `最高${max}°C`;
+  if (max == null && min != null)           return `最低${min}°C`;
+  if (max != null && min != null)           return `${max}°C / ${min}°C`;
+  return '';
 }
 
 // イベント日程を「滞在期間に該当する日付だけ」に整形する（長い羅列・途切れを防ぐ）
@@ -6901,7 +6976,12 @@ function formatEventDatesForStay(datesStr, stayStartStr, stayEndStr) {
   // 範囲表記：開始〜終了が滞在と重なれば範囲のまま表示
   if (hasRange && dates.length >= 2) {
     const start = dates[0], end = dates[dates.length - 1];
-    if (end >= stayS && start <= stayE) return `${fmtD(start)}〜${fmtD(end)}`;
+    if (end >= stayS && start <= stayE) {
+      // チェックイン前から始まっている期間イベントは、過ぎた日付を見せても仕方ないので
+      // 「開催中」と伝えて終了日だけ出す（例：8月20日〜24日／チェックイン8月21日）
+      if (start < stayS) return `開催中〜${fmtD(end)}`;
+      return `${fmtD(start)}〜${fmtD(end)}`;
+    }
   }
   // 個別日付リスト：滞在期間に該当する日だけ
   const inStay = dates.filter(d => d >= stayS && d <= stayE);
@@ -6920,15 +7000,26 @@ function generateWelcomeMsg() {
   // 挨拶（時間帯によらず「こんにちは」で統一）
   const nameSuffix = guestFirst ? `${guestFirst}さん` : '';
   const greeting = nameSuffix ? `こんにちは、${nameSuffix}！` : `こんにちは！`;
-  // 天気テーブル
+  // 天気テーブル：週間予報は7日分返るが、退去後の予報はゲストには不要なので滞在期間で絞る
+  // （チェックアウト日は移動があるので含める）
   const dow = ['日','月','火','水','木','金','土'];
-  const weatherLines = days.map(d => {
-    // 最高気温＝最低気温のとき（APIデータ不備）は1値のみ表示
-    const sameTemp = d.tempMax != null && d.tempMin != null && String(d.tempMax) === String(d.tempMin);
-    const temp = (d.tempMax || d.tempMin) ? (sameTemp ? ` ${d.tempMax}°C` : ` ${d.tempMax ?? '?'}°C / ${d.tempMin ?? '?'}°C`) : '';
-    return `${d.date.getMonth()+1}月${d.date.getDate()}日(${dow[d.date.getDay()]})：${d.weather}${temp}`;
+  let viewDays = days, isStayRange = false;
+  if (b && b.checkin) {
+    const stayS = parseDateStr(b.checkin);
+    const stayE = parseDateStr(getCheckout(b));
+    if (stayS && stayE) {
+      stayS.setHours(0,0,0,0); stayE.setHours(23,59,59,999);
+      const trimmed = days.filter(d => d.date >= stayS && d.date <= stayE);
+      // 滞在が予報範囲外（先の予約など）で1日も残らない場合は全日程をそのまま出す
+      if (trimmed.length > 0) { viewDays = trimmed; isStayRange = trimmed.length < days.length; }
+    }
+  }
+  const weatherLines = viewDays.map(d => {
+    const temp = formatDayTemp(d);
+    return `${d.date.getMonth()+1}月${d.date.getDate()}日(${dow[d.date.getDay()]})：${d.weather}${temp ? ` ${temp}` : ''}`;
   }).join('\n');
-  const comment = buildWeatherComment(days, area.areaName, welcomeTyphoonInclude && !!welcomeTyphoonData);
+  const weatherHeading = isStayRange ? '＜滞在期間の天気予報＞' : '＜週間天気予報＞';
+  const comment = buildWeatherComment(viewDays, area.areaName, welcomeTyphoonInclude && !!welcomeTyphoonData, isStayRange ? 'ご滞在中の' : '今週の');
   // 台風情報（チェックボックスON時のみ）
   let typhoonBlock = '';
   if (welcomeTyphoonInclude && welcomeTyphoonData) {
@@ -6947,12 +7038,16 @@ function generateWelcomeMsg() {
       const rawDates = formatEventDatesForStay(ev.dates, welcomeEventData.startDate, welcomeEventData.endDate);
       const dt     = rawDates ? `\n　📅 ${rawDates}` : '';
       // 会場＋最寄り駅
-      const venueStr = ev.venue || ev.address || ev.area || '';
+      const venueStr = shortenVenue(ev.venue || ev.address || ev.area || '');
       let placeLabel = venueStr;
       if (ev.station) placeLabel += `（最寄：${ev.station}）`;
       const place  = placeLabel ? `\n　📍 ${placeLabel}` : '';
       // タイトル先頭の装飾記号（◆◇■□★☆●○▼▲◎※＊*・等）を除去（【】ラベルは残す）
-      const title = (ev.title || '').replace(/^[\s　◆◇■□★☆●○▼▲△▽◎※＊*・〇〔〕\-―—~〜]+/, '').trim();
+      // 先頭の装飾記号を除去（【】ラベルは残す）＋「第52回　金沢まつり」のような全角空白を正規化
+      const title = (ev.title || '')
+        .replace(/^[\s　◆◇■□★☆●○▼▲△▽◎※＊*・〇〔〕\-―—~〜]+/, '')
+        .replace(/[　\s]+/g, ' ')
+        .trim();
       return `・${title}${dt}${place}`;
     }).join('\n');
     eventLines = `＜期間中のイベント情報＞\n${evList}\n\n${welcomeEventData.targetUrl}`;
@@ -6967,7 +7062,7 @@ function generateWelcomeMsg() {
   const introLine = hasTyphoon
     ? '安全にお過ごしいただけるよう、天気予報と台風・イベント情報をお知らせします。'
     : '快適に過ごしていただけるよう、天気予報と近隣のイベント情報をお知らせしますので、ぜひご参考にしてください。';
-  let msg = `${greeting}\n\n当施設をご予約いただき、ありがとうございます。\n${introLine}\n\n${typhoonBlock}＜週間天気予報＞\n${weatherLines}\n\n${comment}\n▶ 最新の天気予報はこちら：${area.jmaUrl}\n\n${eventLines}\n\n※ 上記は参考情報です。開催日程・内容は予告なく変更になる場合がありますので、最新情報は各リンクよりご確認ください。有料施設のチケットはお客様ご自身でのご購入をお願いしております。\n\n${closingLine}\n\nTy`;
+  let msg = `${greeting}\n\n当施設をご予約いただき、ありがとうございます。\n${introLine}\n\n${typhoonBlock}${weatherHeading}\n${weatherLines}\n\n${comment}\n▶ 最新の天気予報はこちら：${area.jmaUrl}\n\n${eventLines}\n\n※ 上記は参考情報です。開催日程・内容は予告なく変更になる場合がありますので、最新情報は各リンクよりご確認ください。有料施設のチケットはお客様ご自身でのご購入をお願いしております。\n\n${closingLine}\n\nTy`;
   const ta = document.getElementById('msg-prompt-area');
   if (ta) { ta.value = msg; ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 800) + 'px'; }
   document.getElementById('msg-output-card').style.display = 'block';
