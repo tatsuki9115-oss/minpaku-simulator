@@ -4284,8 +4284,11 @@ function renderDashboard() {
     const meterFY = getCurrentFiscalYear();
     const days180ByProp = getFiscalYearNightsByProp(meterFY);
 
-    const meterRows = properties.map(p => {
-      const max = p.maxAnnualNights || 180;
+    // 旅館業など年間上限のない物件は「180日メーター」の対象外
+    // （実績タブの年間稼働日数管理に「旅館業 — 法的上限なし」として表示される）
+    const meterProps = properties.filter(p => p.maxAnnualNights != null);
+    const meterRows = meterProps.map(p => {
+      const max = p.maxAnnualNights;
       const used = days180ByProp[p.id] || 0;
       const remaining = Math.max(max - used, 0);
       const pct = Math.min(Math.round(used / max * 100), 100);
@@ -4303,7 +4306,7 @@ function renderDashboard() {
       </div>`;
     }).join('');
 
-    html += `<div class="card" style="margin-bottom:12px">
+    if (meterProps.length > 0) html += `<div class="card" style="margin-bottom:12px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
         <div style="font-size:11px;font-weight:800;color:#B0ADA8;letter-spacing:.5px">📅 180日消費メーター（${meterFY}年度・4月起点〜翌3月末）</div>
         <div style="display:inline-flex;align-items:center;gap:5px;background:${seasonColor}18;border-radius:20px;padding:3px 10px">
