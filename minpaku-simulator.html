@@ -1075,6 +1075,14 @@ function fbSave(key, data) {
   return fbdb.ref(key).set(data).catch(e => console.warn('Firebase save error:', e));
 }
 
+// 上限日数の既定値：営業形態から決める（旅館業=上限なし / 特区民泊=365 / 民泊=180）
+function defaultMaxNights(p, def) {
+  if (p && p.licenseType === 'ryokan') return null;
+  if (p && p.licenseType === 'tokku') return 365;
+  if (def && def.maxAnnualNights !== undefined) return def.maxAnnualNights;
+  return 180;
+}
+
 function loadData() {
   try {
     const s = localStorage.getItem(KEYS.properties);
@@ -1085,7 +1093,9 @@ function loadData() {
         if (!p.initialCosts) p.initialCosts = def ? JSON.parse(JSON.stringify(def.initialCosts)) : [];
         if (!p.operationStart && def) p.operationStart = def.operationStart || '';
         if (!p.licenseType) p.licenseType = def ? (def.licenseType || 'minpaku') : 'minpaku';
-        if (p.maxAnnualNights === undefined) p.maxAnnualNights = def ? (def.maxAnnualNights !== undefined ? def.maxAnnualNights : 180) : 180;
+        // ★上限日数は営業形態を優先して補完する。旅館業＝上限なし(null)だが、Firebaseはnullのキーを
+        //   保存しないため再読込でundefinedになる。ここで180に戻すと旅館業が民泊扱いに戻ってしまう
+        if (p.maxAnnualNights === undefined) p.maxAnnualNights = defaultMaxNights(p, def);
         if (!p.cleaningStaff) p.cleaningStaff = [];
       });
       return loaded;
@@ -1212,7 +1222,7 @@ function initFirebaseSync() {
       if (!p.initialCosts) p.initialCosts = def ? JSON.parse(JSON.stringify(def.initialCosts)) : [];
       if (!p.operationStart && def) p.operationStart = def.operationStart || '';
       if (!p.licenseType) p.licenseType = def ? (def.licenseType || 'minpaku') : 'minpaku';
-      if (p.maxAnnualNights === undefined) p.maxAnnualNights = def ? (def.maxAnnualNights !== undefined ? def.maxAnnualNights : 180) : 180;
+      if (p.maxAnnualNights === undefined) p.maxAnnualNights = defaultMaxNights(p, def); // ★営業形態を優先（旅館業=null）
       // 清掃スタッフ: Firebaseの空配列でローカルの登録済みデータを上書きしない
       const localProp = properties.find(lp => lp.id === p.id);
       const localStaff = localProp ? (localProp.cleaningStaff || []) : [];
@@ -2812,8 +2822,10 @@ function renderProfitChart(monthlyStats, monthlyTarget) {
   const profits = monthlyStats.map(m => m ? m.profit : null);
   const validP = profits.filter(p => p !== null);
   if (validP.length === 0) return '<div style="text-align:center;color:#ccc;padding:20px;font-size:13px">データなし</div>';
-  const targetLine = (typeof monthlyTarget === 'number' && monthlyTarget > 0) ? monthlyTarget : null;
-  const maxAbs = Math.max(...validP.map(Math.abs), targetLine || 0, 1);
+  // 目標ラインは複数本に対応（数値1つ、または {value,label,color} の配列）
+  const targets = (Array.isArray(monthlyTarget) ? monthlyTarget : [{ value: monthlyTarget, label: '', color: '#ff9800' }])
+    .filter(t => t && typeof t.value === 'number' && t.value > 0);
+  const maxAbs = Math.max(...validP.map(Math.abs), ...targets.map(t => t.value), 1);
   const W = 300, H = 195;
   const barW = (W / 12) * 0.58;
   const labelH = 32; // 金額＋利益率の2行分の上部余白
@@ -2861,12 +2873,14 @@ function renderProfitChart(monthlyStats, monthlyTarget) {
   }).join('');
 
   let targetLineHtml = '';
-  if (targetLine !== null) {
+  {
     const maxPosBarH = baseline - labelH - 2;
-    const ty = (baseline - targetLine / maxAbs * maxPosBarH).toFixed(1);
     const fmtT = n => n >= 10000 ? '¥'+(n/10000).toFixed(1)+'万/月' : '¥'+n.toLocaleString('ja-JP')+'/月';
-    targetLineHtml = '<line x1="0" y1="'+ty+'" x2="'+W+'" y2="'+ty+'" stroke="#ff9800" stroke-width="1.5" stroke-dasharray="4 3"/>'
-      + '<text x="'+(W-2)+'" y="'+(parseFloat(ty)-3)+'" text-anchor="end" font-size="7.5" font-weight="700" fill="#ff9800">目標 '+fmtT(targetLine)+'</text>';
+    targetLineHtml = targets.slice().sort((a, b) => a.value - b.value).map(t => {
+      const ty = (baseline - t.value / maxAbs * maxPosBarH).toFixed(1);
+      return '<line x1="0" y1="'+ty+'" x2="'+W+'" y2="'+ty+'" stroke="'+t.color+'" stroke-width="1.5" stroke-dasharray="4 3"/>'
+        + '<text x="'+(W-2)+'" y="'+(parseFloat(ty)-3)+'" text-anchor="end" font-size="7.5" font-weight="700" fill="'+t.color+'" stroke="white" stroke-width="2" paint-order="stroke">目標 '+fmtT(t.value)+t.label+'</text>';
+    }).join('');
   }
 
   return '<div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;font-size:10px;color:#888;flex-wrap:wrap">'
@@ -4485,6 +4499,15 @@ function renderAnnual() {
     return true;
   });
 
+  // 月の採否は「全物件」基準で判定するための予約一覧（物件フィルターをかけない）
+  // ★物件ごとに判定すると、まだ予約が入っていない物件（例：開業直後のECRU）だけ
+  //   その月が丸ごと消えて固定費が抜け落ち、物件別の合計と全物件の合計が一致しなくなる
+  const yearBooksAllProps = _annualAllBooks.filter(b => {
+    if (!b.checkin || !b.revenue || b.revenue === 0) return false;
+    const [by, bm] = b.checkin.split('/').map(Number);
+    return (by === currentAnnualYear && bm >= 4) || (by === currentAnnualYear + 1 && bm <= 3);
+  });
+
   // 月別統計を計算（会計年度順：4,5,...,12,1,2,3）
   const todayY = new Date().getFullYear();
   const todayM = new Date().getMonth() + 1;
@@ -4496,7 +4519,12 @@ function renderAnnual() {
       return by === mYear && bm === m;
     });
     const isFuture = (mYear > todayY) || (mYear === todayY && m > todayM);
-    if (isFuture && mBooks.length === 0) return null;
+    // 未来の月を落とすかどうかは全物件基準で判定（物件フィルターの影響を受けない）
+    const anyPropHasBooks = yearBooksAllProps.some(b => {
+      const [by, bm] = b.checkin.split('/').map(Number);
+      return by === mYear && bm === m;
+    });
+    if (isFuture && !anyPropHasBooks) return null;
 
     const operatingProps = annualPropFilter === 'all'
       ? properties.filter(p => isPropertyOperating(p, mYear, m))
@@ -4843,8 +4871,19 @@ function renderAnnual() {
   // グラフ＋月別テーブルを1枚のカードに統合（上部に配置）
   {
     const targetPropsForChart = annualPropFilter === 'all' ? properties : properties.filter(p => String(p.id) === String(annualPropFilter));
-    const totalInitialForChart = targetPropsForChart.reduce((s, p) => s + (p.initialCosts || []).reduce((ss, c) => ss + c.amount, 0), 0);
-    const monthlyTarget = totalInitialForChart > 0 ? Math.round(totalInitialForChart / 12) : 0;
+    const initOf = list => list.reduce((s, p) => s + (p.initialCosts || []).reduce((ss, c) => ss + (c.amount || 0), 0), 0);
+    // 年度開始(4月)時点で営業していた物件＝既存 / 年度途中に開業した物件＝新規
+    // 新規物件の初期投資は目標を大きく押し上げるため、既存だけのラインも併記して比べられるようにする
+    const existingProps = targetPropsForChart.filter(p => isPropertyOperating(p, currentAnnualYear, 4));
+    const newProps = targetPropsForChart.filter(p => !isPropertyOperating(p, currentAnnualYear, 4));
+    const totalInitialForChart = initOf(targetPropsForChart);
+    const monthlyTargetAll = totalInitialForChart > 0 ? Math.round(totalInitialForChart / 12) : 0;
+    const monthlyTarget = (existingProps.length > 0 && newProps.length > 0)
+      ? [
+          { value: Math.round(initOf(existingProps) / 12), label: '（'+newProps.map(p => p.name).join('・')+' 除く）', color: '#9e9e9e' },
+          { value: monthlyTargetAll, label: '（全'+targetPropsForChart.length+'件）', color: '#ff9800' },
+        ]
+      : monthlyTargetAll;
     html += `<div class="card" style="margin-bottom:12px">
       <div class="card-title" style="margin-bottom:10px">月別利益（緑＝黒字 / 赤＝赤字）</div>
       ${renderProfitChart(monthlyStats, monthlyTarget)}
