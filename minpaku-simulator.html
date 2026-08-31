@@ -6600,46 +6600,90 @@ async function fetchYokohamaEvents() {
     }
     throw new Error('全プロキシで取得失敗');
   }
-  try {
-    let html = await fetchWithProxy(targetUrl);
-    // 一覧ページをパースしてイベント抽出
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
-    const cards = doc.querySelectorAll('a.event-list-box');
-    const events = [];
-    cards.forEach(card => {
-      const title = card.querySelector('h3.event-list-box-title')?.textContent?.trim();
-      const href  = card.getAttribute('href') || '';
-      let area2 = '', dates = '', address = '';
-      card.querySelectorAll('div.event-list-disc li').forEach(li => {
-        const label = li.querySelector('span.event-disc-category')?.textContent?.trim() || '';
-        const text  = li.textContent.replace(label, '').trim();
-        if (label === 'エリア')  area2   = text;
-        if (label === '開催日程') dates  = text;
-        if (label === '住所')    address = text;
-      });
-      if (title) events.push({ title, href, area: area2, dates, address, venue: '', access: null });
-    });
-    // 詳細ページを並列フェッチ（上位5件のみ）→ フル日程・会場・アクセスを補完
-    if (btn) btn.textContent = '⏳ 詳細情報取得中...';
-    const detailResults = await Promise.allSettled(
-      events.slice(0, 5).map(ev => ev.href ? fetchEventDetailInfo(ev.href, proxyFnUsed || (u => u)) : Promise.resolve(null))
-    );
-    detailResults.forEach((r, i) => {
-      if (r.status === 'fulfilled' && r.value) {
-        if (r.value.dates) events[i].dates  = r.value.dates;
-        if (r.value.venue) {
-          events[i].venue  = r.value.venue;
-          events[i].access = getVenueAccess(r.value.venue);
-        }
+  // 同時アクセス数を絞って順に処理する（横浜市のサイトに負荷をかけないため）
+  async function mapLimit(items, limit, fn) {
+    const out = new Array(items.length);
+    let cursor = 0;
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (cursor < items.length) {
+        const idx = cursor++;
+        try { out[idx] = await fn(items[idx], idx); } catch { out[idx] = null; }
       }
+    }));
+    return out;
+  }
+
+  try {
+    // ===== ① 一覧を「全ページ」取得する =====
+    // ★横浜市サイトは1ページ12件で複数ページに分かれる。以前は1ページ目しか見ておらず、
+    //   滞在期間中の大きなイベント（美術館の企画展・アートフェア・花火シンフォニア等）が
+    //   毎回そっくり抜け落ちていた
+    const parser = new DOMParser();
+    const MAX_PAGES = 15; // 安全弁（12件×15＝最大180件）
+    const events = [];
+    const seenHref = new Set();
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const pageUrl = page === 1 ? targetUrl : `${targetUrl}&page=${page}`;
+      let pageHtml;
+      try { pageHtml = await fetchWithProxy(pageUrl); }
+      catch (e) { if (page === 1) throw e; break; } // 1ページ目が取れなければエラー、途中なら打ち切り
+      const doc = parser.parseFromString(pageHtml, 'text/html');
+      const cards = doc.querySelectorAll('a.event-list-box');
+      if (cards.length === 0) break;
+      cards.forEach(card => {
+        const title = card.querySelector('h3.event-list-box-title')?.textContent?.trim();
+        const href  = card.getAttribute('href') || '';
+        if (!title || (href && seenHref.has(href))) return;
+        if (href) seenHref.add(href);
+        let area2 = '', dates = '', address = '';
+        card.querySelectorAll('div.event-list-disc li').forEach(li => {
+          const label = li.querySelector('span.event-disc-category')?.textContent?.trim() || '';
+          const text  = li.textContent.replace(label, '').trim();
+          if (label === 'エリア')  area2   = text;
+          if (label === '開催日程') dates  = text;
+          if (label === '住所')    address = text;
+        });
+        events.push({ title, href, area: area2, dates, address, venue: '', access: null, detailed: false });
+      });
+      if (btn) btn.textContent = `⏳ 一覧を取得中... (${events.length}件)`;
+      if (!doc.querySelector('a.pagination-next')) break; // 次ページが無ければ終了
+    }
+
+    // ===== ② 先に「ゲスト向けでないもの」を落としてから並べ替える =====
+    // 実例：2026-08にEricさん宛の案内へ「（講師募集）たちかわワークショップフェスタ」
+    // （＝講師の募集告知で参加イベントですらない）が入ってしまった
+    const NG_TITLE_PRE = /募集|セミナー|シンポジウム|講演会|研修|説明会|勉強会|採用|求人|総会|商談|相談会|会員限定|入札|パブリックコメント|献血/;
+    // 観光客が喜ぶイベントを優先的に上位へ（ひらがな表記も拾う）
+    const PRIORITY_PRE = /まつり|祭り|祭|花火|はなび|フェス|マルシェ|縁日|えんにち|盆踊|ぼんおどり|ライトアップ|イルミネーション|屋台|夜店|展覧会|美術館|博物館|ミュージアム|水族館|アートフェア|博覧会|物産展/;
+    const candidates = events
+      .filter(ev => !NG_TITLE_PRE.test(ev.title || ''))
+      .sort((a, b) => (PRIORITY_PRE.test(b.title||'')?1:0) - (PRIORITY_PRE.test(a.title||'')?1:0));
+
+    // ===== ③ 詳細ページでフル日程・会場を補完する =====
+    // ★一覧の「開催日程」は "2026年9月5日(土)、9月2…" のように途中で切れるため、
+    //   詳細を見ないと複数開催日（例：花火の9/5と9/20）を取りこぼす。以前は上位5件だけだった
+    const DETAIL_MAX = 24;
+    const detailTargets = candidates.slice(0, DETAIL_MAX);
+    if (btn) btn.textContent = '⏳ 詳細情報取得中...';
+    await mapLimit(detailTargets, 5, async (ev, i) => {
+      if (!ev.href) return null;
+      const info = await fetchEventDetailInfo(ev.href, proxyFnUsed || (u => u));
+      if (info) {
+        if (info.dates) { ev.dates = info.dates; ev.detailed = true; }
+        if (info.venue) { ev.venue = info.venue; ev.access = getVenueAccess(info.venue); }
+      }
+      if (btn) btn.textContent = `⏳ 詳細情報取得中... (${i + 1}/${detailTargets.length})`;
+      return null;
     });
     // 日付フィルター：滞在期間（startDate〜endDate）に1日も重ならないイベントを除外
     // datesフィールドから "YYYY年M月D日" を抽出し、stay期間内の日付があるか確認
     const stayS = new Date(startDate); stayS.setHours(0,0,0,0);
     const stayE = new Date(endDate);   stayE.setHours(23,59,59,999);
-    function hasDatesInStay(datesStr) {
+    function hasDatesInStay(datesStr, detailed) {
       if (!datesStr) return true; // 日付不明はそのまま表示
+      // ★一覧の日程は「…」で途中が切れている。詳細を取れていないものを
+      //   切れた文字列だけで判定すると、実際は滞在中のイベントを落としてしまう
+      if (!detailed && /[…]|\.\.\./.test(datesStr)) return true;
       // "YYYY年M月D日" または "M月D日" を全て抽出
       const matched = [];
       const re = /(?:(\d{4})年)?(\d{1,2})月(\d{1,2})日/g;
@@ -6653,18 +6697,12 @@ async function fetchYokohamaEvents() {
       if (matched.length === 0) return true; // 日付抽出できない場合は表示
       return matched.some(d => d >= stayS && d <= stayE);
     }
-    // ゲスト向けでないイベントを除外する
-    // 実例：2026-08にEricさん宛の案内へ「（講師募集）たちかわワークショップフェスタ」
-    // （＝講師の募集告知で参加イベントですらない）が入ってしまった
-    const NG_TITLE = /募集|セミナー|シンポジウム|講演会|研修|説明会|勉強会|採用|求人|総会|商談|相談会|会員限定|入札|パブリックコメント|献血/;
-    // 観光客が喜ぶイベント（祭り・花火など）を優先的に上位へ
-    // ひらがな表記（えんにち・はなび等）も拾えるようにしておく
-    const PRIORITY_TITLE = /まつり|祭り|祭|花火|はなび|フェス|マルシェ|縁日|えんにち|盆踊|ぼんおどり|ライトアップ|イルミネーション|屋台|夜店/;
-    const pri = ev => PRIORITY_TITLE.test(ev.title || '') ? 1 : 0;
-    const filteredEvents = events
-      .filter(ev => hasDatesInStay(ev.dates))
-      .filter(ev => !NG_TITLE.test(ev.title || ''))
-      .sort((a, b) => pri(b) - pri(a));
+    // 除外・並べ替えは②で済ませてあるので、ここは日付の最終確認と件数の上限だけ
+    // ★上限：ウェルカムメッセージに載せすぎても読まれないため
+    const SHOW_MAX = 12;
+    const filteredEvents = candidates
+      .filter(ev => hasDatesInStay(ev.dates, ev.detailed))
+      .slice(0, SHOW_MAX);
     welcomeEventData = { events: filteredEvents, startDate, endDate, fetchedAt: new Date(), targetUrl };
     // プレビュー表示（除外後のリストを表示＝生成される文面と一致させる）
     if (filteredEvents.length === 0) {
@@ -6677,7 +6715,7 @@ async function fetchYokohamaEvents() {
           ${(ev.venue||ev.area) ? `<div style="font-size:11px;color:#888;margin-top:1px">📍 ${ev.venue||ev.area}</div>` : ''}
         </div>`).join('');
       if (preview) preview.innerHTML = `
-        <div style="font-size:11px;color:#aaa;margin-bottom:6px">✅ ${filteredEvents.length}件（${startDate} 〜 ${endDate}／募集・セミナー等は除外済み）</div>
+        <div style="font-size:11px;color:#aaa;margin-bottom:6px">✅ ${filteredEvents.length}件を表示（サイト掲載 ${events.length}件から選定／${startDate} 〜 ${endDate}／募集・セミナー等は除外済み）</div>
         <div style="background:#F5F5F4;border-radius:8px;padding:8px 12px">${rows}</div>
         <div style="font-size:10px;color:#aaa;margin-top:6px;text-align:right">
           <a href="${targetUrl}" target="_blank" style="color:#4a7fc1">横浜市サイトで確認 →</a>
