@@ -6699,7 +6699,7 @@ async function fetchYokohamaEvents() {
     }
     // 除外・並べ替えは②で済ませてあるので、ここは日付の最終確認と件数の上限だけ
     // ★上限：ウェルカムメッセージに載せすぎても読まれないため
-    const SHOW_MAX = 12;
+    const SHOW_MAX = 10;
     const filteredEvents = candidates
       .filter(ev => hasDatesInStay(ev.dates, ev.detailed))
       .slice(0, SHOW_MAX);
@@ -6986,9 +6986,11 @@ function formatEventDatesForStay(datesStr, stayStartStr, stayEndStr) {
   // 個別日付リスト：滞在期間に該当する日だけ
   const inStay = dates.filter(d => d >= stayS && d <= stayE);
   if (inStay.length > 0) return inStay.map(fmtD).join('、');
-  // 該当日が抽出できなかった場合は説明文（最初の行）にフォールバック
-  const firstLine = s.split(/[\r\n]/)[0].trim();
-  return firstLine.length > 40 ? firstLine.slice(0, 40) : firstLine;
+  // ★日付は取れたのに滞在期間に1日も無い＝「開催日」欄が開催日程ではない可能性が高い
+  //   （実例：ツタンカーメン展のナイトミュージアムは「8月21日20:00〜アソビューで先着販売」という
+  //    チケット販売の告知だった）。ここで説明文にフォールバックすると滞在と無関係な日付を
+  //   ゲストに送ってしまうため、日付は出さない
+  return '';
 }
 
 function generateWelcomeMsg() {
@@ -7021,7 +7023,9 @@ function generateWelcomeMsg() {
   // イベント情報
   let eventLines = '';
   if (welcomeEventData && welcomeEventData.events.length > 0) {
-    const evList = welcomeEventData.events.slice(0, 5).map(ev => {
+    // ★以前はここで先頭5件に切っていたため、プレビューに出ているのに文面へ入らない
+    //   イベントがあった（取りこぼしの一因）。件数の上限は取得側(SHOW_MAX)に一本化する
+    const evList = welcomeEventData.events.map(ev => {
       const loc    = ev.area  ? `（${ev.area}）` : '';
       // 日程：滞在期間に該当する日付だけに整形（長い羅列・途切れを防止）
       const rawDates = formatEventDatesForStay(ev.dates, welcomeEventData.startDate, welcomeEventData.endDate);
