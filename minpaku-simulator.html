@@ -6480,10 +6480,10 @@ async function fetchTamaEvents() {
       const headers = { 'Content-Type': 'application/json' };
       const apiUrl = `${area.eventApiUrl}/1.json`;
       let data = null;
-      // 直接 → corsproxy.io の順で試す
+      // 直接 → 自前Worker(/proxy) の順で試す（いまたまはCORS許可があるので通常は直接で通る）
       for (const reqFn of [
         () => fetch(apiUrl, { method:'POST', headers, body, signal: AbortSignal.timeout(5000) }),
-        () => fetch(`https://corsproxy.io/?${encodeURIComponent(apiUrl)}`, { method:'POST', headers, body, signal: AbortSignal.timeout(8000) }),
+        () => fetch(`${MSG_SYNC_WORKER_URL}/proxy?url=${encodeURIComponent(apiUrl)}`, { method:'POST', headers, body, signal: AbortSignal.timeout(8000) }),
       ]) {
         try { const r = await reqFn(); if (r.ok) { data = await r.json(); break; } } catch {}
       }
@@ -6517,7 +6517,7 @@ async function fetchTamaEvents() {
       let detail = null;
       for (const reqFn of [
         () => fetch(detailUrl, { method:'POST', headers: detailHeaders, body: JSON.stringify({}), signal: AbortSignal.timeout(5000) }),
-        () => fetch(`https://corsproxy.io/?${encodeURIComponent(detailUrl)}`, { method:'POST', headers: detailHeaders, body: JSON.stringify({}), signal: AbortSignal.timeout(8000) }),
+        () => fetch(`${MSG_SYNC_WORKER_URL}/proxy?url=${encodeURIComponent(detailUrl)}`, { method:'POST', headers: detailHeaders, body: JSON.stringify({}), signal: AbortSignal.timeout(8000) }),
       ]) {
         try { const r = await reqFn(); if (r.ok) { detail = await r.json(); break; } } catch {}
       }
@@ -6579,10 +6579,10 @@ async function fetchYokohamaEvents() {
   const preview = document.getElementById('welcome-event-preview');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ 取得中...'; }
   // 複数プロキシを順番に試みるフェッチ関数
+  // 中継は自前のCloudflare Worker（/proxy）を使う。
+  // 以前使っていた無料の外部プロキシ(corsproxy.io/allorigins/codetabs)は2026-08にすべて停止した
   const CORS_PROXIES = [
-    url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-    url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-    url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+    url => `${MSG_SYNC_WORKER_URL}/proxy?url=${encodeURIComponent(url)}`,
   ];
   let proxyFnUsed = null; // 成功したプロキシ関数を詳細ページ取得でも再利用
   async function fetchWithProxy(url) {
