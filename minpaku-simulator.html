@@ -6942,8 +6942,27 @@ function buildWeatherComment(days, areaName, hasTyphoon = false) {
   else if (avgMax >= 23)      c += `日中${minMax}〜${maxMax}°Cまで上がり、初夏の陽気です。紫外線対策もお忘れなく。`;
   else if (avgMax >= 18)      c += `日中${minMax}〜${maxMax}°Cまで上がります。${minMin < 12 ? '朝晩はひんやりするので' : ''}長袖シャツや薄手のジャケットがちょうどよい気候です。`;
   else                        c += `日中も${minMax}〜${maxMax}°C程度とかなりひんやりします。暖かい服装でお越しください。`;
+  // ★気温の急変（前日比で最高気温が5°C以上下がる日）を知らせる
+  //   実例：2026/9/2の34°Cから9/4は26°Cと2日で8°C下がるのに「かなり暑くなります」だけだった
+  const dowJ = ['日','月','火','水','木','金','土'];
+  const fmtDay = d => `${d.date.getMonth()+1}月${d.date.getDate()}日(${dowJ[d.date.getDay()]})`;
+  let dropNote = '';
+  for (let i = 1; i < valid.length; i++) {
+    const prev = parseInt(valid[i-1].tempMax), cur = parseInt(valid[i].tempMax);
+    if (!isNaN(prev) && !isNaN(cur) && prev - cur >= 5) {
+      dropNote = `\n${fmtDay(valid[i-1])}の${prev}°Cから${fmtDay(valid[i])}は${cur}°Cまで下がる予報です。気温差が大きいので、羽織れるものがあると安心です。`;
+      break;
+    }
+  }
+  if (dropNote) c += dropNote;
   if (!hasTyphoon) {
-    if (hasRain) {
+    // ★降水確率50%以上の日は日付と数字をはっきり伝える
+    //   （「くもり一時雨」＋「折りたたみ傘が便利」だけでは70%の日に対応できない）
+    const heavyDays = days.filter(d => d.pop != null && d.pop >= 50);
+    if (heavyDays.length > 0) {
+      const list = heavyDays.map(d => `${fmtDay(d)}は${d.pop}%`).join('、');
+      c += `\n${list}と雨の降る可能性が高い予報です。この日のお出かけには傘をお持ちください。`;
+    } else if (hasRain) {
       c += '\n折りたたみ傘を持っておくと便利です。';
     } else if (popDays.length >= Math.max(2, Math.ceil(days.length / 2))) {
       c += `\nまた、期間中は毎日${maxPop}%ほどの降水確率が出ていますので、折りたたみ傘があると安心です。`;
@@ -7008,9 +7027,27 @@ function generateWelcomeMsg() {
     // 最高気温＝最低気温のとき（APIデータ不備）は1値のみ表示
     const sameTemp = d.tempMax != null && d.tempMin != null && String(d.tempMax) === String(d.tempMin);
     const temp = (d.tempMax || d.tempMin) ? (sameTemp ? ` ${d.tempMax}°C` : ` ${d.tempMax ?? '?'}°C / ${d.tempMin ?? '?'}°C`) : '';
-    return `${d.date.getMonth()+1}月${d.date.getDate()}日(${dow[d.date.getDay()]})：${d.weather}${temp}`;
+    // ★降水確率を明記する。天気の文言が「くもり一時雨」でも70%なのか30%なのかで
+    //   ゲストの行動（傘・予定変更）が変わるため、30%以上の日は数字を出す
+    const popStr = (d.pop != null && d.pop >= 30) ? `（降水確率${d.pop}%）` : '';
+    return `${d.date.getMonth()+1}月${d.date.getDate()}日(${dow[d.date.getDay()]})：${d.weather}${temp}${popStr}`;
   }).join('\n');
   const comment = buildWeatherComment(days, area.areaName, welcomeTyphoonInclude && !!welcomeTyphoonData);
+  // ★週間予報(7日)より滞在が長い場合の注記
+  //   実例：29泊のDemetrioさん宛に7日分の予報だけを送っていた
+  let longStayNote = '';
+  {
+    const lastForecast = days.length ? days[days.length - 1].date : null;
+    const coStr = b ? getCheckout(b) : null;
+    if (lastForecast && coStr) {
+      const [cy, cm, cd] = coStr.split('/').map(Number);
+      const coDate = new Date(cy, cm - 1, cd);
+      // チェックアウトが予報の最終日より2日以上先＝滞在の後半をカバーできていない
+      if ((coDate - lastForecast) / 86400000 >= 2) {
+        longStayNote = `\n※ 天気予報は直近1週間分です。ご滞在が長いため、後半の天気は改めてお知らせします。`;
+      }
+    }
+  }
   // 台風情報（チェックボックスON時のみ）
   let typhoonBlock = '';
   if (welcomeTyphoonInclude && welcomeTyphoonData) {
@@ -7051,7 +7088,7 @@ function generateWelcomeMsg() {
   const introLine = hasTyphoon
     ? '安全にお過ごしいただけるよう、天気予報と台風・イベント情報をお知らせします。'
     : '快適に過ごしていただけるよう、天気予報と近隣のイベント情報をお知らせしますので、ぜひご参考にしてください。';
-  let msg = `${greeting}\n\n当施設をご予約いただき、ありがとうございます。\n${introLine}\n\n${typhoonBlock}＜週間天気予報＞\n${weatherLines}\n\n${comment}\n▶ 最新の天気予報はこちら：${area.jmaUrl}\n\n${eventLines}\n\n※ 上記は参考情報です。開催日程・内容は予告なく変更になる場合がありますので、最新情報は各リンクよりご確認ください。有料施設のチケットはお客様ご自身でのご購入をお願いしております。\n\n${closingLine}\n\nTy`;
+  let msg = `${greeting}\n\n当施設をご予約いただき、ありがとうございます。\n${introLine}\n\n${typhoonBlock}＜週間天気予報＞\n${weatherLines}\n\n${comment}${longStayNote}\n▶ 最新の天気予報はこちら：${area.jmaUrl}\n\n${eventLines}\n\n※ 上記は参考情報です。開催日程・内容は予告なく変更になる場合がありますので、最新情報は各リンクよりご確認ください。有料施設のチケットはお客様ご自身でのご購入をお願いしております。\n\n${closingLine}\n\nTy`;
   const ta = document.getElementById('msg-prompt-area');
   if (ta) { ta.value = msg; ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 800) + 'px'; }
   document.getElementById('msg-output-card').style.display = 'block';
