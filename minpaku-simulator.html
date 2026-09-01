@@ -6407,16 +6407,28 @@ function getWelcomeArea(b) {
     return { label: '新子安（横浜）', areaCode: '140000', areaName: '横浜', areaNameHint: '横浜',
       lat: 35.4998, lon: 139.6556,
       jmaUrl: 'https://www.data.jma.go.jp/multi/yoho/yoho_detail.html?code=140010&lang=jp',
-      bousaiName: '横浜市防災情報', bousaiUrl: 'https://www.city.yokohama.lg.jp/kurashi/bousai_kyukyu/bousai/',
+      bousaiName: '横浜市防災情報', bousaiUrl: 'https://bousai.city.yokohama.lg.jp/',
       transitName: 'JR東日本 運行情報', transitUrl: 'https://traininfo.jreast.co.jp/train_info/kanto.aspx',
       eventBaseUrl: 'https://www.welcome.city.yokohama.jp/eventinfo/index.php',
       eventSiteName: '横浜市観光情報サイト' };
+  }
+  // ECRU（調布市国領）。天気は高幡不動と同じ気象庁「東京地方」だが、
+  // 表示ラベル・防災リンク・台風の距離計算の基準点を国領のものにする
+  if (/国領|調布|ecru|kokuryo|chofu/.test(listing + pName)) {
+    return { label: '国領（調布）', areaCode: '130000', areaName: '多摩地方', areaNameHint: '多摩',
+      lat: 35.6512, lon: 139.5533,
+      jmaUrl: 'https://www.data.jma.go.jp/multi/yoho/yoho_detail.html?code=130010&lang=jp',
+      bousaiName: '調布市 防災・安全', bousaiUrl: 'https://www.city.chofu.lg.jp/bousaianzen/index.html',
+      transitName: '京王電鉄 運行情報', transitUrl: 'https://www.keio.co.jp/unkou/unkou_pc.html',
+      eventBaseUrl: null,
+      eventApiUrl: 'https://imatama.jp/imatama/events/list',
+      eventSiteName: 'いまたま（多摩エリア）' };
   }
   return { label: '高幡不動（多摩）', areaCode: '130000', areaName: '多摩地方', areaNameHint: '多摩',
     lat: 35.6593, lon: 139.4113,
     jmaUrl: 'https://www.data.jma.go.jp/multi/yoho/yoho_detail.html?code=130010&lang=jp',
     bousaiName: '東京都防災ホームページ', bousaiUrl: 'https://www.bousai.metro.tokyo.lg.jp/',
-    transitName: '京王電鉄 運行情報', transitUrl: 'https://www.keio.co.jp/unten/index.html',
+    transitName: '京王電鉄 運行情報', transitUrl: 'https://www.keio.co.jp/unkou/unkou_pc.html',
     eventBaseUrl: null,
     eventApiUrl: 'https://imatama.jp/imatama/events/list',
     eventSiteName: 'いまたま（多摩エリア）' };
