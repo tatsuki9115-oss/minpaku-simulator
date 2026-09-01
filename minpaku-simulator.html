@@ -5112,6 +5112,11 @@ setTimeout(() => autoBackupCheck(), 8000);
 // initFirebaseSync() はログイン後に fbauth.onAuthStateChanged 内で呼ぶ
 
 // ==================== LINE文生成 共通ヘルパー ====================
+// ECRU（国領）かどうか。ベビー用品を置いているのはこの物件だけ
+function _isEcruProp(prop) {
+  const n = ((prop && prop.name) || '').toLowerCase();
+  return n.includes('ecru') || n.includes('国領') || n.includes('kokuryo');
+}
 function _lineFmtDate(dateStr) {
   if (!dateStr) return '不明';
   const dayNames = ['日','月','火','水','木','金','土'];
@@ -5246,7 +5251,9 @@ function showCleaningReminderForm(code) {
   const prop = properties.find(p => p.id === getBookingPropId(b));
   const propId = getBookingPropId(b);
   // 物件ごとのデフォルトキーボックス番号
-  const defaultKeybox = propId === 1 ? '6579' : propId === 2 ? '8531' : '';
+  const defaultKeybox = _isEcruProp(prop) ? '8314'
+                      : propId === 1 ? '6579'
+                      : propId === 2 ? '8531' : '';
 
   // 予約情報
   const propName = prop ? prop.name : '物件';
@@ -5324,6 +5331,18 @@ function showCleaningReminderForm(code) {
         </div>
       </div>
 
+      ${_isEcruProp(prop) ? `
+      <!-- ベビーベッド／サークル（ECRUのみ） -->
+      <div style="margin-bottom:20px">
+        <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">👶 ベビーベッド／サークル</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <button id="cr-baby-none" onclick="crSelect('baby','none')" style="padding:10px;border-radius:10px;border:2px solid #00B900;background:#f0fff0;color:#007a00;font-size:13px;font-weight:700;cursor:pointer">不要</button>
+          <button id="cr-baby-bed" onclick="crSelect('baby','bed')" style="padding:10px;border-radius:10px;border:2px solid #e0e0e0;background:#f9f9f9;color:#555;font-size:13px;font-weight:700;cursor:pointer">ベッド</button>
+          <button id="cr-baby-pen" onclick="crSelect('baby','pen')" style="padding:10px;border-radius:10px;border:2px solid #e0e0e0;background:#f9f9f9;color:#555;font-size:13px;font-weight:700;cursor:pointer">サークル</button>
+        </div>
+        <div style="font-size:10.5px;color:#888;margin-top:5px;line-height:1.5">同じ商品です。ゲストの希望を聞いてから選んでください</div>
+      </div>
+      ` : ''}
       <button onclick="generateCleaningReminderMsg('${code}')" style="width:100%;padding:15px;background:#FF6D00;border:none;border-radius:12px;color:white;font-size:15px;font-weight:800;cursor:pointer;letter-spacing:.5px">
         🧹 LINE文を生成する
       </button>
@@ -5332,7 +5351,7 @@ function showCleaningReminderForm(code) {
   overlay.addEventListener('click', e => { if (e.target === overlay) document.body.removeChild(overlay); });
 
   // デフォルト選択状態を初期化
-  window._crState = { trash: 'clear', shop: 'none', card: 'ja', linen: '2' };
+  window._crState = { trash: 'clear', shop: 'none', card: 'ja', linen: '2', baby: 'none' };
 }
 
 function crSelect(group, val) {
@@ -5344,12 +5363,18 @@ function crSelect(group, val) {
     shop:  { none:  ['cr-shop-none','cr-shop-yes'],   yes: ['cr-shop-yes','cr-shop-none'] },
     card:  { ja:    ['cr-card-ja','cr-card-en'],       en:  ['cr-card-en','cr-card-ja'] },
     linen: { '2':   ['cr-linen-2','cr-linen-3'],      '3': ['cr-linen-3','cr-linen-2'] },
+    baby:  { none:  ['cr-baby-none','cr-baby-bed','cr-baby-pen'],
+             bed:   ['cr-baby-bed','cr-baby-none','cr-baby-pen'],
+             pen:   ['cr-baby-pen','cr-baby-none','cr-baby-bed'] },
   };
-  const [activeId, inactiveId] = configs[group][val];
-  const active = document.getElementById(activeId);
-  const inactive = document.getElementById(inactiveId);
+  const ids = configs[group][val];
+  if (!ids) return;
+  const active = document.getElementById(ids[0]);
   if (active) { active.style.border='2px solid #00B900'; active.style.background='#f0fff0'; active.style.color='#007a00'; }
-  if (inactive) { inactive.style.border='2px solid #e0e0e0'; inactive.style.background='#f9f9f9'; inactive.style.color='#555'; }
+  ids.slice(1).forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.style.border='2px solid #e0e0e0'; el.style.background='#f9f9f9'; el.style.color='#555'; }
+  });
 
   // 買い出しメモの表示切替
   if (group === 'shop') {
@@ -5418,6 +5443,15 @@ function generateCleaningReminderMsg(code) {
   lines.push(`💌 メッセージカード：${st.card === 'en' ? '英語' : '日本語'}`);
   // リネン
   lines.push(`🛏️ リネン：${st.linen === '3' ? '3人分' : '2人分'}セット`);
+  // ベビーベッド／サークル（ECRUのみ・希望があった場合だけ出す）
+  if (_isEcruProp(prop) && st.baby && st.baby !== 'none') {
+    lines.push('');
+    lines.push(`▶▶ 👶 ベビー${st.baby === 'bed' ? 'ベッド' : 'サークル'}：【設置あり】 ◀◀`);
+    lines.push('　→ クローゼットから出して組み立ててください');
+    lines.push(st.baby === 'bed'
+      ? '　→ ベビーベッドとして使用（上段のバシネットを取り付ける）'
+      : '　→ ベビーサークルとして使用（床置きで柵にする）');
+  }
   lines.push('');
   lines.push('よろしくお願いします！🙌');
 
@@ -7351,6 +7385,39 @@ ${langRule}
       prompt += `\n## 今回ゲストから届いた未返信メッセージ（原文）\n\`\`\`\n${guestText}\n\`\`\`\n`;
     }
     if (notes) prompt += `\n## 特記事項\n${notes}\n`;
+
+    // ECRU（国領）限定：ベビー用品の案内ルール ※他の物件には置いていない
+    {
+      const _pn = (propName + ' ' + listing).toLowerCase();
+      const _isEcru = _pn.includes('ecru') || _pn.includes('国領') || _pn.includes('kokuryo');
+      const _inf = parseInt(infants) || 0;
+      if (_isEcru) {
+        prompt += `
+## ベビー用品（この物件のみ・他の物件には置いていません）
+- 常にお部屋にあるもの：ベビーチェア／ベビージム／バウンサー／ベビーバス／ベビーシャンプー／おむつ処理ポット
+- リクエストがあったときだけ出すもの：**折りたたみ式のベビーベッド ＝ ベビーサークル（同じ商品）**
+  普段はたたんでクローゼットに収納しているため、事前連絡が必要です。
+
+ゲストから希望が出た場合、確認は必ず次の2点をセットで聞くこと：
+1. ベビーベッド／ベビーサークルが必要かどうか
+2. 必要な場合、どちらの使い方をするか
+   ・ベビーベッドとして使う（上段のバシネットを取り付ける）
+   ・ベビーサークルとして使う（床置きで柵にする）
+   ※同じ商品ですが組み立て方が変わるため、事前確認が必要です。
+
+希望が確定した場合は、回答の最後に
+「清掃チェックリストアプリに設置指示を入れてください（設置形態：ベビーベッド／ベビーサークル）」
+と必ず添えること。担当する清掃スタッフは回ごとに変わるため、個人名は書かないこと。
+不要と言われた場合は収納したままにし、こちらから再提案はしません。
+`;
+        if (_inf > 0) {
+          prompt += `
+⚠️ **この予約には乳幼児が${_inf}名含まれています。**
+ゲストからまだ希望を聞いていない場合は、こちらから確認するメッセージを送ることを提案してください。
+`;
+        }
+      }
+    }
 
     prompt += `
 ---
