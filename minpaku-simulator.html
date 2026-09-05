@@ -6421,8 +6421,14 @@ function getWelcomeArea(b) {
       bousaiName: '調布市 防災・安全', bousaiUrl: 'https://www.city.chofu.lg.jp/bousaianzen/index.html',
       transitName: '京王電鉄 運行情報', transitUrl: 'https://www.keio.co.jp/unkou/unkou_pc.html',
       eventBaseUrl: null,
-      eventApiUrl: 'https://imatama.jp/imatama/events/list',
-      eventSiteName: 'いまたま（多摩エリア）' };
+      eventApiUrl: null,
+      // 2026-09-05 いまたま → いこーよ に変更。
+      // いまたまは掲載68件中「府中・調布・狛江」がゼロ件で、調布のイベントが全く拾えなかった。
+      // いこーよは area_ids=102 が「府中・調布・狛江」で、1イベント＝1つの JSON-LD
+      // (schema.org Event) を埋め込んでいるため、HTMLのクラス名に依存せず安定して取れる。
+      eventIkoyoBase: 'https://iko-yo.net/events?area_ids%5B%5D=102&prefecture_ids%5B%5D=13',
+      eventCities: ['府中市', '調布市', '狛江市'],
+      eventSiteName: 'いこーよ（府中・調布・狛江）' };
   }
   return { label: '高幡不動（多摩）', areaCode: '130000', areaName: '多摩地方', areaNameHint: '多摩',
     lat: 35.6593, lon: 139.4113,
@@ -6495,6 +6501,105 @@ function fetchEvents() {
   if (!area) return;
   if (area.eventBaseUrl) fetchYokohamaEvents();
   else if (area.eventApiUrl) fetchTamaEvents();
+  else if (area.eventIkoyoBase) fetchIkoyoEvents();
+}
+
+// 府中・調布・狛江（いこーよ／各イベントに埋め込まれた JSON-LD を読む）
+async function fetchIkoyoEvents() {
+  const code = document.getElementById('msg-booking-select')?.value;
+  const b = code ? findBookingByCode(code) : null;
+  if (!b) { showToast('予約を選択してください', 'error'); return; }
+  const area = getWelcomeArea(b);
+  const btn     = document.getElementById('welcome-event-btn');
+  const preview = document.getElementById('welcome-event-preview');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 取得中...'; }
+
+  const parseD = s => { const [y,m,d] = s.split('/').map(Number); return new Date(y, m-1, d); };
+  const fmtD   = d => `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+  const cin  = parseD(b.checkin || '');
+  const cout = parseD(getCheckout(b) || '');
+  const last = new Date(cout.getTime() - 86400000); // 最終宿泊日＝チェックアウト前日
+  // ★ term を付けると start_date/end_date が無視されるので絶対に付けない
+  const dq = (name, d) => `&${name}%5Byear%5D=${d.getFullYear()}&${name}%5Bmonth%5D=${d.getMonth()+1}&${name}%5Bday%5D=${d.getDate()}`;
+  const targetUrl = `${area.eventIkoyoBase}${dq('start_date', cin)}${dq('end_date', last)}`;
+
+  const CORS_PROXIES = [ url => `${MSG_SYNC_WORKER_URL}/proxy?url=${encodeURIComponent(url)}` ];
+  async function fetchWithProxy(url) {
+    try {
+      const r = await fetch(url, { signal: AbortSignal.timeout(4000) });
+      if (r.ok) return await r.text();
+    } catch {}
+    for (const pFn of CORS_PROXIES) {
+      try {
+        const r = await fetch(pFn(url), { signal: AbortSignal.timeout(8000) });
+        if (r.ok) return await r.text();
+      } catch {}
+    }
+    throw new Error('全プロキシで取得失敗');
+  }
+
+  try {
+    const parser = new DOMParser();
+    const PER_PAGE  = 15; // いこーよは1ページ15件
+    const MAX_PAGES = 10;
+    const seen = new Set();
+    const events = [];
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const pageUrl = page === 1 ? targetUrl : `${targetUrl}&page=${page}`;
+      let html;
+      try { html = await fetchWithProxy(pageUrl); }
+      catch (e) { if (page === 1) throw e; break; }
+      const doc = parser.parseFromString(html, 'text/html');
+      let found = 0;
+      doc.querySelectorAll('script[type="application/ld+json"]').forEach(sc => {
+        let j; try { j = JSON.parse(sc.textContent); } catch { return; }
+        (Array.isArray(j) ? j : [j]).forEach(o => {
+          if (!o || o['@type'] !== 'Event' || !o.name) return;
+          found++;
+          const loc = o.location?.address?.addressLocality || '';
+          // 対象3市以外が混ざったときの保険（PR枠はJSON-LDに入らないので通常は素通り）
+          if (area.eventCities?.length && loc && !area.eventCities.some(c => loc.includes(c))) return;
+          const key = o.name + '|' + (o.startDate || '');
+          if (seen.has(key)) return;
+          seen.add(key);
+          const sd = (o.startDate || '').replace(/-/g, '/');
+          const ed = (o.endDate   || '').replace(/-/g, '/');
+          events.push({
+            title: o.name.trim(),
+            dates: (!ed || sd === ed) ? sd : `${sd}〜${ed}`,
+            area:  loc,
+            venue: (o.location && o.location.name) || '',
+            station: '',
+          });
+        });
+      });
+      if (btn) btn.textContent = `⏳ 一覧を取得中... (${events.length}件)`;
+      if (found < PER_PAGE) break; // 15件未満＝最終ページ
+    }
+
+    welcomeEventData = { events, startDate: fmtD(cin), endDate: fmtD(last), fetchedAt: new Date(), targetUrl };
+    if (events.length === 0) {
+      if (preview) preview.innerHTML = `<div style="font-size:12px;color:#aaa;padding:8px">この期間のイベント情報はありませんでした</div>`;
+    } else {
+      const rows = events.map(ev => `
+        <div style="padding:7px 0;border-bottom:1px solid #E8E6E1">
+          <div style="font-size:13px;font-weight:700;color:#333;line-height:1.4">${ev.title}</div>
+          ${ev.dates ? `<div style="font-size:11px;color:#888;margin-top:2px">📅 ${ev.dates}</div>` : ''}
+          ${(ev.venue || ev.area) ? `<div style="font-size:11px;color:#888;margin-top:1px">📍 ${ev.venue || ev.area}</div>` : ''}
+        </div>`).join('');
+      if (preview) preview.innerHTML = `
+        <div style="font-size:11px;color:#aaa;margin-bottom:6px">✅ ${events.length}件取得（${welcomeEventData.startDate} 〜 ${welcomeEventData.endDate}）</div>
+        <div style="background:#F5F5F4;border-radius:8px;padding:8px 12px">${rows}</div>
+        <div style="font-size:10px;color:#aaa;margin-top:6px;text-align:right">
+          <a href="${targetUrl}" target="_blank" style="color:#4a7fc1">${area.eventSiteName}で確認 →</a>
+        </div>`;
+    }
+    showToast('イベント情報を取得しました', 'success');
+  } catch(e) {
+    if (preview) preview.innerHTML = `<div style="color:#e53e3e;font-size:13px;padding:8px">❌ 取得失敗：${e.message}</div>`;
+    showToast('イベント取得に失敗しました', 'error');
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '🎪 イベント情報を取得'; btn.style.opacity = '1'; }
 }
 
 // 多摩エリア（いまたまJSON API）
