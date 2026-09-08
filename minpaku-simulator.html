@@ -1000,6 +1000,7 @@ let calendarYear = new Date().getFullYear();
 let calendarMonth = new Date().getMonth() + 1;
 let bookingChecks = loadBookingChecks();
 let spotWorks = loadSpotWorks(); // 予約に紐づかないスポット作業（駆けつけ・立替など）
+let spotWorkMonth = null; // スポット作業カードの表示月（null=今月 / 'all'=全期間 / 'YYYY-MM'）
 let systemFee = loadSystemFee();
 let whatsappNotes = loadWhatsapp();
 let propCheckHistory = loadPropCheck();
@@ -4491,12 +4492,28 @@ function renderDashboard() {
 
 // ==================== スポット作業カード（ホーム最下部） ====================
 function renderSpotWorksCard() {
-  // 直近3ヶ月分を新しい順に表示（古い分は件数だけ知らせる）
   const now = new Date();
-  const limit = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-  const inRange = w => { if (!w.date) return true; const [y,m] = String(w.date).split('-').map(Number); return new Date(y, m-1, 1) >= limit; };
-  const shown = spotWorks.filter(inRange).sort((a,b) => String(b.date||'').localeCompare(String(a.date||'')));
-  const hiddenCount = spotWorks.length - shown.length;
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const monthOf = w => String(w.date || '').slice(0, 7);
+  // 記録のある月＋今月を新しい順に並べる
+  const months = [...new Set(spotWorks.map(monthOf).filter(Boolean).concat(thisMonth))].sort().reverse();
+  const sel = spotWorkMonth === null ? thisMonth : spotWorkMonth;
+  const isAll = sel === 'all';
+
+  const shown = spotWorks
+    .filter(w => isAll || monthOf(w) === sel)
+    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+
+  // 表示中の合計（明細あり／なしの内訳つき）
+  let sumIn = 0, sumOff = 0;
+  shown.forEach(w => { const f = parseInt(w.fee) || 0; if (w.inStatement === false) sumOff += f; else sumIn += f; });
+  const sumAll = sumIn + sumOff;
+
+  const monthLabel = m2 => { const [y, mm] = m2.split('-'); return `${Number(mm)}月`; };
+  const tabs = `<div class="prop-filter" style="margin-bottom:10px">
+    ${months.map(m2 => `<button class="prop-filter-btn${sel===m2?' active':''}" onclick="setSpotWorkMonth('${m2}')">${m2.slice(0,4)!==String(now.getFullYear())?m2.slice(2,4)+'年':''}${monthLabel(m2)}</button>`).join('')}
+    <button class="prop-filter-btn${isAll?' active':''}" onclick="setSpotWorkMonth('all')">全期間</button>
+  </div>`;
 
   const rows = shown.map(w => {
     const prop = properties.find(p => String(p.id) === String(w.propId));
@@ -4504,7 +4521,8 @@ function renderSpotWorksCard() {
     const staffOpts = staffList.filter(st => !st.retired || st.name === w.staffName);
     const fee = parseInt(w.fee) || 0;
     const ready = !!(w.staffName && fee > 0);
-    return `<div style="border:1.5px solid #E8E6E1;border-radius:11px;padding:9px 10px;margin-bottom:8px;background:#FCFCFB">
+    const blank = !w.staffName && fee === 0; // 追加したまま未入力の行
+    return `<div style="border:1.5px solid ${blank?'#F0D9C8':'#E8E6E1'};border-radius:11px;padding:9px 10px;margin-bottom:8px;background:${blank?'#FFFCF9':'#FCFCFB'}">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
         <input type="date" value="${escHtml(String(w.date||''))}" onchange="updateSpotWork('${w.id}','date',this.value,true)"
           style="padding:5px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;color:#333;box-sizing:border-box;width:100%">
@@ -4548,6 +4566,14 @@ function renderSpotWorksCard() {
     </div>`;
   }).join('');
 
+  const sumRow = shown.length ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#F9F8F6;border-radius:9px;margin-bottom:8px">
+      <div style="font-size:11px;font-weight:800;color:#666">${isAll?'全期間':monthLabel(sel)}の合計（${shown.length}件）</div>
+      <div style="text-align:right">
+        <div style="font-family:'Inter',sans-serif;font-size:15px;font-weight:800;color:#1C1C1E">${sumAll.toLocaleString('ja-JP')}円</div>
+        ${sumOff > 0 ? `<div style="font-size:10px;color:#B0ADA8">明細あり ${sumIn.toLocaleString('ja-JP')} / 明細なし ${sumOff.toLocaleString('ja-JP')}</div>` : ''}
+      </div>
+    </div>` : '';
+
   return `<div class="card" style="margin-top:14px">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px">
       <div>
@@ -4556,14 +4582,25 @@ function renderSpotWorksCard() {
       </div>
       <button onclick="addSpotWork()" style="padding:7px 13px;background:#F07C3F;color:white;border:none;border-radius:9px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap">＋ 追加</button>
     </div>
-    ${shown.length ? rows : `<div style="font-size:12px;color:#C8C5C0;padding:10px 0;text-align:center">記録はありません</div>`}
-    ${hiddenCount > 0 ? `<div style="font-size:10px;color:#C8C5C0;text-align:right">※ 3ヶ月より前の記録が ${hiddenCount} 件あります（集計には反映されています）</div>` : ''}
+    ${tabs}
+    ${sumRow}
+    ${shown.length ? rows : `<div style="font-size:12px;color:#C8C5C0;padding:10px 0;text-align:center">${isAll?'記録はありません':monthLabel(sel)+'の記録はありません'}</div>`}
   </div>`;
+}
+
+function setSpotWorkMonth(m) {
+  spotWorkMonth = m;
+  renderDashboard();
 }
 
 function addSpotWork() {
   const now = new Date();
-  const iso = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  // 今月以外を表示中に追加したら、その月の1日を初期値にする（追加した行がその場で消えないように）
+  const sel = spotWorkMonth === null ? thisMonth : spotWorkMonth;
+  const iso = (sel === 'all' || sel === thisMonth)
+    ? `${thisMonth}-${String(now.getDate()).padStart(2,'0')}`
+    : `${sel}-01`;
   spotWorks.push({ id: String(Date.now()), date: iso, propId: properties[0] ? properties[0].id : null,
     staffName: '', type: SPOT_TYPES[0], fee: 0, memo: '', inStatement: true });
   saveSpotWorks();
