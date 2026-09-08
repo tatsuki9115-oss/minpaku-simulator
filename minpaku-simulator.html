@@ -949,6 +949,7 @@ const KEYS = {
   systemFee: 'minpaku_system_fee_v1',
   whatsapp: 'minpaku_whatsapp_v1',
   propCheck: 'minpaku_propcheck_history_v1',
+  spotWorks: 'minpaku_spot_works_v1',
 };
 
 let properties = loadData();
@@ -998,6 +999,7 @@ let calendarPropFilter = 'all';
 let calendarYear = new Date().getFullYear();
 let calendarMonth = new Date().getMonth() + 1;
 let bookingChecks = loadBookingChecks();
+let spotWorks = loadSpotWorks(); // 予約に紐づかないスポット作業（駆けつけ・立替など）
 let systemFee = loadSystemFee();
 let whatsappNotes = loadWhatsapp();
 let propCheckHistory = loadPropCheck();
@@ -1158,6 +1160,38 @@ function loadListingMap() {
 }
 function saveListingMap() { fbSave(KEYS.listingMap, listingMap); }
 
+// ==================== スポット作業（清掃以外のスタッフ作業） ====================
+// 予約にぶら下げられない作業（別日の駆けつけ・立替・空室期間の対応）を独立して記録する。
+// 1件 = { id, date:'YYYY-MM-DD', propId, staffName, type, fee, memo, inStatement }
+const SPOT_TYPES = ['駆けつけ', '追加清掃', '立替（部品・備品）', 'ゴミ出し', 'メッセージボード作成', 'その他'];
+
+function loadSpotWorks() {
+  try { const s = localStorage.getItem(KEYS.spotWorks); if (s) { const v = JSON.parse(s); if (Array.isArray(v)) return v; } } catch(e) {}
+  return [];
+}
+function saveSpotWorks() { fbSave(KEYS.spotWorks, spotWorks); }
+
+// ある物件・ある月のスポット作業を集計する
+// → 支払明細に載せる分（その他（明細あり））と載せない分（その他（明細なし））に分ける
+function getPropMonthSpotWorks(propId, year, month) {
+  const res = { withDetail: 0, noDetail: 0, lines: [] };
+  spotWorks.forEach(w => {
+    if (String(w.propId) !== String(propId) || !w.date) return;
+    const [wy, wm, wd] = String(w.date).split('-').map(Number);
+    if (wy !== year || wm !== month) return;
+    const fee = parseInt(w.fee) || 0;
+    if (fee === 0) return;
+    if (w.inStatement === false) res.noDetail += fee; else res.withDetail += fee;
+    res.lines.push(`${wm}/${wd} ${w.type || 'スポット作業'}（${w.staffName || '担当未設定'}）${fee.toLocaleString('ja-JP')}円${w.memo ? ' ' + w.memo : ''}${w.inStatement === false ? '（非公開）' : ''}`);
+  });
+  return res;
+}
+// 実績タブ用：その月のスポット作業の合計（実費未入力の月だけ変動費に足す）
+function getPropMonthSpotTotal(propId, year, month) {
+  const r = getPropMonthSpotWorks(propId, year, month);
+  return r.withDetail + r.noDetail;
+}
+
 function loadBookingChecks() {
   try { const s = localStorage.getItem(KEYS.bookingChecks); if (s) return JSON.parse(s); } catch(e) {}
   return {};
@@ -1294,6 +1328,15 @@ function initFirebaseSync() {
     if (JSON.stringify(val) === JSON.stringify(monthlyData)) return;
     try { localStorage.setItem(KEYS.monthly, JSON.stringify(val)); } catch(e) {}
     monthlyData = val;
+  });
+
+  fbdb.ref(KEYS.spotWorks).on('value', snap => {
+    const val = snap.val();
+    if (!Array.isArray(val)) return;
+    if (JSON.stringify(val) === JSON.stringify(spotWorks)) return;
+    try { localStorage.setItem(KEYS.spotWorks, JSON.stringify(val)); } catch(e) {}
+    spotWorks = val;
+    renderDashboard && renderDashboard();
   });
 
   fbdb.ref(KEYS.bookingChecks).on('value', snap => {
@@ -3465,6 +3508,12 @@ function showActualCostModal(year, month, propId) {
     if (chk.otherMemoOff) memoLines.push(`${dateLabel} ${b.guestName || ''}：${chk.otherMemoOff}（非公開）`);
   });
 
+  // スポット作業（予約に紐づかない駆けつけ・立替など）を合算
+  const _spot = getPropMonthSpotWorks(propId, year, month);
+  calSum['その他（明細あり）'] += _spot.withDetail;
+  calSum['その他（明細なし）'] += _spot.noDetail;
+  _spot.lines.forEach(l => memoLines.push(`🔧 ${l}`));
+
   // 変動費アイテム定義
   const EXTRA_DEFS = [
     { name: '清掃費',             autoKey: '清掃費',             sub: null },
@@ -4435,7 +4484,107 @@ function renderDashboard() {
     html += `</div>`; // pc-booking-grid
   }
 
+  html += renderSpotWorksCard();
+
   content.innerHTML = html;
+}
+
+// ==================== スポット作業カード（ホーム最下部） ====================
+function renderSpotWorksCard() {
+  // 直近3ヶ月分を新しい順に表示（古い分は件数だけ知らせる）
+  const now = new Date();
+  const limit = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+  const inRange = w => { if (!w.date) return true; const [y,m] = String(w.date).split('-').map(Number); return new Date(y, m-1, 1) >= limit; };
+  const shown = spotWorks.filter(inRange).sort((a,b) => String(b.date||'').localeCompare(String(a.date||'')));
+  const hiddenCount = spotWorks.length - shown.length;
+
+  const rows = shown.map(w => {
+    const prop = properties.find(p => String(p.id) === String(w.propId));
+    const staffList = prop ? (prop.cleaningStaff || []) : [];
+    const staffOpts = staffList.filter(st => !st.retired || st.name === w.staffName);
+    const fee = parseInt(w.fee) || 0;
+    const ready = !!(w.staffName && fee > 0);
+    return `<div style="border:1.5px solid #E8E6E1;border-radius:11px;padding:9px 10px;margin-bottom:8px;background:#FCFCFB">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+        <input type="date" value="${escHtml(String(w.date||''))}" onchange="updateSpotWork('${w.id}','date',this.value,true)"
+          style="padding:5px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;color:#333;box-sizing:border-box;width:100%">
+        <select onchange="updateSpotWork('${w.id}','propId',this.value,true)"
+          style="padding:5px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;color:#333;background:white;box-sizing:border-box;width:100%">
+          ${properties.map(p => `<option value="${p.id}" ${String(w.propId)===String(p.id)?'selected':''}>${escHtml(p.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+        <select onchange="updateSpotWork('${w.id}','staffName',this.value,true)"
+          style="padding:5px 7px;border:1.5px solid ${w.staffName?'#e0e0e0':'#E53935'};border-radius:7px;font-size:12px;color:#333;background:white;box-sizing:border-box;width:100%">
+          <option value="">担当を選ぶ</option>
+          ${staffOpts.map(st => `<option value="${escHtml(st.name)}" ${w.staffName===st.name?'selected':''}>${escHtml(st.name)}${st.retired?'（退職）':''}</option>`).join('')}
+        </select>
+        <select onchange="updateSpotWork('${w.id}','type',this.value,true)"
+          style="padding:5px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;color:#333;background:white;box-sizing:border-box;width:100%">
+          ${SPOT_TYPES.map(t => `<option value="${t}" ${w.type===t?'selected':''}>${t}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:110px 1fr;gap:6px;margin-bottom:6px;align-items:center">
+        <div style="display:flex;align-items:center;gap:3px">
+          <input type="number" value="${fee||''}" placeholder="0" oninput="updateSpotWork('${w.id}','fee',this.value)" onblur="saveSpotWorks()"
+            style="width:100%;padding:5px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;color:#333;text-align:right;box-sizing:border-box">
+          <span style="font-size:11px;color:#aaa">円</span>
+        </div>
+        <input type="text" value="${escHtml(String(w.memo||''))}" placeholder="メモ（支払明細に記載）" oninput="updateSpotWork('${w.id}','memo',this.value)" onblur="saveSpotWorks()"
+          style="padding:5px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;color:#333;box-sizing:border-box;width:100%">
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#666;cursor:pointer">
+          <input type="checkbox" ${w.inStatement===false?'':'checked'} onchange="updateSpotWork('${w.id}','inStatement',this.checked,true)" style="cursor:pointer">
+          支払明細に載せる
+        </label>
+        <div style="display:flex;gap:6px">
+          <button onclick="showPaymentStatementModal('spot:${w.id}')" ${ready?'':'disabled'}
+            style="padding:5px 10px;font-size:11px;font-weight:800;border-radius:8px;border:1.5px solid ${ready?'#4a7fc1':'#ddd'};background:white;color:${ready?'#4a7fc1':'#bbb'};cursor:${ready?'pointer':'not-allowed'}">📄 支払明細</button>
+          <button onclick="deleteSpotWork('${w.id}')"
+            style="padding:5px 10px;font-size:11px;font-weight:800;border-radius:8px;border:1.5px solid #f0d0d0;background:white;color:#c62828;cursor:pointer">🗑</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  return `<div class="card" style="margin-top:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px">
+      <div>
+        <div style="font-size:11px;font-weight:800;color:#B0ADA8;letter-spacing:.5px">🔧 スポット作業（清掃以外）</div>
+        <div style="font-size:10px;color:#C8C5C0;margin-top:2px">別日の駆けつけ・立替など、予約に紐づかない作業を記録します</div>
+      </div>
+      <button onclick="addSpotWork()" style="padding:7px 13px;background:#F07C3F;color:white;border:none;border-radius:9px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap">＋ 追加</button>
+    </div>
+    ${shown.length ? rows : `<div style="font-size:12px;color:#C8C5C0;padding:10px 0;text-align:center">記録はありません</div>`}
+    ${hiddenCount > 0 ? `<div style="font-size:10px;color:#C8C5C0;text-align:right">※ 3ヶ月より前の記録が ${hiddenCount} 件あります（集計には反映されています）</div>` : ''}
+  </div>`;
+}
+
+function addSpotWork() {
+  const now = new Date();
+  const iso = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  spotWorks.push({ id: String(Date.now()), date: iso, propId: properties[0] ? properties[0].id : null,
+    staffName: '', type: SPOT_TYPES[0], fee: 0, memo: '', inStatement: true });
+  saveSpotWorks();
+  renderDashboard();
+}
+
+function updateSpotWork(id, field, val, rerender) {
+  const w = spotWorks.find(x => String(x.id) === String(id));
+  if (!w) return;
+  w[field] = (field === 'fee') ? (parseInt(val) || 0) : val;
+  if (rerender) { saveSpotWorks(); renderDashboard(); }
+}
+
+function deleteSpotWork(id) {
+  const w = spotWorks.find(x => String(x.id) === String(id));
+  if (!w) return;
+  const fee = parseInt(w.fee) || 0;
+  if (fee > 0 && !confirm(`${w.date} ${w.type}（${w.staffName || '担当未設定'}）${fee.toLocaleString('ja-JP')}円 を削除します。よろしいですか？`)) return;
+  spotWorks = spotWorks.filter(x => String(x.id) !== String(id));
+  saveSpotWorks();
+  renderDashboard();
 }
 
 function toggleCheckForDash(code, field) {
@@ -4569,6 +4718,8 @@ function renderAnnual() {
     });
     // 実費保存済み物件の変動費を月単位で加算
     operatingProps.forEach(p => { varCosts += getPropMonthActualVarCosts(p, mYear, m); });
+    // スポット作業（清掃以外のスタッフ作業）。実費入力済みの月は実費側に含まれるので二重計上しない
+    operatingProps.forEach(p => { if (!hasActualCosts(p.id, mYear, m)) varCosts += getPropMonthSpotTotal(p.id, mYear, m); });
 
     const profit = rev - monthFixedCosts - varCosts;
     const dim = getDaysInMonth(mYear, m);
@@ -5671,15 +5822,23 @@ function savePayeeHistory(name) {
   localStorage.setItem(PAYEE_HISTORY_KEY, JSON.stringify(hist));
 }
 
+// code は予約コード、または 'spot:<スポット作業のid>'
+function getSpotWork(code) {
+  const c = String(code);
+  return c.startsWith('spot:') ? spotWorks.find(w => String(w.id) === c.slice(5)) : null;
+}
+
 function showPaymentStatementModal(code, which) {
-  const b = findBookingByCode(code);
-  if (!b) return;
-  const chk = bookingChecks[code] || {};
-  if (!chk.cleaningStaffName) { showToast('担当スタッフが設定されていません', 'error'); return; }
+  const sw = getSpotWork(code);
+  const b = sw ? null : findBookingByCode(code);
+  if (!sw && !b) return;
+  const chk = sw ? {} : (bookingChecks[code] || {});
+  if (!sw && !chk.cleaningStaffName) { showToast('担当スタッフが設定されていません', 'error'); return; }
+  if (sw && !sw.staffName) { showToast('担当スタッフが設定されていません', 'error'); return; }
 
   // 2人目スタッフがいる場合は、どちらの支払明細を作るか先に選ぶ
   const _s2fee = chk.staff2Fee != null ? (parseInt(chk.staff2Fee) || 0) : 0;
-  if (!which && chk.staff2Name && _s2fee > 0) {
+  if (!sw && !which && chk.staff2Name && _s2fee > 0) {
     const pick = document.createElement('div');
     pick.setAttribute('data-paysmt-pick', '1');
     pick.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
@@ -5700,8 +5859,8 @@ function showPaymentStatementModal(code, which) {
     return;
   }
   which = which === 2 ? 2 : 1;
-  const _targetName = which === 2 ? chk.staff2Name : chk.cleaningStaffName;
-  const _targetSub  = which === 2 ? `（2人目・${chk.staff2Type || '追加業務'}）` : '';
+  const _targetName = sw ? sw.staffName : (which === 2 ? chk.staff2Name : chk.cleaningStaffName);
+  const _targetSub  = sw ? `（${sw.type || 'スポット作業'}）` : (which === 2 ? `（2人目・${chk.staff2Type || '追加業務'}）` : '');
 
   const hist = getPayeeHistory();
   const today = new Date();
@@ -5758,12 +5917,13 @@ function generatePaymentStatement(code, which) {
   savePayeeHistory(payee);
   document.body.removeChild(document.querySelector('[data-paysmt-modal]'));
 
-  const b = findBookingByCode(code);
-  if (!b) return;
-  const chk = bookingChecks[code] || {};
-  const prop = properties.find(p => p.id === getBookingPropId(b));
+  const sw = getSpotWork(code);
+  const b = sw ? null : findBookingByCode(code);
+  if (!sw && !b) return;
+  const chk = sw ? {} : (bookingChecks[code] || {});
+  const prop = sw ? properties.find(p => String(p.id) === String(sw.propId)) : properties.find(p => p.id === getBookingPropId(b));
   const propName = prop ? prop.name : '未設定';
-  const staff = prop ? (prop.cleaningStaff || []).find(s => s.name === chk.cleaningStaffName) : null;
+  const staff = (!sw && prop) ? (prop.cleaningStaff || []).find(s => s.name === chk.cleaningStaffName) : null;
 
   // 金額
   // 【1人目】カードで手入力した清掃費を最優先（未入力ならスタッフ登録料金→物件デフォルトの順）
@@ -5774,13 +5934,13 @@ function generatePaymentStatement(code, which) {
   // 【2人目】ダブルチェック・駆けつけ等。立替費用は1人目側に計上するため役務のみ
   const _staff2Fee = chk.staff2Fee != null ? (parseInt(chk.staff2Fee) || 0) : 0;
 
-  const isSecond    = which === 2;
-  const serviceName = isSecond ? (chk.staff2Type || '追加業務') : '清掃代金';
-  const serviceNote = isSecond ? (chk.staff2Memo || '2人目対応分') : '税込固定';
-  const cleaningFee = isSecond ? _staff2Fee : _cleaningFee1;
-  const laundryFee  = isSecond ? 0 : (chk.laundryFee  != null ? (parseInt(chk.laundryFee)  || 0) : 1400);
-  const suppliesFee = isSecond ? 0 : (chk.suppliesFee != null ? (parseInt(chk.suppliesFee) || 0) : 0);
-  const otherFee    = isSecond ? 0 : (chk.otherFee    != null ? (parseInt(chk.otherFee)    || 0) : 0);
+  const isSecond    = !sw && which === 2;
+  const serviceName = sw ? (sw.type || 'スポット作業') : (isSecond ? (chk.staff2Type || '追加業務') : '清掃代金');
+  const serviceNote = sw ? (sw.memo || 'スポット対応分') : (isSecond ? (chk.staff2Memo || '2人目対応分') : '税込固定');
+  const cleaningFee = sw ? (parseInt(sw.fee) || 0) : (isSecond ? _staff2Fee : _cleaningFee1);
+  const laundryFee  = (sw || isSecond) ? 0 : (chk.laundryFee  != null ? (parseInt(chk.laundryFee)  || 0) : 1400);
+  const suppliesFee = (sw || isSecond) ? 0 : (chk.suppliesFee != null ? (parseInt(chk.suppliesFee) || 0) : 0);
+  const otherFee    = (sw || isSecond) ? 0 : (chk.otherFee    != null ? (parseInt(chk.otherFee)    || 0) : 0);
   const otherMemo   = chk.otherMemo   || '';
   const expenseTotal = laundryFee + suppliesFee + otherFee;
   const total = cleaningFee + expenseTotal;
@@ -5793,7 +5953,9 @@ function generatePaymentStatement(code, which) {
     const d = new Date(p[0], p[1]-1, p[2]);
     return `${p[1]}月${p[2]}日（${dayNames[d.getDay()]}）`;
   }
-  const coStr = getCheckout(b);
+  const coStr = sw ? '' : getCheckout(b);
+  // スポット作業は日付が1つだけ（YYYY-MM-DD → YYYY/M/D に直す）
+  const spotDateSlash = (sw && sw.date) ? String(sw.date).split('-').map(Number).join('/') : '';
 
   // 備考
   const expenseNotes = [laundryFee > 0 ? `コインランドリー ${laundryFee.toLocaleString('ja-JP')}円` : '', suppliesFee > 0 ? `消耗品 ${suppliesFee.toLocaleString('ja-JP')}円` : '', otherFee > 0 ? `その他 ${otherFee.toLocaleString('ja-JP')}円` : ''].filter(Boolean).join('<br>');
@@ -5822,11 +5984,11 @@ function generatePaymentStatement(code, which) {
       .print-btn{display:block;margin:0 auto;padding:12px 40px;font-size:15px;font-weight:700;background:#1a365d;color:white;border:none;border-radius:10px;cursor:pointer}
       @media print{.no-print{display:none !important}body{padding:20px 28px}}
     </style></head><body>
-    <h2>支払明細書（${isSecond ? '追加業務' : '清掃費用'}・税込表記）</h2>
+    <h2>支払明細書（${sw ? 'スポット作業' : isSecond ? '追加業務' : '清掃費用'}・税込表記）</h2>
     <table class="meta">
       <tr><td>支払日</td><td>${payDate}</td></tr>
       <tr><td>支払先</td><td><strong>${escHtml(payee)}</strong>　様</td></tr>
-      <tr><td>施設/案件</td><td>${escHtml(propName)}（${fmtDateJa(b.checkin)} チェックイン → ${fmtDateJa(coStr)} チェックアウト）</td></tr>
+      <tr><td>施設/案件</td><td>${escHtml(propName)}（${sw ? fmtDateJa(spotDateSlash) + ' 対応分' : fmtDateJa(b.checkin) + ' チェックイン → ' + fmtDateJa(coStr) + ' チェックアウト'}）</td></tr>
     </table>
     <table class="items">
       <thead><tr><th>区分</th><th>項目</th><th>金額（税込）</th><th>備考</th></tr></thead>
