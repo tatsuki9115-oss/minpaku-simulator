@@ -7385,6 +7385,8 @@ function generateWelcomeMsg() {
   const comment = buildWeatherComment(days, area.areaName, welcomeTyphoonInclude && !!welcomeTyphoonData);
   // ★週間予報(7日)より滞在が長い場合の注記
   //   実例：29泊のDemetrioさん宛に7日分の予報だけを送っていた
+  //   ⛔「後半の天気は改めてお知らせします」のような“次回の連絡の約束”は書かない。
+  //     書いた瞬間にオーナーの仕事になるため（2026-09-09 オーナー指摘）。事実とリンクの案内だけにする
   let longStayNote = '';
   {
     const lastForecast = days.length ? days[days.length - 1].date : null;
@@ -7394,7 +7396,7 @@ function generateWelcomeMsg() {
       const coDate = new Date(cy, cm - 1, cd);
       // チェックアウトが予報の最終日より2日以上先＝滞在の後半をカバーできていない
       if ((coDate - lastForecast) / 86400000 >= 2) {
-        longStayNote = `\n※ 天気予報は直近1週間分です。ご滞在が長いため、後半の天気は改めてお知らせします。`;
+        longStayNote = `\n※ 天気予報は直近1週間分のため、ご滞在の後半は含まれておりません。最新の予報は下記リンクからご確認いただけます。`;
       }
     }
   }
