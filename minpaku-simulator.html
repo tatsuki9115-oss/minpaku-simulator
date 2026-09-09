@@ -7079,6 +7079,30 @@ async function fetchYokohamaEvents() {
   if (btn) { btn.disabled = false; btn.textContent = '🎪 イベント情報を取得'; btn.style.opacity = '1'; }
 }
 
+// 気象庁の発表時刻を「9月9日17時」の形にする
+function fmtJmaReport(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  return `${d.getMonth() + 1}月${d.getDate()}日${d.getHours()}時`;
+}
+// 気象庁の週間予報は毎日11時と17時に更新される。
+// 手元の予報がその後の発表回より古い＝すでに新しい予報が出ている、と判定する
+function isWeatherStale(iso) {
+  if (!iso) return false;
+  const rep = new Date(iso);
+  if (isNaN(rep)) return false;
+  const now = new Date();
+  const at = (dayOffset, hour) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() + dayOffset);
+    d.setHours(hour, 0, 0, 0);
+    return d;
+  };
+  // 直近に「もう過ぎた」発表時刻を求める
+  const latest = now.getHours() >= 17 ? at(0, 17) : now.getHours() >= 11 ? at(0, 11) : at(-1, 17);
+  return rep < latest;
+}
+
 async function fetchWelcomeWeather() {
   const code = document.getElementById('msg-booking-select')?.value;
   const b = code ? findBookingByCode(code) : null;
@@ -7157,14 +7181,17 @@ async function fetchWelcomeWeather() {
         pop: (pops[i] !== '' && pops[i] != null) ? parseInt(pops[i]) : null,
       };
     }).filter(d => d.weather);
-    welcomeWeatherData = { area, days, fetchedAt: new Date() };
+    // ★どの発表回の予報かを必ず保持する。気象庁の週間予報は1日2回（11時・17時）更新されるため、
+    //   朝に取得した数値を夜に送ると古い内容になる（2026-09-09に実際に発生）
+    const reportDatetime = weekly.reportDatetime || data[0]?.reportDatetime || null;
+    welcomeWeatherData = { area, days, reportDatetime, fetchedAt: new Date() };
     // プレビュー表示
     const dow = ['日','月','火','水','木','金','土'];
     const rows = days.map(d => {
       const temp = (d.tempMax || d.tempMin) ? `${d.tempMax ?? '?'}°C / ${d.tempMin ?? '?'}°C` : '―';
       return `<tr><td style="padding:5px 8px;font-size:12px;white-space:nowrap">${d.date.getMonth()+1}/${d.date.getDate()}(${dow[d.date.getDay()]})</td><td style="padding:5px 8px;font-size:12px">${d.weather}</td><td style="padding:5px 8px;font-size:12px;text-align:right;white-space:nowrap">${temp}</td></tr>`;
     }).join('');
-    if (preview) preview.innerHTML = `<div style="font-size:11px;color:#aaa;margin-bottom:6px">✅ 取得完了（${area.label}）</div><table style="width:100%;border-collapse:collapse;background:#F5F5F4;border-radius:8px;overflow:hidden">${rows}</table>`;
+    if (preview) preview.innerHTML = `<div style="font-size:11px;color:#aaa;margin-bottom:6px">✅ 取得完了（${area.label}）${reportDatetime ? ' ／ 気象庁 ' + fmtJmaReport(reportDatetime) + '発表' : ''}</div><table style="width:100%;border-collapse:collapse;background:#F5F5F4;border-radius:8px;overflow:hidden">${rows}</table>`;
     showToast('天気予報を取得しました', 'success');
     // 天気取得に続けて台風接近もチェック
     await checkTyphoonApproach(b, area);
@@ -7364,7 +7391,12 @@ function formatEventDatesForStay(datesStr, stayStartStr, stayEndStr) {
 
 function generateWelcomeMsg() {
   if (!welcomeWeatherData) { showToast('先に天気予報を取得してください', 'error'); return; }
-  const { area, days } = welcomeWeatherData;
+  const { area, days, reportDatetime } = welcomeWeatherData;
+  // ★古い発表回のまま送ってしまう事故を防ぐ（気象庁は11時・17時に更新）
+  if (isWeatherStale(reportDatetime)) {
+    showToast(`気象庁の予報が更新されています（お手元は${fmtJmaReport(reportDatetime)}発表）。「天気予報を取得」を押し直してください`, 'error');
+    return;
+  }
   const code = document.getElementById('msg-booking-select')?.value;
   const b = code ? findBookingByCode(code) : null;
   const guestFirst = b ? (b.guestName || '').split(/[\s　]/)[0] : '';
@@ -7440,7 +7472,7 @@ function generateWelcomeMsg() {
   const introLine = hasTyphoon
     ? '安全にお過ごしいただけるよう、天気予報と台風・イベント情報をお知らせします。'
     : '快適に過ごしていただけるよう、天気予報と近隣のイベント情報をお知らせしますので、ぜひご参考にしてください。';
-  let msg = `${greeting}\n\n当施設をご予約いただき、ありがとうございます。\n${introLine}\n\n${typhoonBlock}＜週間天気予報＞\n${weatherLines}\n\n${comment}${longStayNote}\n▶ 最新の天気予報はこちら：${area.jmaUrl}\n\n${eventLines}\n\n※ 上記は参考情報です。開催日程・内容は予告なく変更になる場合がありますので、最新情報は各リンクよりご確認ください。有料施設のチケットはお客様ご自身でのご購入をお願いしております。\n\n${closingLine}\n\nTy`;
+  let msg = `${greeting}\n\n当施設をご予約いただき、ありがとうございます。\n${introLine}\n\n${typhoonBlock}＜週間天気予報${reportDatetime ? `（気象庁 ${fmtJmaReport(reportDatetime)}発表）` : ''}＞\n${weatherLines}\n\n${comment}${longStayNote}\n▶ 最新の天気予報はこちら：${area.jmaUrl}\n\n${eventLines}\n\n※ 上記は参考情報です。開催日程・内容は予告なく変更になる場合がありますので、最新情報は各リンクよりご確認ください。有料施設のチケットはお客様ご自身でのご購入をお願いしております。\n\n${closingLine}\n\nTy`;
   const ta = document.getElementById('msg-prompt-area');
   if (ta) { ta.value = msg; ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 800) + 'px'; }
   document.getElementById('msg-output-card').style.display = 'block';
