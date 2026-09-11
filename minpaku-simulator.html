@@ -5447,6 +5447,12 @@ function showCleaningReminderForm(code) {
   const propName = prop ? prop.name : '物件';
   const coStr = getCheckout(b);
   const nextEntry = _lineNextEntry(code, propId, coStr);
+  // 🍽 ダイニングテーブル（ECRU）：次のゲストの大人が5名以上なら「大きくする」を初期選択
+  const _nextAdults = nextEntry && nextEntry.x.adults != null ? Number(nextEntry.x.adults) : null;
+  const tableDefault = (_nextAdults != null && _nextAdults >= 5) ? 'big' : 'small';
+  const tableHint = _nextAdults != null
+    ? `次回は大人${_nextAdults}名 → 自動で「${_nextAdults >= 5 ? '大きくする' : '小さくする'}」を選んでいます`
+    : '次の予約がないため「小さくする」にしています';
   const currentInfo = `
     <div style="background:#f5faff;border:1.5px solid #cfe2ff;border-radius:10px;padding:10px 12px;margin-bottom:10px">
       <div style="font-size:10px;font-weight:800;color:#1565C0;margin-bottom:4px">📌 今回の予約</div>
@@ -5530,6 +5536,16 @@ function showCleaningReminderForm(code) {
         </div>
         <div style="font-size:10.5px;color:#888;margin-top:5px;line-height:1.5">同じ商品です。ゲストの希望を聞いてから選んでください</div>
       </div>
+
+      <!-- ダイニングテーブル（ECRUのみ） -->
+      <div style="margin-bottom:20px">
+        <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">🍽 ダイニングテーブルの大きさ</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button id="cr-table-small" onclick="crSelect('table','small')" style="padding:10px;border-radius:10px;border:2px solid ${tableDefault === 'small' ? '#00B900' : '#e0e0e0'};background:${tableDefault === 'small' ? '#f0fff0' : '#f9f9f9'};color:${tableDefault === 'small' ? '#007a00' : '#555'};font-size:13px;font-weight:700;cursor:pointer">◻️ 小さくする</button>
+          <button id="cr-table-big" onclick="crSelect('table','big')" style="padding:10px;border-radius:10px;border:2px solid ${tableDefault === 'big' ? '#00B900' : '#e0e0e0'};background:${tableDefault === 'big' ? '#f0fff0' : '#f9f9f9'};color:${tableDefault === 'big' ? '#007a00' : '#555'};font-size:13px;font-weight:700;cursor:pointer">⬛ 大きくする</button>
+        </div>
+        <div style="font-size:10.5px;color:#888;margin-top:5px;line-height:1.5">大人5名以上＝大きく／4名以下＝小さく。${tableHint}<br>※ゲストは操作しません（スタッフのみ）</div>
+      </div>
       ` : ''}
       <button onclick="generateCleaningReminderMsg('${code}')" style="width:100%;padding:15px;background:#FF6D00;border:none;border-radius:12px;color:white;font-size:15px;font-weight:800;cursor:pointer;letter-spacing:.5px">
         🧹 LINE文を生成する
@@ -5539,7 +5555,7 @@ function showCleaningReminderForm(code) {
   overlay.addEventListener('click', e => { if (e.target === overlay) document.body.removeChild(overlay); });
 
   // デフォルト選択状態を初期化
-  window._crState = { trash: 'clear', shop: 'none', card: 'ja', linen: '2', baby: 'none' };
+  window._crState = { trash: 'clear', shop: 'none', card: 'ja', linen: '2', baby: 'none', table: tableDefault };
 }
 
 function crSelect(group, val) {
@@ -5554,6 +5570,7 @@ function crSelect(group, val) {
     baby:  { none:  ['cr-baby-none','cr-baby-bed','cr-baby-pen'],
              bed:   ['cr-baby-bed','cr-baby-none','cr-baby-pen'],
              pen:   ['cr-baby-pen','cr-baby-none','cr-baby-bed'] },
+    table: { small: ['cr-table-small','cr-table-big'], big: ['cr-table-big','cr-table-small'] },
   };
   const ids = configs[group][val];
   if (!ids) return;
@@ -5639,6 +5656,20 @@ function generateCleaningReminderMsg(code) {
     lines.push(st.baby === 'bed'
       ? '　→ ベビーベッドとして使用（上段のバシネットを取り付ける）'
       : '　→ ベビーサークルとして使用（床置きで柵にする）');
+  }
+  // ダイニングテーブルの大きさ（ECRUのみ）
+  if (_isEcruProp(prop) && st.table) {
+    const big = st.table === 'big';
+    lines.push('');
+    lines.push(`▶▶ 🍽 ダイニングテーブル：【${big ? '大きくする' : '小さくする'}】 ◀◀`);
+    lines.push(big
+      ? '　→ 天板の裏の固定金具を上へ押し上げ、天板を左右に引き離す'
+      : '　→ 天板の裏の固定金具を上へ押し上げ、少し引き離す');
+    lines.push(big
+      ? '　→ 中の伸長天板をハンドル側から起こして倒し、はめ込む'
+      : '　→ 伸長天板をハンドル側から持ち上げて折りたたむ');
+    lines.push('　→ 天板を寄せて、固定金具を下へ押し込んでロック（ガタつきがないか確認）');
+    lines.push('　※ゲストは操作しません。写真つきの手順は清掃アプリのマニュアルにあります');
   }
   lines.push('');
   lines.push('よろしくお願いします！🙌');
