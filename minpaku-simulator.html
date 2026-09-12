@@ -5453,6 +5453,14 @@ function showCleaningReminderForm(code) {
   const tableHint = _nextAdults != null
     ? `次回は大人${_nextAdults}名 → 自動で「${_nextAdults >= 5 ? '大きくする' : '小さくする'}」を選んでいます`
     : '次の予約がないため「小さくする」にしています';
+  // 🛏 お布団（ECRU）：次のゲストが7名以上なら「出す」を初期選択（大人＋子ども）
+  const _nextTotal = nextEntry
+    ? (Number(nextEntry.x.adults || 0) + Number(nextEntry.x.children || 0))
+    : null;
+  const futonDefault = (_nextTotal != null && _nextTotal >= 7) ? 'out' : 'keep';
+  const futonHint = _nextTotal != null
+    ? `次回は${_nextTotal}名 → 自動で「${_nextTotal >= 7 ? '8畳に出す' : '天袋のまま'}」を選んでいます`
+    : '次の予約がないため「天袋のまま」にしています';
   const currentInfo = `
     <div style="background:#f5faff;border:1.5px solid #cfe2ff;border-radius:10px;padding:10px 12px;margin-bottom:10px">
       <div style="font-size:10px;font-weight:800;color:#1565C0;margin-bottom:4px">📌 今回の予約</div>
@@ -5546,6 +5554,16 @@ function showCleaningReminderForm(code) {
         </div>
         <div style="font-size:10.5px;color:#888;margin-top:5px;line-height:1.5">大人5名以上＝大きく／4名以下＝小さく。${tableHint}<br>※ゲストは操作しません（スタッフのみ）</div>
       </div>
+
+      <!-- お布団（ECRUのみ） -->
+      <div style="margin-bottom:20px">
+        <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">🛏 お布団2組の置き場所</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button id="cr-futon-keep" onclick="crSelect('futon','keep')" style="padding:10px;border-radius:10px;border:2px solid ${futonDefault === 'keep' ? '#00B900' : '#e0e0e0'};background:${futonDefault === 'keep' ? '#f0fff0' : '#f9f9f9'};color:${futonDefault === 'keep' ? '#007a00' : '#555'};font-size:13px;font-weight:700;cursor:pointer">🗄 天袋のまま</button>
+          <button id="cr-futon-out" onclick="crSelect('futon','out')" style="padding:10px;border-radius:10px;border:2px solid ${futonDefault === 'out' ? '#00B900' : '#e0e0e0'};background:${futonDefault === 'out' ? '#f0fff0' : '#f9f9f9'};color:${futonDefault === 'out' ? '#007a00' : '#555'};font-size:13px;font-weight:700;cursor:pointer">🛏 8畳に出す</button>
+        </div>
+        <div style="font-size:10.5px;color:#888;margin-top:5px;line-height:1.5">7名以上＝使う組数だけ8畳に畳んで出す／6名以下＝天袋のまま。${futonHint}<br>※どちらの場合も2組ともコロコロをかけます</div>
+      </div>
       ` : ''}
       <button onclick="generateCleaningReminderMsg('${code}')" style="width:100%;padding:15px;background:#FF6D00;border:none;border-radius:12px;color:white;font-size:15px;font-weight:800;cursor:pointer;letter-spacing:.5px">
         🧹 LINE文を生成する
@@ -5555,7 +5573,7 @@ function showCleaningReminderForm(code) {
   overlay.addEventListener('click', e => { if (e.target === overlay) document.body.removeChild(overlay); });
 
   // デフォルト選択状態を初期化
-  window._crState = { trash: 'clear', shop: 'none', card: 'ja', linen: '2', baby: 'none', table: tableDefault };
+  window._crState = { trash: 'clear', shop: 'none', card: 'ja', linen: '2', baby: 'none', table: tableDefault, futon: futonDefault };
 }
 
 function crSelect(group, val) {
@@ -5571,6 +5589,7 @@ function crSelect(group, val) {
              bed:   ['cr-baby-bed','cr-baby-none','cr-baby-pen'],
              pen:   ['cr-baby-pen','cr-baby-none','cr-baby-bed'] },
     table: { small: ['cr-table-small','cr-table-big'], big: ['cr-table-big','cr-table-small'] },
+    futon: { keep:  ['cr-futon-keep','cr-futon-out'],   out: ['cr-futon-out','cr-futon-keep'] },
   };
   const ids = configs[group][val];
   if (!ids) return;
@@ -5670,6 +5689,16 @@ function generateCleaningReminderMsg(code) {
       : '　→ 伸長天板をハンドル側から持ち上げて折りたたむ');
     lines.push('　→ 天板を寄せて、固定金具を下へ押し込んでロック（ガタつきがないか確認）');
     lines.push('　※ゲストは操作しません。写真つきの手順は清掃アプリのマニュアルにあります');
+  }
+  // お布団の置き場所（ECRUのみ）
+  if (_isEcruProp(prop) && st.futon) {
+    const out = st.futon === 'out';
+    lines.push('');
+    lines.push(`▶▶ 🛏 お布団2組：【${out ? '8畳に出す' : '天袋のまま'}】 ◀◀`);
+    lines.push(out
+      ? '　→ 使う組数だけ、8畳の部屋に畳んだ状態で出しておく'
+      : '　→ 8畳・7畳の天袋に1セットずつ収納');
+    lines.push('　※どちらの場合も2組ともコロコロをかけます');
   }
   lines.push('');
   lines.push('よろしくお願いします！🙌');
