@@ -48,7 +48,7 @@
   #nav-calendar svg   { stroke: #F07C3F; }
   #nav-annual svg     { stroke: #EF4444; }
   #nav-settings svg   { stroke: #6B7280; }
-  #nav-check svg      { stroke: #059669; }
+  #nav-check svg      { stroke: #EC4899; }
   /* アクティブ時はオレンジで統一 */
   .bottom-nav-item.active svg { stroke: #F07C3F; }
 
@@ -575,7 +575,7 @@
     実績
   </button>
   <button class="bottom-nav-item" onclick="showTab('check')" id="nav-check">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
     物件候補
   </button>
   <button class="bottom-nav-item" onclick="showTab('settings')" id="nav-settings">
@@ -819,10 +819,12 @@
       <div>
         <div style="font-size:12px;color:#888;margin-bottom:4px">繁忙期ADR<span style="color:#E53935">*</span>（ゲスト支払）</div>
         <input type="number" id="ck-adr-busy" placeholder="例: 26000" oninput="calcCheckV2()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
+        <div id="ck-adr-busy-host" style="font-size:11px;color:#888;margin-top:3px;min-height:0"></div>
       </div>
       <div>
         <div style="font-size:12px;color:#888;margin-bottom:4px">閑散期ADR<span style="color:#E53935">*</span>（ゲスト支払）</div>
         <input type="number" id="ck-adr-slow" placeholder="例: 14000" oninput="calcCheckV2()" style="width:100%;padding:10px 12px;border:1.5px solid #E5E2DE;border-radius:10px;font-size:14px;box-sizing:border-box">
+        <div id="ck-adr-slow-host" style="font-size:11px;color:#888;margin-top:3px;min-height:0"></div>
       </div>
     </div>
 
@@ -2696,6 +2698,25 @@ function showToast(msg, type='info') {
   t.id = 'toast-msg';
   const bg = type === 'error' ? '#E53935' : type === 'success' ? '#1C9A52' : '#1C1C1E';
   t.style.cssText = `position:fixed;bottom:calc(80px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:${bg};color:white;padding:11px 20px;border-radius:12px;font-size:13px;font-weight:700;z-index:9999;max-width:90vw;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,.2);animation:toastIn .2s ease`;
+  if (type === 'error') {
+    t.style.display = 'flex';
+    t.style.alignItems = 'center';
+    t.style.gap = '8px';
+    t.style.padding = '6px 6px 6px 16px';
+    const span = document.createElement('span');
+    span.style.cssText = 'flex:1;text-align:left';
+    span.textContent = msg;
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.setAttribute('aria-label', '閉じる');
+    close.textContent = '×';
+    close.style.cssText = 'flex-shrink:0;width:40px;height:40px;border:none;background:rgba(255,255,255,.18);color:white;font-size:22px;line-height:1;border-radius:10px;cursor:pointer;padding:0';
+    close.onclick = () => t.remove();
+    t.appendChild(span);
+    t.appendChild(close);
+    document.body.appendChild(t);
+    return;
+  }
   t.textContent = msg;
   document.body.appendChild(t);
   setTimeout(() => { t.style.animation='toastOut .2s ease forwards'; setTimeout(()=>t.remove(), 200); }, 2800);
@@ -4224,7 +4245,7 @@ function renderDashboard() {
         <span style="font-size:12px;color:#888;white-space:nowrap">利益 <strong style="color:${fyIsP?'#1C9A52':'#E53935'};font-size:14px">${fyIsP?'':'▲'}${fmtShort(Math.abs(fyProfit))}円</strong>${fyMargin!==null?` <span style="font-size:11px;font-weight:700;color:${fyIsP?'#1C9A52':'#E53935'}">(${fyIsP?'':'▲'}${Math.abs(fyMargin)}%)</span>`:''}</span>
         <span style="font-size:12px;color:#888;white-space:nowrap">稼働 <strong style="color:#1C1C1E;font-size:14px">${occRateShort===null?'—':occRateShort+'%'}</strong></span>
       </div>
-      <span style="font-size:11px;font-weight:700;color:#F07C3F;white-space:nowrap;flex-shrink:0">詳細 ›</span>
+      <span style="font-size:11px;font-weight:700;color:#F07C3F;white-space:nowrap;flex-shrink:0">年間の実績を見る ›</span>
     </div>` : ''}
     ${(() => {
       const bd = daysSinceBackup();
@@ -8034,7 +8055,16 @@ function renderResearchResult(data) {
   el.innerHTML = linksHtml;
 }
 
+function _ckUpdateHostPayoutHints() {
+  ['busy', 'slow'].forEach(k => {
+    const el = document.getElementById('ck-adr-' + k + '-host');
+    if (!el) return;
+    const v = parseFloat(document.getElementById('ck-adr-' + k)?.value);
+    el.textContent = (v > 0) ? '→ 受取 1泊 ' + Math.round(v * AIRBNB_HOST_RATE).toLocaleString('ja-JP') + '円' : '';
+  });
+}
 function calcCheckV2() {
+  _ckUpdateHostPayoutHints();
   const adrBusyG = _ckReadNum('ck-adr-busy', 0);
   const adrSlowG = _ckReadNum('ck-adr-slow', 0);
   const adrNormGRaw = document.getElementById('ck-adr-norm')?.value;
