@@ -6314,8 +6314,8 @@ function renderMessageTab() {
       </div>
 
       <div style="margin-bottom:14px">
-        <label style="font-size:11px;font-weight:700;color:#B0ADA8;display:block;margin-bottom:4px">補足（自由記述・空欄でも可）</label>
-        <input type="text" id="dis-note" placeholder="例：台風8号「ヒーゴス」／人身事故／停電" style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:10px 12px;font-size:14px;background:#FAFAF9;box-sizing:border-box">
+        <label style="font-size:11px;font-weight:700;color:#B0ADA8;display:block;margin-bottom:4px">補足（空欄でも可）… 日本語版にそのまま1文で入ります。日本語で書いた場合、英語版には入りません</label>
+        <input type="text" id="dis-note" placeholder="例：21日のチェックアウト日に台風が近づく見込みです" style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:10px 12px;font-size:14px;background:#FAFAF9;box-sizing:border-box">
       </div>
 
       <div style="font-size:12px;font-weight:700;color:#B0ADA8;margin-bottom:8px">含める内容（チェックを外すと省略）</div>
@@ -7660,14 +7660,16 @@ function generateDisasterMsg() {
   jp.push(guestFirst ? `${guestFirst}さん、` : 'こんにちは、');
   en.push(guestFirst ? `Hi ${guestFirst},` : 'Hello,');
 
-  const noteJp = note ? `（${note}）` : '';
-  const noteEn = note ? ` (${note})` : '';
   if (incSafety && (isAfter ? t.jpAfter : t.jpBefore)) {
-    jp.push((isAfter ? t.jpAfter : t.jpBefore).replace('。', noteJp ? noteJp + '。' : '。'));
-    en.push((isAfter ? t.enAfter : t.enBefore) + noteEn);
-  } else if (note) {
-    jp.push(`${note}の影響が出ております。`);
-    en.push(`There is a disruption due to ${note}.`);
+    jp.push(isAfter ? t.jpAfter : t.jpBefore);
+    en.push(isAfter ? t.enAfter : t.enBefore);
+  }
+  // 補足は型にはめず、書いたとおりの1文として入れる（「〜の影響が出ております」と言い切らない）。
+  // 日本語の補足を英語版に混ぜると文が壊れるので、英数字だけのときだけ英語版にも入れる
+  const noteHasJp = /[^\x00-\x7F]/.test(note);
+  if (note) {
+    jp.push(/[。！？!?]$/.test(note) ? note : note + '。');
+    if (!noteHasJp) en.push(/[.!?]$/.test(note) ? note : note + '.');
   }
 
   if (incIndoor && t.jpIndoor) { jp.push(t.jpIndoor); en.push(t.enIndoor); }
@@ -7709,7 +7711,8 @@ function generateDisasterMsg() {
   if (ta) { ta.value = msg; ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 800) + 'px'; }
   document.getElementById('msg-output-card').style.display = 'block';
   document.getElementById('msg-output-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  showToast('災害・緊急メッセージを生成しました！', 'success');
+  if (note && noteHasJp) showToast('補足は英語版に入っていません。必要なら英語版に書き足してください', 'error');
+  else showToast('災害・緊急メッセージを生成しました！', 'success');
 }
 
 function getMsgSeasonComment(checkinStr) {
