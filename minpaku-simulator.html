@@ -2039,7 +2039,7 @@ function renderCalendarTab() {
           ? (parseInt(_selStaff.fee) || 0)
           : (prop ? (prop.perBookingCosts.find(c => c.name === '清掃費')?.amount || 0) : 0);
         const dispCleaning = chk.cleaningFee != null ? chk.cleaningFee : _defCleaning;
-        const dispLaundry  = chk.laundryFee  != null ? chk.laundryFee  : 1400;
+        const dispLaundry  = chk.laundryFee  != null ? chk.laundryFee  : getDefaultLaundry(prop);
         // 「0」が初期値の項目はプレースホルダ表示にして編集しやすく
         const dispSupplies = (chk.suppliesFee != null && chk.suppliesFee !== 0 && chk.suppliesFee !== '0') ? chk.suppliesFee : '';
         const dispOtherFee = (chk.otherFee != null && chk.otherFee !== 0 && chk.otherFee !== '0') ? chk.otherFee : '';
@@ -3516,7 +3516,7 @@ function showActualCostModal(year, month, propId) {
       : (prop.perBookingCosts ? (prop.perBookingCosts.find(c => c.name === '清掃費')?.amount || 0) : 0);
 
     calSum['清掃費']            += chk.cleaningFee  != null ? (parseInt(chk.cleaningFee)  || 0) : defCleaning;
-    calSum['コインランドリー']  += chk.laundryFee   != null ? (parseInt(chk.laundryFee)   || 0) : 1400;
+    calSum['コインランドリー']  += chk.laundryFee   != null ? (parseInt(chk.laundryFee)   || 0) : getDefaultLaundry(prop);
     calSum['消耗品']            += chk.suppliesFee  != null ? (parseInt(chk.suppliesFee)  || 0) : 0;
     // 2人目スタッフ（ダブルチェック・駆けつけ等）は「その他（明細あり）」に合算
     const _staff2Fee = chk.staff2Fee != null ? (parseInt(chk.staff2Fee) || 0) : 0;
@@ -3963,6 +3963,16 @@ function isLongStayListing(b) {
   return (b.listing && b.listing.startsWith('【28泊以上】')) || (b.nights >= 28);
 }
 
+// コインランドリーの初期値＝物件の「1組あたり変動費」のリネンの金額（未設定なら1,400円）
+// ★以前は全物件共通で1,400円をコードに直書きしており、ECRU（3,500円）が反映されなかった（2026-09-19）
+function getDefaultLaundry(prop) {
+  const c = (prop && Array.isArray(prop.perBookingCosts))
+    ? prop.perBookingCosts.find(x => x.name === 'リネン' || x.name === 'コインランドリー')
+    : null;
+  const v = c ? parseInt(c.amount) : NaN;
+  return isNaN(v) ? 1400 : v;
+}
+
 // 予約ごとの変動費合計（清掃スタッフに料金設定がある場合はその金額を使う）
 function getPerBookingTotal(booking, prop) {
   if (!prop) return 0;
@@ -3979,8 +3989,8 @@ function getPerBookingTotal(booking, prop) {
     : (prop.perBookingCosts.find(c => c.name === '清掃費')?.amount || 0);
   const cleaningFee = chk.cleaningFee != null ? (parseInt(chk.cleaningFee) || 0) : defaultCleaningFee;
 
-  // コインランドリー: 明示入力値 → デフォルト1400
-  const laundryFee = chk.laundryFee != null ? (parseInt(chk.laundryFee) || 0) : 1400;
+  // コインランドリー: 明示入力値 → 物件のリネン設定（なければ1,400）
+  const laundryFee = chk.laundryFee != null ? (parseInt(chk.laundryFee) || 0) : getDefaultLaundry(prop);
 
   // 消耗品: 明示入力値 → デフォルト0
   const suppliesFee = chk.suppliesFee != null ? (parseInt(chk.suppliesFee) || 0) : 0;
@@ -4888,7 +4898,7 @@ function renderAnnual() {
           const _bStaffFee = (_bSelStaff && _bSelStaff.fee != null && _bSelStaff.fee !== '') ? (parseInt(_bSelStaff.fee) || 0) : null;
           const _bDefClean = _bStaffFee !== null ? _bStaffFee : (prop ? (prop.perBookingCosts.find(c => c.name === '清掃費')?.amount || 0) : 0);
           const _bCleanFee = _bChk.cleaningFee != null ? (parseInt(_bChk.cleaningFee) || 0) : _bDefClean;
-          const _bLaundry  = _bChk.laundryFee  != null ? (parseInt(_bChk.laundryFee)  || 0) : 1400;
+          const _bLaundry  = _bChk.laundryFee  != null ? (parseInt(_bChk.laundryFee)  || 0) : getDefaultLaundry(prop);
           const _bSupplies = _bChk.suppliesFee  != null ? (parseInt(_bChk.suppliesFee) || 0) : 0;
           const varBreakdown = bVarCost > 0
             ? [_bCleanFee>0?`🧹¥${fmt(_bCleanFee)}`:'', _bLaundry>0?`🌀¥${fmt(_bLaundry)}`:'', _bSupplies>0?`🛒¥${fmt(_bSupplies)}`:''].filter(Boolean).join(' + ')
@@ -6053,7 +6063,7 @@ function generatePaymentStatement(code, which) {
   const serviceName = sw ? (sw.type || 'スポット作業') : (isSecond ? (chk.staff2Type || '追加業務') : '清掃代金');
   const serviceNote = sw ? (sw.memo || 'スポット対応分') : (isSecond ? (chk.staff2Memo || '2人目対応分') : '税込固定');
   const cleaningFee = sw ? (parseInt(sw.fee) || 0) : (isSecond ? _staff2Fee : _cleaningFee1);
-  const laundryFee  = (sw || isSecond) ? 0 : (chk.laundryFee  != null ? (parseInt(chk.laundryFee)  || 0) : 1400);
+  const laundryFee  = (sw || isSecond) ? 0 : (chk.laundryFee  != null ? (parseInt(chk.laundryFee)  || 0) : getDefaultLaundry(prop));
   const suppliesFee = (sw || isSecond) ? 0 : (chk.suppliesFee != null ? (parseInt(chk.suppliesFee) || 0) : 0);
   const otherFee    = (sw || isSecond) ? 0 : (chk.otherFee    != null ? (parseInt(chk.otherFee)    || 0) : 0);
   const otherMemo   = chk.otherMemo   || '';
