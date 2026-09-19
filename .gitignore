@@ -1,0 +1,9 @@
+# 原則すべて公開しない（個人情報の流出防止）
+*
+
+# ↓ 民泊シミュレーターの公開ファイルだけ許可
+!.gitignore
+!index.html
+!minpaku-simulator.html
+!fetch_beds24.py
+!netlify.toml
