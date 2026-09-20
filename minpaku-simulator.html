@@ -1351,6 +1351,9 @@ function initFirebaseSync() {
     try { localStorage.setItem(KEYS.bookingChecks, JSON.stringify(val)); } catch(e) {}
     bookingChecks = val;
     renderDashboard && renderDashboard();
+    // ★予約カードもチェック内容で見た目が変わる（支払通知ボタンの有効/無効・清掃スタッフ名など）。
+    //   ここで描き直さないと、あとから届いたデータが反映されず「チェックを1回押すまで押せない」状態になる
+    if (renderCalendarTab && !isEditingBookingCard()) renderCalendarTab();
   });
 
   fbdb.ref(KEYS.actualCosts).on('value', snap => {
@@ -1443,6 +1446,15 @@ function initFirebaseSync() {
       fbdb.ref(KEYS.actualCosts).set(actualCosts);
     }
   });
+}
+
+// 予約カードの入力欄（実費入力など）を操作している最中は再描画しない。
+// 再描画すると入力途中の値やフォーカスが失われるため
+function isEditingBookingCard() {
+  const el = document.activeElement;
+  if (!el) return false;
+  if (!/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) return false;
+  return !!el.closest('#page-calendar');
 }
 
 // ==================== 物件カラー ====================
