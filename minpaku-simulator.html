@@ -6876,8 +6876,10 @@ async function fetchChofuEvents() {
       if (r.ok) return await r.text();
     } catch {}
     let lastStatus = 0;
-    for (let i = 0; i < 5; i++) {
-      if (i > 0) await new Promise(r => setTimeout(r, 600 + i * 500));
+    // ★調布市は中継役のIP（Cloudflare）がCloudFrontに弾かれ、環境によっては毎回403になる。
+    //   取れないときに何十秒も待たせないよう試行は2回まで。スタジアム側は安定して取れる
+    for (let i = 0; i < 2; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, 800));
       try {
         const r2 = await fetch(viaProxy(url), { signal: AbortSignal.timeout(12000) });
         if (r2.ok) return await r2.text();
