@@ -1174,6 +1174,9 @@ function loadSpotWorks() {
 }
 function saveSpotWorks() { fbSave(KEYS.spotWorks, spotWorks); }
 
+// スポット作業をオーナー自身が支払った場合の担当名（スタッフへの支払いではないので支払明細には載せない）
+const SPOT_OWNER = 'オーナー（自分）';
+
 // ある物件・ある月のスポット作業を集計する
 // → 支払明細に載せる分（その他（明細あり））と載せない分（その他（明細なし））に分ける
 function getPropMonthSpotWorks(propId, year, month) {
@@ -1184,8 +1187,10 @@ function getPropMonthSpotWorks(propId, year, month) {
     if (wy !== year || wm !== month) return;
     const fee = parseInt(w.fee) || 0;
     if (fee === 0) return;
-    if (w.inStatement === false) res.noDetail += fee; else res.withDetail += fee;
-    res.lines.push(`${wm}/${wd} ${w.type || 'スポット作業'}（${w.staffName || '担当未設定'}）${fee.toLocaleString('ja-JP')}円${w.memo ? ' ' + w.memo : ''}${w.inStatement === false ? '（非公開）' : ''}`);
+    // オーナー立替はスタッフの支払明細に載せない（経費としては計上する）
+    const onStatement = w.staffName !== SPOT_OWNER && w.inStatement !== false;
+    if (onStatement) res.withDetail += fee; else res.noDetail += fee;
+    res.lines.push(`${wm}/${wd} ${w.type || 'スポット作業'}（${w.staffName || '担当未設定'}）${fee.toLocaleString('ja-JP')}円${w.memo ? ' ' + w.memo : ''}${w.staffName === SPOT_OWNER ? '（オーナー立替）' : w.inStatement === false ? '（非公開）' : ''}`);
   });
   return res;
 }
@@ -4589,7 +4594,8 @@ function renderSpotWorksCard() {
     const staffList = prop ? (prop.cleaningStaff || []) : [];
     const staffOpts = staffList.filter(st => !st.retired || st.name === w.staffName);
     const fee = parseInt(w.fee) || 0;
-    const ready = !!(w.staffName && fee > 0);
+    const isOwnerPaid = w.staffName === SPOT_OWNER;
+    const ready = !!(w.staffName && fee > 0 && !isOwnerPaid); // オーナー立替はスタッフへの支払いではない
     const blank = !w.staffName && fee === 0; // 追加したまま未入力の行
     return `<div style="border:1.5px solid ${blank?'#F0D9C8':'#E8E6E1'};border-radius:11px;padding:9px 10px;margin-bottom:8px;background:${blank?'#FFFCF9':'#FCFCFB'}">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
@@ -4604,6 +4610,7 @@ function renderSpotWorksCard() {
         <select onchange="updateSpotWork('${w.id}','staffName',this.value,true)"
           style="padding:5px 7px;border:1.5px solid ${w.staffName?'#e0e0e0':'#E53935'};border-radius:7px;font-size:12px;color:#333;background:white;box-sizing:border-box;width:100%">
           <option value="">担当を選ぶ</option>
+          <option value="${escHtml(SPOT_OWNER)}" ${isOwnerPaid?'selected':''}>🏠 ${escHtml(SPOT_OWNER)}</option>
           ${staffOpts.map(st => `<option value="${escHtml(st.name)}" ${w.staffName===st.name?'selected':''}>${escHtml(st.name)}${st.retired?'（退職）':''}</option>`).join('')}
         </select>
         <select onchange="updateSpotWork('${w.id}','type',this.value,true)"
@@ -4621,10 +4628,12 @@ function renderSpotWorksCard() {
           style="padding:5px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;color:#333;box-sizing:border-box;width:100%">
       </div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-        <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#666;cursor:pointer">
+        ${isOwnerPaid
+          ? `<span style="font-size:11px;font-weight:700;color:#8d6e63">🏠 オーナー立替（支払明細には載りません）</span>`
+          : `<label style="display:flex;align-items:center;gap:5px;font-size:11px;color:#666;cursor:pointer">
           <input type="checkbox" ${w.inStatement===false?'':'checked'} onchange="updateSpotWork('${w.id}','inStatement',this.checked,true)" style="cursor:pointer">
           支払明細に載せる
-        </label>
+        </label>`}
         <div style="display:flex;gap:6px">
           <button onclick="showPaymentStatementModal('spot:${w.id}')" ${ready?'':'disabled'}
             style="padding:5px 10px;font-size:11px;font-weight:800;border-radius:8px;border:1.5px solid ${ready?'#4a7fc1':'#ddd'};background:white;color:${ready?'#4a7fc1':'#bbb'};cursor:${ready?'pointer':'not-allowed'}">📄 支払明細</button>
