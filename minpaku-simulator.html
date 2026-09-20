@@ -6901,19 +6901,21 @@ async function fetchChofuEvents() {
       const url = `${area.eventChofuCal}?type=3&year=${d.getFullYear()}&month=${d.getMonth()+1}&day=${d.getDate()}`;
       let html; try { html = await getHtml(url); } catch { continue; }
       const doc = parser.parseFromString(html, 'text/html');
-      // イベント名はリンク、その直後に開催期間が続く
-      doc.querySelectorAll('a').forEach(a => {
-        const href = a.getAttribute('href') || '';
-        if (!/\/event\/|kouhou|\.html/.test(href)) return;
-        const title = strip(a.textContent || '');
-        if (title.length < 6 || title.length > 80) return;
+      // ★イベントは #tmp_event_cal_list の <ul><li><a> だけ。
+      //   ページ全体の <a> を見るとヘッダー・フッターのナビまで拾ってしまう
+      //   （「サイトマップ」「暮らし・手続き」等が混ざった：2026-09-20）
+      const list = doc.querySelector('#tmp_event_cal_list');
+      (list ? list.querySelectorAll('ul li a') : []).forEach(a => {
+        // リンク文字列＝「イベント名  2026年5月28日（木曜日） ～ 2026年9月30日（水曜日）」
+        const raw = strip(a.textContent || '');
+        const dm = raw.match(/20\d\d年\d{1,2}月\d{1,2}日/);
+        const title = strip(dm ? raw.slice(0, dm.index) : raw);
+        const dates = dm ? strip(raw.slice(dm.index).replace(/（[^）]*）/g, '')) : '';
+        if (!title || title.length < 4) return;
         if (isNotForGuest(title)) return;
         if (seen.has(title)) return;
-        // 直後のテキストから「2026年9月19日（土曜日） ～ …」を拾う
-        const after = strip((a.parentElement?.textContent || '').replace(title, ''));
-        const dm = after.match(/20\d\d年\d{1,2}月\d{1,2}日[^～]*(?:～[^0-9]*20\d\d年\d{1,2}月\d{1,2}日)?/);
         seen.add(title);
-        events.push({ title, dates: dm ? dm[0].replace(/（[^）]*）/g, '') : '', area: '調布市', venue: '', station: '' });
+        events.push({ title, dates, area: '調布市', venue: '', station: '' });
       });
     }
 
