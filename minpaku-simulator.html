@@ -2096,8 +2096,9 @@ function renderCalendarTab() {
               ${fmtD(b.checkin)} → ${fmtD(coStr)}<br><span style="font-weight:600;color:#888">${b.nights}泊</span>
             </div>
           </div>
-          ${b.code ? `<!-- 上段（その他）: 名簿 | CI情報 | ウェルカム | 支払通知 | [ゴミ依頼] -->
-          <div style="display:grid;grid-template-columns:${getBookingPropId(b)===2?'repeat(5, 1fr)':'repeat(4, 1fr)'};gap:4px;margin-bottom:4px;align-items:stretch">
+          ${b.code ? `<!-- 上段（その他）: 名簿 | CI情報 | ウェルカム | 支払通知 | [ボード（ECRU）/ ゴミ依頼（フィオーレ）] -->
+          <!-- 5個目のボタンがある物件だけ5列にする。4列のままだと5個目が次の行に落ちる -->
+          <div style="display:grid;grid-template-columns:${(getBookingPropId(b)===2 || isEcruProp(getBookingPropId(b)))?'repeat(5, 1fr)':'repeat(4, 1fr)'};gap:4px;margin-bottom:4px;align-items:stretch">
             <button onclick="toggleCheckFromList('${b.code}','formDone')" style="font-size:11px;font-weight:800;padding:7px 4px;border-radius:9px;border:2px solid ${formBorder};cursor:pointer;background:${formBg};color:${formColor};line-height:1.3">📋 ${chk.formDone?'名簿✓済':'名簿'}</button>
             <button onclick="toggleCheckFromList('${b.code}','checkinMsgDone')" style="font-size:10px;font-weight:800;padding:5px 2px;border-radius:9px;border:2px solid ${chk.checkinMsgDone?'#1565C0':daysToCI>=0&&daysToCI<=3?'#E53935':'#ddd'};cursor:pointer;background:${chk.checkinMsgDone?'#E3F2FD':daysToCI>=0&&daysToCI<=3?'#FFEBEE':'#f9f9f9'};color:${chk.checkinMsgDone?'#1565C0':daysToCI>=0&&daysToCI<=3?'#D32F2F':'#aaa'};line-height:1.3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;box-sizing:border-box"><span>📩</span><span>${chk.checkinMsgDone?'CI情報✓':'CI情報'}</span></button>
             <button onclick="toggleCheckFromList('${b.code}','welcomeMsgDone')" style="font-size:10px;font-weight:800;padding:5px 2px;border-radius:9px;border:2px solid ${chk.welcomeMsgDone?'#1565C0':daysToCI>=0&&daysToCI<=3?'#E53935':'#ddd'};cursor:pointer;background:${chk.welcomeMsgDone?'#E3F2FD':daysToCI>=0&&daysToCI<=3?'#FFEBEE':'#f9f9f9'};color:${chk.welcomeMsgDone?'#1565C0':daysToCI>=0&&daysToCI<=3?'#D32F2F':'#aaa'};line-height:1.3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;box-sizing:border-box"><span>👋</span><span>${chk.welcomeMsgDone?'WL✓':'ウェルカム'}</span></button>
