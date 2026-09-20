@@ -6867,16 +6867,17 @@ async function fetchChofuEvents() {
   const isNotForGuest = t => /オンライン|アカデミー|セミナー|講座|研修|説明会|議会|入札|募集|審議会|委員会|健診|検診|相談会|教室生/.test(t);
 
   const viaProxy = url => `${MSG_SYNC_WORKER_URL}/proxy?url=${encodeURIComponent(url)}`;
-  // ★調布市はCloudFrontの連続アクセス制限で5回に1回ほど403を返す（2026-09-20実測）。
-  //   1回失敗しただけでその日のイベントを落とさないよう、間を空けて数回試す
+  // ★調布市はCloudFrontの制限で半分ほど403を返す（2026-09-20実測で5/10成功）。
+  //   1回失敗しただけでその日のイベントを落とさないよう、間隔を空けて5回まで試す。
+  //   成功した応答はWorker側で10分キャッシュされるので、2回目以降は速い
   async function getHtml(url) {
     try {
       const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
       if (r.ok) return await r.text();
     } catch {}
     let lastStatus = 0;
-    for (let i = 0; i < 3; i++) {
-      if (i > 0) await new Promise(r => setTimeout(r, 900));
+    for (let i = 0; i < 5; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, 600 + i * 500));
       try {
         const r2 = await fetch(viaProxy(url), { signal: AbortSignal.timeout(12000) });
         if (r2.ok) return await r2.text();
