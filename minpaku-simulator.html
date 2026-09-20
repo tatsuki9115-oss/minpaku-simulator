@@ -6762,13 +6762,14 @@ function getWelcomeArea(b) {
       transitName: '京王電鉄 運行情報', transitUrl: 'https://www.keio.co.jp/unkou/unkou_pc.html',
       eventBaseUrl: null,
       eventApiUrl: null,
-      // 2026-09-05 いまたま → いこーよ に変更。
-      // いまたまは掲載68件中「府中・調布・狛江」がゼロ件で、調布のイベントが全く拾えなかった。
-      // いこーよは area_ids=102 が「府中・調布・狛江」で、1イベント＝1つの JSON-LD
-      // (schema.org Event) を埋め込んでいるため、HTMLのクラス名に依存せず安定して取れる。
-      eventIkoyoBase: 'https://iko-yo.net/events?area_ids%5B%5D=102&prefecture_ids%5B%5D=13',
-      eventCities: ['府中市', '調布市', '狛江市'],
-      eventSiteName: 'いこーよ（府中・調布・狛江）' };
+      // 2026-09-20 いこーよ → 調布市公式＋味の素スタジアム に変更。
+      // いこーよは検索結果をページ表示後にJavaScriptで描くため、HTMLを取っても
+      // 調布の一覧が入っておらず、埋め込みJSON-LDの「全国のおすすめ枠」しか拾えなかった
+      // （実測：15件すべて長崎・山梨・兵庫など他県で、調布/府中/狛江は0件）。
+      // 下の2つはどちらもサーバー側で組み立てられたHTMLなのでそのまま読める。
+      eventChofuCal: 'https://www.city.chofu.lg.jp/cgi-bin/event_cal_multi/calendar.cgi',
+      eventStadium: 'https://www.ajinomotostadium.com/schedule/',
+      eventSiteName: '調布市イベントカレンダー・味の素スタジアム' };
   }
   return { label: '高幡不動（多摩）', areaCode: '130000', areaName: '多摩地方', areaNameHint: '多摩',
     lat: 35.6593, lon: 139.4113,
@@ -6841,11 +6842,12 @@ function fetchEvents() {
   if (!area) return;
   if (area.eventBaseUrl) fetchYokohamaEvents();
   else if (area.eventApiUrl) fetchTamaEvents();
-  else if (area.eventIkoyoBase) fetchIkoyoEvents();
+  else if (area.eventChofuCal) fetchChofuEvents();
 }
 
-// 府中・調布・狛江（いこーよ／各イベントに埋め込まれた JSON-LD を読む）
-async function fetchIkoyoEvents() {
+// 調布（ECRU）：調布市の公式イベントカレンダー＋味の素スタジアムのイベント日程を読む
+// どちらもサーバー側で組み立てられたHTMLなので、そのまま解析できる
+async function fetchChofuEvents() {
   const code = document.getElementById('msg-booking-select')?.value;
   const b = code ? findBookingByCode(code) : null;
   if (!b) { showToast('予約を選択してください', 'error'); return; }
@@ -6854,74 +6856,101 @@ async function fetchIkoyoEvents() {
   const preview = document.getElementById('welcome-event-preview');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ 取得中...'; }
 
-  const parseD = s => { const [y,m,d] = s.split('/').map(Number); return new Date(y, m-1, d); };
+  const parseD = s2 => { const [y,m2,d] = s2.split('/').map(Number); return new Date(y, m2-1, d); };
   const fmtD   = d => `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
   const cin  = parseD(b.checkin || '');
   const cout = parseD(getCheckout(b) || '');
   const last = new Date(cout.getTime() - 86400000); // 最終宿泊日＝チェックアウト前日
-  // ★ term を付けると start_date/end_date が無視されるので絶対に付けない
-  const dq = (name, d) => `&${name}%5Byear%5D=${d.getFullYear()}&${name}%5Bmonth%5D=${d.getMonth()+1}&${name}%5Bday%5D=${d.getDate()}`;
-  const targetUrl = `${area.eventIkoyoBase}${dq('start_date', cin)}${dq('end_date', last)}`;
+  const targetUrl = `${area.eventChofuCal}?type=2&year=${cin.getFullYear()}&month=${cin.getMonth()+1}`;
 
-  const CORS_PROXIES = [ url => `${MSG_SYNC_WORKER_URL}/proxy?url=${encodeURIComponent(url)}` ];
-  async function fetchWithProxy(url) {
+  // ゲスト向けでないもの（オンライン講座・業務セミナー等）は落とす
+  const isNotForGuest = t => /オンライン|アカデミー|セミナー|講座|研修|説明会|議会|入札|募集|審議会|委員会|健診|検診|相談会|教室生/.test(t);
+
+  const viaProxy = url => `${MSG_SYNC_WORKER_URL}/proxy?url=${encodeURIComponent(url)}`;
+  // ★調布市はCloudFrontの連続アクセス制限で5回に1回ほど403を返す（2026-09-20実測）。
+  //   1回失敗しただけでその日のイベントを落とさないよう、間を空けて数回試す
+  async function getHtml(url) {
     try {
-      const r = await fetch(url, { signal: AbortSignal.timeout(4000) });
+      const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
       if (r.ok) return await r.text();
     } catch {}
-    for (const pFn of CORS_PROXIES) {
+    let lastStatus = 0;
+    for (let i = 0; i < 3; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, 900));
       try {
-        const r = await fetch(pFn(url), { signal: AbortSignal.timeout(8000) });
-        if (r.ok) return await r.text();
-      } catch {}
+        const r2 = await fetch(viaProxy(url), { signal: AbortSignal.timeout(12000) });
+        if (r2.ok) return await r2.text();
+        lastStatus = r2.status;
+      } catch { lastStatus = 0; }
     }
-    throw new Error('全プロキシで取得失敗');
+    throw new Error(`取得失敗 (${lastStatus || 'タイムアウト'})`);
   }
+  const strip = h => h.replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
 
   try {
     const parser = new DOMParser();
-    const PER_PAGE  = 15; // いこーよは1ページ15件
-    const MAX_PAGES = 10;
-    const seen = new Set();
     const events = [];
-    for (let page = 1; page <= MAX_PAGES; page++) {
-      const pageUrl = page === 1 ? targetUrl : `${targetUrl}&page=${page}`;
-      let html;
-      try { html = await fetchWithProxy(pageUrl); }
-      catch (e) { if (page === 1) throw e; break; }
+    const seen = new Set();
+
+    // ---- ① 調布市のイベントカレンダー（滞在する日ごとに1ページ） ----
+    const days = [];
+    for (let d = new Date(cin); d <= last; d.setDate(d.getDate() + 1)) days.push(new Date(d));
+    if (days.length === 0) days.push(new Date(cin));
+    for (const d of days) {
+      if (btn) btn.textContent = `⏳ 調布市を確認中... (${events.length}件)`;
+      const url = `${area.eventChofuCal}?type=3&year=${d.getFullYear()}&month=${d.getMonth()+1}&day=${d.getDate()}`;
+      let html; try { html = await getHtml(url); } catch { continue; }
       const doc = parser.parseFromString(html, 'text/html');
-      let found = 0;
-      doc.querySelectorAll('script[type="application/ld+json"]').forEach(sc => {
-        let j; try { j = JSON.parse(sc.textContent); } catch { return; }
-        (Array.isArray(j) ? j : [j]).forEach(o => {
-          if (!o || o['@type'] !== 'Event' || !o.name) return;
-          found++;
-          const loc = o.location?.address?.addressLocality || '';
-          // 対象3市以外が混ざったときの保険（PR枠はJSON-LDに入らないので通常は素通り）
-          if (area.eventCities?.length && loc && !area.eventCities.some(c => loc.includes(c))) return;
-          const key = o.name + '|' + (o.startDate || '');
-          if (seen.has(key)) return;
-          seen.add(key);
-          const sd = (o.startDate || '').replace(/-/g, '/');
-          const ed = (o.endDate   || '').replace(/-/g, '/');
-          events.push({
-            title: o.name.trim(),
-            dates: (!ed || sd === ed) ? sd : `${sd}〜${ed}`,
-            area:  loc,
-            venue: (o.location && o.location.name) || '',
-            station: '',
-          });
+      // イベント名はリンク、その直後に開催期間が続く
+      doc.querySelectorAll('a').forEach(a => {
+        const href = a.getAttribute('href') || '';
+        if (!/\/event\/|kouhou|\.html/.test(href)) return;
+        const title = strip(a.textContent || '');
+        if (title.length < 6 || title.length > 80) return;
+        if (isNotForGuest(title)) return;
+        if (seen.has(title)) return;
+        // 直後のテキストから「2026年9月19日（土曜日） ～ …」を拾う
+        const after = strip((a.parentElement?.textContent || '').replace(title, ''));
+        const dm = after.match(/20\d\d年\d{1,2}月\d{1,2}日[^～]*(?:～[^0-9]*20\d\d年\d{1,2}月\d{1,2}日)?/);
+        seen.add(title);
+        events.push({ title, dates: dm ? dm[0].replace(/（[^）]*）/g, '') : '', area: '調布市', venue: '', station: '' });
+      });
+    }
+
+    // ---- ② 味の素スタジアム（滞在がまたぐ月のページ） ----
+    const months = [...new Set(days.map(d => `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}`))];
+    for (const ym of months) {
+      if (btn) btn.textContent = `⏳ スタジアムを確認中... (${events.length}件)`;
+      const [yy, mm] = ym.split('/');
+      let html; try { html = await getHtml(`${area.eventStadium}${yy}/${mm}/`); } catch { continue; }
+      const txt = strip(html.replace(/<[^>]+>/g, '\n')).replace(/ \n /g, '\n');
+      const rows = html.split(/columnBlock01/).slice(1);
+      rows.forEach(seg => {
+        const plain = strip(seg.replace(/<[^>]+>/g, ' | '));
+        const dm = plain.match(/(\d{2})\.(\d{2})\s*[月火水木金土日]/);
+        if (!dm) return;
+        const evDate = new Date(Number(yy), Number(dm[1]) - 1, Number(dm[2]));
+        if (evDate < cin || evDate > last) return; // 滞在期間に重ならない日は捨てる
+        const parts = plain.split('|').map(x => x.trim()).filter(x => x && !/^[月火水木金土日]$/.test(x));
+        const title = parts.find(x => x.length > 4 && !/^\d{2}\.\d{2}/.test(x) && !/味の素スタジアム|駐車場|開始時間|お問合せ|詳細/.test(x));
+        if (!title) return;
+        const key = 'ST:' + title + dm[0];
+        if (seen.has(key)) return;
+        seen.add(key);
+        const time = (plain.match(/開始時間[:：]\s*([^|]{1,20})/) || [])[1] || '';
+        events.push({
+          title: title.replace(/&#\d+;/g, '').trim(),
+          dates: `${Number(dm[1])}月${Number(dm[2])}日${time ? '　' + time.trim() : ''}`,
+          area: '調布市', venue: '味の素スタジアム', station: '飛田給駅 徒歩5分',
         });
       });
-      if (btn) btn.textContent = `⏳ 一覧を取得中... (${events.length}件)`;
-      if (found < PER_PAGE) break; // 15件未満＝最終ページ
     }
 
     welcomeEventData = { events, startDate: fmtD(cin), endDate: fmtD(last), fetchedAt: new Date(), targetUrl };
     if (events.length === 0) {
       if (preview) preview.innerHTML = `<div style="font-size:12px;color:#aaa;padding:8px">この期間のイベント情報はありませんでした</div>`;
     } else {
-      const rows = events.map(ev => `
+      const rows2 = events.map(ev => `
         <div style="padding:7px 0;border-bottom:1px solid #E8E6E1">
           <div style="font-size:13px;font-weight:700;color:#333;line-height:1.4">${ev.title}</div>
           ${ev.dates ? `<div style="font-size:11px;color:#888;margin-top:2px">📅 ${ev.dates}</div>` : ''}
@@ -6929,7 +6958,7 @@ async function fetchIkoyoEvents() {
         </div>`).join('');
       if (preview) preview.innerHTML = `
         <div style="font-size:11px;color:#aaa;margin-bottom:6px">✅ ${events.length}件取得（${welcomeEventData.startDate} 〜 ${welcomeEventData.endDate}）</div>
-        <div style="background:#F5F5F4;border-radius:8px;padding:8px 12px">${rows}</div>
+        <div style="background:#F5F5F4;border-radius:8px;padding:8px 12px">${rows2}</div>
         <div style="font-size:10px;color:#aaa;margin-top:6px;text-align:right">
           <a href="${targetUrl}" target="_blank" style="color:#4a7fc1">${area.eventSiteName}で確認 →</a>
         </div>`;
@@ -7603,7 +7632,9 @@ function generateWelcomeMsg() {
     }).join('\n');
     eventLines = `＜期間中のイベント情報＞\n${evList}\n\n${welcomeEventData.targetUrl}`;
   } else {
-    const evSiteUrl = area.eventBaseUrl || area.eventApiUrl ? 'https://imatama.jp/event-list/index/1' : '';
+    // 0件でもイベントの欄ごと消えないよう、物件に合ったイベントサイトのURLを載せる
+    const evSiteUrl = area.eventChofuCal ? `${area.eventChofuCal}?type=2`
+      : (area.eventBaseUrl || area.eventApiUrl) ? 'https://imatama.jp/event-list/index/1' : '';
     eventLines = evSiteUrl ? `＜期間中のイベント情報＞\n${evSiteUrl}` : '';
   }
   const hasTyphoon = welcomeTyphoonInclude && !!welcomeTyphoonData;
