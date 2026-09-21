@@ -5568,7 +5568,16 @@ function showCleaningReminderForm(code) {
       ${currentInfo}
       ${nextInfo}
 
-      <!-- ゴミ袋 -->
+      <!-- ゴミ袋：ECRUは使い分けが決まっているので選択させず固定表示 -->
+      ${_isEcruProp(prop) ? `
+      <div style="margin-bottom:14px">
+        <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">🗑️ ゴミ袋の種類</div>
+        <div style="padding:10px 12px;border-radius:10px;border:1.5px solid #e0e0e0;background:#FAFAF9;font-size:12.5px;color:#444;line-height:1.7">
+          ・<b>事業用L</b> … 燃えるゴミ／プラスチック<br>
+          ・<b>透明</b> … 缶・瓶・ペットボトル
+        </div>
+      </div>
+      ` : `
       <div style="margin-bottom:14px">
         <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">🗑️ ゴミ袋の種類</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -5576,6 +5585,7 @@ function showCleaningReminderForm(code) {
           <button id="cr-trash-biz" onclick="crSelect('trash','biz')" style="padding:10px;border-radius:10px;border:2px solid #e0e0e0;background:#f9f9f9;color:#555;font-size:13px;font-weight:700;cursor:pointer">🟡 事業用</button>
         </div>
       </div>
+      `}
 
       <!-- 買い出し -->
       <div style="margin-bottom:14px">
@@ -5593,7 +5603,8 @@ function showCleaningReminderForm(code) {
         <input id="cr-keybox" type="text" inputmode="numeric" value="${defaultKeybox}" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:16px;font-weight:700;color:#333;text-align:center">
       </div>
 
-      <!-- メッセージカード -->
+      <!-- メッセージカード（ECRUはカードをセットしないので出さない） -->
+      ${_isEcruProp(prop) ? '' : `
       <div style="margin-bottom:14px">
         <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">💌 メッセージカードの種類</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -5602,7 +5613,20 @@ function showCleaningReminderForm(code) {
         </div>
       </div>
 
-      <!-- リネン人数 -->
+      `}
+
+      <!-- リネン：ECRUは常に8名分なので選択させない -->
+      ${_isEcruProp(prop) ? `
+      <div style="margin-bottom:20px">
+        <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">🛏️ リネンのセット人数</div>
+        <div style="padding:10px 12px;border-radius:10px;border:1.5px solid #e0e0e0;background:#FAFAF9;font-size:12.5px;color:#444;line-height:1.7">
+          <b>8名分セット（固定）</b><br>
+          ・歯ブラシ 8 ／ コップ 8<br>
+          ・バスタオル 8 ／ フェイスタオル 8<br>
+          ・バスマット 2枚
+        </div>
+      </div>
+      ` : `
       <div style="margin-bottom:20px">
         <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">🛏️ リネンのセット人数</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -5610,6 +5634,7 @@ function showCleaningReminderForm(code) {
           <button id="cr-linen-3" onclick="crSelect('linen','3')" style="padding:10px;border-radius:10px;border:2px solid #e0e0e0;background:#f9f9f9;color:#555;font-size:13px;font-weight:700;cursor:pointer">👨‍👩‍👧 3人分</button>
         </div>
       </div>
+      `}
 
       ${_isEcruProp(prop) ? `
       <!-- ベビーベッド／サークル（ECRUのみ） -->
@@ -5633,6 +5658,17 @@ function showCleaningReminderForm(code) {
         <div style="font-size:10.5px;color:#888;margin-top:5px;line-height:1.5">大人5名以上＝大きく／4名以下＝小さく。${tableHint}<br>※ゲストは操作しません（スタッフのみ）</div>
       </div>
 
+      <!-- 前回のゲストがお布団を何組使ったか（ECRUのみ・洗うリネンの数が変わる） -->
+      <div style="margin-bottom:20px">
+        <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">🛏 今回のゲストが使ったお布団の組数</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <button id="cr-futonused-0" onclick="crSelect('futonUsed','0')" style="padding:10px;border-radius:10px;border:2px solid #00B900;background:#f0fff0;color:#007a00;font-size:13px;font-weight:700;cursor:pointer">0組</button>
+          <button id="cr-futonused-1" onclick="crSelect('futonUsed','1')" style="padding:10px;border-radius:10px;border:2px solid #e0e0e0;background:#f9f9f9;color:#555;font-size:13px;font-weight:700;cursor:pointer">1組</button>
+          <button id="cr-futonused-2" onclick="crSelect('futonUsed','2')" style="padding:10px;border-radius:10px;border:2px solid #e0e0e0;background:#f9f9f9;color:#555;font-size:13px;font-weight:700;cursor:pointer">2組</button>
+        </div>
+        <div style="font-size:10.5px;color:#888;margin-top:5px;line-height:1.5">洗う敷き布団カバーの枚数が変わります</div>
+      </div>
+
       <!-- お布団（ECRUのみ） -->
       <div style="margin-bottom:20px">
         <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">🛏 お布団2組の置き場所</div>
@@ -5651,7 +5687,7 @@ function showCleaningReminderForm(code) {
   overlay.addEventListener('click', e => { if (e.target === overlay) document.body.removeChild(overlay); });
 
   // デフォルト選択状態を初期化
-  window._crState = { trash: 'clear', shop: 'none', card: 'ja', linen: '2', baby: 'none', table: tableDefault, futon: futonDefault };
+  window._crState = { trash: 'clear', shop: 'none', card: 'ja', linen: '2', baby: 'none', table: tableDefault, futon: futonDefault, futonUsed: '0' };
 }
 
 function crSelect(group, val) {
@@ -5737,14 +5773,36 @@ function generateCleaningReminderMsg(code) {
     lines.push(`▶▶ 🛒 買い出し：【不要】 ◀◀`);
   }
   lines.push('');
-  // ゴミ袋
-  lines.push(`🗑️ ゴミ袋：${st.trash === 'biz' ? '事業用' : '透明'}`);
+  // ゴミ袋（ECRUは使い分けが決まっているので固定）
+  if (_isEcruProp(prop)) {
+    lines.push('🗑️ ゴミ袋');
+    lines.push('　・事業用L … 燃えるゴミ／プラスチック');
+    lines.push('　・透明 … 缶・瓶・ペットボトル');
+  } else {
+    lines.push(`🗑️ ゴミ袋：${st.trash === 'biz' ? '事業用' : '透明'}`);
+  }
   // キーボックス
   if (keybox) lines.push(`🔐 キーボックス：${keybox}`);
-  // メッセージカード
-  lines.push(`💌 メッセージカード：${st.card === 'en' ? '英語' : '日本語'}`);
-  // リネン
-  lines.push(`🛏️ リネン：${st.linen === '3' ? '3人分' : '2人分'}セット`);
+  // メッセージカード（ECRUはカードをセットしないので出さない）
+  if (!_isEcruProp(prop)) lines.push(`💌 メッセージカード：${st.card === 'en' ? '英語' : '日本語'}`);
+  // リネン（ECRUは常に8名分）
+  if (_isEcruProp(prop)) {
+    lines.push('🛏️ リネン：8名分セット');
+    lines.push('　・歯ブラシ 8 ／ コップ 8');
+    lines.push('　・バスタオル 8 ／ フェイスタオル 8');
+    lines.push('　・バスマット 2枚');
+  } else {
+    lines.push(`🛏️ リネン：${st.linen === '3' ? '3人分' : '2人分'}セット`);
+  }
+  // 今回のゲストが使ったお布団の組数（ECRUのみ・洗う敷き布団カバーの枚数が変わる）
+  if (_isEcruProp(prop)) {
+    const used = parseInt(st.futonUsed) || 0;
+    lines.push('');
+    lines.push(`▶▶ 🛏 今回使ったお布団：【${used === 0 ? '0組（使用なし）' : used + '組'}】 ◀◀`);
+    lines.push(used === 0
+      ? '　→ 敷き布団カバーの洗濯・セットは不要です'
+      : `　→ 敷き布団カバー ${used}枚を洗濯してください`);
+  }
   // ベビーベッド／サークル（ECRUのみ・希望があった場合だけ出す）
   if (_isEcruProp(prop) && st.baby && st.baby !== 'none') {
     lines.push('');
