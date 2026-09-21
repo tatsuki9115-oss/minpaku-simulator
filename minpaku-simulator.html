@@ -5704,8 +5704,11 @@ function crSelect(group, val) {
              pen:   ['cr-baby-pen','cr-baby-none','cr-baby-bed'] },
     table: { small: ['cr-table-small','cr-table-big'], big: ['cr-table-big','cr-table-small'] },
     futon: { keep:  ['cr-futon-keep','cr-futon-out'],   out: ['cr-futon-out','cr-futon-keep'] },
+    futonUsed: { '0': ['cr-futonused-0','cr-futonused-1','cr-futonused-2'],
+                 '1': ['cr-futonused-1','cr-futonused-0','cr-futonused-2'],
+                 '2': ['cr-futonused-2','cr-futonused-0','cr-futonused-1'] },
   };
-  const ids = configs[group][val];
+  const ids = configs[group] && configs[group][val]; // 未登録のgroupでも落ちないようにする
   if (!ids) return;
   const active = document.getElementById(ids[0]);
   if (active) { active.style.border='2px solid #00B900'; active.style.background='#f0fff0'; active.style.color='#007a00'; }
