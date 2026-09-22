@@ -1258,7 +1258,7 @@ function initFirebaseSync() {
   fbdb.ref(KEYS.properties).on('value', snap => {
     const val = snap.val();
     if (!val || !Array.isArray(val)) return;
-    if (JSON.stringify(val) === JSON.stringify(properties)) return;
+    if (sameData(val, properties)) return;
     val.forEach(p => {
       const def = DEFAULT_PROPERTIES.find(d => d.id === p.id);
       if (!p.initialCosts) p.initialCosts = def ? JSON.parse(JSON.stringify(def.initialCosts)) : [];
@@ -1274,8 +1274,8 @@ function initFirebaseSync() {
     });
     try { localStorage.setItem(KEYS.properties, JSON.stringify(val)); } catch(e) {}
     properties = val;
-    renderSimPropertySelect && renderSimPropertySelect();
-    renderSettingsKeepOpen ? renderSettingsKeepOpen() : (renderSettings && renderSettings());
+    keepScroll(() => { renderSimPropertySelect && renderSimPropertySelect(); });
+    keepScroll(() => { renderSettingsKeepOpen ? renderSettingsKeepOpen() : (renderSettings && renderSettings()); });
   });
 
   fbdb.ref(KEYS.airbnb).on('value', snap => {
@@ -1283,12 +1283,12 @@ function initFirebaseSync() {
     if (!Array.isArray(val)) return;
     // 空配列でローカルの有効データを上書きしない
     if (val.length === 0 && airbnbBookings.length > 0) return;
-    if (JSON.stringify(val) === JSON.stringify(airbnbBookings)) return;
+    if (sameData(val, airbnbBookings)) return;
     try { localStorage.setItem(KEYS.airbnb, JSON.stringify(val)); } catch(e) {}
     airbnbBookings = val;
     // データ到着後に画面を更新
-    renderDashboard && renderDashboard();
-    renderAnnual && renderAnnual();
+    keepScroll(() => { renderDashboard && renderDashboard(); });
+    keepScroll(() => { renderAnnual && renderAnnual(); });
   });
 
   fbdb.ref(KEYS.forecast).on('value', snap => {
@@ -1300,10 +1300,10 @@ function initFirebaseSync() {
       }
       return;
     }
-    if (JSON.stringify(val) === JSON.stringify(pricelabsForecast)) return;
+    if (sameData(val, pricelabsForecast)) return;
     try { localStorage.setItem(KEYS.forecast, JSON.stringify(val)); } catch(e) {}
     pricelabsForecast = val;
-    renderAnnual && renderAnnual();
+    keepScroll(() => { renderAnnual && renderAnnual(); });
   });
 
   fbdb.ref(KEYS.listingMap).on('value', snap => {
@@ -1311,21 +1311,21 @@ function initFirebaseSync() {
     if (!val || typeof val !== 'object') return;
     // 空オブジェクトで有効データを上書きしない
     if (Object.keys(val).length === 0 && Object.keys(listingMap).length > 0) return;
-    if (JSON.stringify(val) === JSON.stringify(listingMap)) return;
+    if (sameData(val, listingMap)) return;
     try { localStorage.setItem(KEYS.listingMap, JSON.stringify(val)); } catch(e) {}
     listingMap = val;
-    renderDashboard && renderDashboard();
-    renderAnnual && renderAnnual();
+    keepScroll(() => { renderDashboard && renderDashboard(); });
+    keepScroll(() => { renderAnnual && renderAnnual(); });
   });
 
   fbdb.ref(KEYS.history).on('value', snap => {
     const val = snap.val();
     if (!Array.isArray(val)) return;
     if (val.length === 0 && history.length > 0) return;
-    if (JSON.stringify(val) === JSON.stringify(history)) return;
+    if (sameData(val, history)) return;
     try { localStorage.setItem(KEYS.history, JSON.stringify(val)); } catch(e) {}
     history = val;
-    renderHistory && renderHistory();
+    keepScroll(() => { renderHistory && renderHistory(); });
   });
 
   fbdb.ref(KEYS.monthly).on('value', snap => {
@@ -1333,7 +1333,7 @@ function initFirebaseSync() {
     if (!val || typeof val !== 'object') return;
     // 空オブジェクトで有効データを上書きしない
     if (Object.keys(val).length === 0 && Object.keys(monthlyData).length > 0) return;
-    if (JSON.stringify(val) === JSON.stringify(monthlyData)) return;
+    if (sameData(val, monthlyData)) return;
     try { localStorage.setItem(KEYS.monthly, JSON.stringify(val)); } catch(e) {}
     monthlyData = val;
   });
@@ -1341,10 +1341,10 @@ function initFirebaseSync() {
   fbdb.ref(KEYS.spotWorks).on('value', snap => {
     const val = snap.val();
     if (!Array.isArray(val)) return;
-    if (JSON.stringify(val) === JSON.stringify(spotWorks)) return;
+    if (sameData(val, spotWorks)) return;
     try { localStorage.setItem(KEYS.spotWorks, JSON.stringify(val)); } catch(e) {}
     spotWorks = val;
-    renderDashboard && renderDashboard();
+    keepScroll(() => { renderDashboard && renderDashboard(); });
   });
 
   fbdb.ref(KEYS.bookingChecks).on('value', snap => {
@@ -1352,13 +1352,13 @@ function initFirebaseSync() {
     if (!val || typeof val !== 'object') return;
     // 空オブジェクトで有効データを上書きしない
     if (Object.keys(val).length === 0 && Object.keys(bookingChecks).length > 0) return;
-    if (JSON.stringify(val) === JSON.stringify(bookingChecks)) return;
+    if (sameData(val, bookingChecks)) return;
     try { localStorage.setItem(KEYS.bookingChecks, JSON.stringify(val)); } catch(e) {}
     bookingChecks = val;
-    renderDashboard && renderDashboard();
+    keepScroll(() => { renderDashboard && renderDashboard(); });
     // ★予約カードもチェック内容で見た目が変わる（支払通知ボタンの有効/無効・清掃スタッフ名など）。
     //   ここで描き直さないと、あとから届いたデータが反映されず「チェックを1回押すまで押せない」状態になる
-    if (renderCalendarTab && !isEditingBookingCard()) renderCalendarTab();
+    keepScroll(() => { if (renderCalendarTab && !isEditingBookingCard()) renderCalendarTab(); });
   });
 
   fbdb.ref(KEYS.actualCosts).on('value', snap => {
@@ -1366,10 +1366,10 @@ function initFirebaseSync() {
     if (!val || typeof val !== 'object') return;
     // 空オブジェクトで有効データを上書きしない
     if (Object.keys(val).length === 0 && Object.keys(actualCosts).length > 0) return;
-    if (JSON.stringify(val) === JSON.stringify(actualCosts)) return;
+    if (sameData(val, actualCosts)) return;
     try { localStorage.setItem(KEYS.actualCosts, JSON.stringify(val)); } catch(e) {}
     actualCosts = val;
-    renderAnnual && renderAnnual();
+    keepScroll(() => { renderAnnual && renderAnnual(); });
   });
 
   fbdb.ref(KEYS.bookingCom).on('value', snap => {
@@ -1377,37 +1377,37 @@ function initFirebaseSync() {
     if (!Array.isArray(val)) return;
     // 空配列で有効データを上書きしない
     if (val.length === 0 && bookingComBookings.length > 0) return;
-    if (JSON.stringify(val) === JSON.stringify(bookingComBookings)) return;
+    if (sameData(val, bookingComBookings)) return;
     try { localStorage.setItem(KEYS.bookingCom, JSON.stringify(val)); } catch(e) {}
     bookingComBookings = val;
-    renderCalendarTab && renderCalendarTab();
-    renderMonthly && renderMonthly();
-    renderAnnual && renderAnnual();
+    keepScroll(() => { renderCalendarTab && renderCalendarTab(); });
+    keepScroll(() => { renderMonthly && renderMonthly(); });
+    keepScroll(() => { renderAnnual && renderAnnual(); });
   });
 
   fbdb.ref(KEYS.systemFee).on('value', snap => {
     const val = snap.val();
     if (!val || typeof val !== 'object' || !Array.isArray(val.items)) return;
-    if (JSON.stringify(val) === JSON.stringify(systemFee)) return;
+    if (sameData(val, systemFee)) return;
     try { localStorage.setItem(KEYS.systemFee, JSON.stringify(val)); } catch(e) {}
     systemFee = val;
-    renderAnnual && renderAnnual();
-    renderDashboard && renderDashboard();
+    keepScroll(() => { renderAnnual && renderAnnual(); });
+    keepScroll(() => { renderDashboard && renderDashboard(); });
   });
 
   fbdb.ref(KEYS.propCheck).on('value', snap => {
     const val = snap.val();
     if (!Array.isArray(val)) return;
-    if (JSON.stringify(val) === JSON.stringify(propCheckHistory)) return;
+    if (sameData(val, propCheckHistory)) return;
     try { localStorage.setItem(KEYS.propCheck, JSON.stringify(val)); } catch(e) {}
     propCheckHistory = val;
-    if (document.getElementById('page-check')?.classList.contains('active')) renderCheckHistory && renderCheckHistory();
+    keepScroll(() => { if (document.getElementById('page-check')?.classList.contains('active')) renderCheckHistory && renderCheckHistory(); });
   });
 
   fbdb.ref(KEYS.whatsapp).on('value', snap => {
     const val = snap.val();
     if (!val || typeof val !== 'object') return;
-    if (JSON.stringify(val) === JSON.stringify(whatsappNotes)) return;
+    if (sameData(val, whatsappNotes)) return;
     try { localStorage.setItem(KEYS.whatsapp, JSON.stringify(val)); } catch(e) {}
     whatsappNotes = val;
     // 編集中でなければ表示中の予約のメモを更新
@@ -1425,7 +1425,7 @@ function initFirebaseSync() {
     guestMessages = val;
     // メッセージタブで予約を選んでいれば会話を更新
     const sel = document.getElementById('msg-booking-select');
-    if (sel && sel.value) renderConversation && renderConversation(sel.value);
+    keepScroll(() => { if (sel && sel.value) renderConversation && renderConversation(sel.value); });
   });
 
   // Beds24自動同期（minpaku-sync Worker）の同期時刻をヘッダーの「更新」表示に反映
@@ -1451,6 +1451,45 @@ function initFirebaseSync() {
       fbdb.ref(KEYS.actualCosts).set(actualCosts);
     }
   });
+}
+
+// ★Firebaseから届いたデータが「手元と同じ中身か」を判定する。
+//   Firebaseは返すときに①項目をアルファベット順に並べ替え ②空欄(null)や空の{}/[]を削る。
+//   JSON.stringify をそのまま比べると、自分が保存した内容の"送り返し"まで「変わった」と誤判定し、
+//   保存のたびに画面を描き直して開いていた欄が閉じ・位置が飛んでいた（2026-09-22 修正）
+function normalizeForCompare(v) {
+  if (Array.isArray(v)) return v.map(normalizeForCompare);
+  if (v && typeof v === 'object') {
+    const out = {};
+    Object.keys(v).sort().forEach(k => {
+      const n = normalizeForCompare(v[k]);
+      if (n === null || n === undefined) return;
+      if (Array.isArray(n) && n.length === 0) return;
+      if (typeof n === 'object' && !Array.isArray(n) && Object.keys(n).length === 0) return;
+      out[k] = n;
+    });
+    return out;
+  }
+  return v;
+}
+function sameData(a, b) {
+  return JSON.stringify(normalizeForCompare(a)) === JSON.stringify(normalizeForCompare(b));
+}
+// 描き直しても画面の位置を変えない
+function keepScroll(fn) {
+  const y = window.scrollY;
+  fn();
+  if (window.scrollY !== y) window.scrollTo(0, y);
+  requestAnimationFrame(() => { if (window.scrollY !== y) window.scrollTo(0, y); });
+}
+// 予約カードの「💴 実費入力」を開いている予約（描き直しても開いたままにする）
+const _openCostPanels = new Set();
+function toggleCostPanel(code, btn) {
+  const body = btn.nextElementSibling;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  btn.querySelector('.acc-arrow').textContent = isOpen ? '▶' : '▼';
+  if (isOpen) _openCostPanels.delete(code); else _openCostPanels.add(code);
 }
 
 // 予約カードの入力欄（実費入力など）を操作している最中は再描画しない。
@@ -2134,11 +2173,11 @@ function renderCalendarTab() {
             <button onclick="showLineTypeModal('${b.code}')" style="padding:7px 4px;font-size:11px;font-weight:800;border-radius:9px;border:2px solid #00B900;background:white;color:#00B900;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;box-sizing:border-box"><span>📱</span><span>LINE生成</span></button>
           </div>
           <div style="margin-top:8px;border-top:1px solid #f0f0f0;padding-top:6px">
-            <button onclick="(function(btn){var body=btn.nextElementSibling;var isOpen=body.style.display!=='none';body.style.display=isOpen?'none':'block';btn.querySelector('.acc-arrow').textContent=isOpen?'▶':'▼';})(this)" style="width:100%;display:flex;align-items:center;gap:5px;background:none;border:none;padding:2px 0;cursor:pointer;text-align:left">
-              <span class="acc-arrow" style="font-size:10px;color:#B0ADA8">▶</span>
+            <button onclick="toggleCostPanel('${b.code}', this)" style="width:100%;display:flex;align-items:center;gap:5px;background:none;border:none;padding:2px 0;cursor:pointer;text-align:left">
+              <span class="acc-arrow" style="font-size:10px;color:#B0ADA8">${_openCostPanels.has(b.code) ? '▼' : '▶'}</span>
               <span style="font-size:10px;font-weight:700;color:#B0ADA8;letter-spacing:.05em">💴 実費入力</span>
             </button>
-            <div style="display:none;margin-top:6px">
+            <div style="display:${_openCostPanels.has(b.code) ? 'block' : 'none'};margin-top:6px">
               <div style="display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:5px 6px">
                 <span style="font-size:11px;color:#555">🧹 清掃費</span>
                 <input type="text" inputmode="numeric" pattern="[0-9]*" value="${dispCleaning}" style="width:74px;padding:4px 7px;border:1.5px solid #e0e0e0;border-radius:7px;font-size:12px;text-align:right;color:#333;box-sizing:border-box" oninput="updateBookingCost('${b.code}','cleaningFee',this.value)" onblur="saveBookingChecks()">
