@@ -5647,6 +5647,16 @@ function showCleaningReminderForm(code) {
         <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">🔢 リネン庫などの番号</div>
         <input id="cr-linencode" type="text" inputmode="numeric" value="2586" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:16px;font-weight:700;color:#333;text-align:center">
       </div>
+
+      <!-- トイレットペーパーの予備（ECRUのみ・基本1個） -->
+      <div style="margin-bottom:14px">
+        <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">🧻 トイレに置くトイレットペーパーの予備</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input id="cr-tp" type="text" inputmode="numeric" value="1" style="flex:1;box-sizing:border-box;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:16px;font-weight:700;color:#333;text-align:center">
+          <span style="font-size:13px;color:#888;white-space:nowrap">個</span>
+        </div>
+        <div style="font-size:10.5px;color:#888;margin-top:5px;line-height:1.5">基本は1個。長めの滞在や人数が多いときは増やしてください</div>
+      </div>
       ` : ''}
 
       <!-- メッセージカード（ECRUはカードをセットしないので出さない） -->
@@ -5845,6 +5855,8 @@ function generateCleaningReminderMsg(code) {
     lines.push('　・歯ブラシ 8 ／ コップ 8');
     lines.push('　・バスタオル 8 ／ フェイスタオル 8');
     lines.push('　・バスマット 2枚');
+    const tp = (document.getElementById('cr-tp')?.value || '').replace(/[^0-9]/g, '');
+    if (tp) lines.push(`🧻 トイレットペーパーの予備：${tp}個（トイレに置く）`);
   } else {
     lines.push(`🛏️ リネン：${st.linen === '3' ? '3人分' : '2人分'}セット`);
   }
