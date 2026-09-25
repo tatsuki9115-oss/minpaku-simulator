@@ -4634,7 +4634,7 @@ function renderSpotWorksCard() {
     const staffOpts = staffList.filter(st => !st.retired || st.name === w.staffName);
     const fee = parseInt(w.fee) || 0;
     const isOwnerPaid = w.staffName === SPOT_OWNER;
-    const ready = !!(w.staffName && fee > 0 && !isOwnerPaid); // オーナー立替はスタッフへの支払いではない
+    const ready = isSpotWorkReady(w);
     const blank = !w.staffName && fee === 0; // 追加したまま未入力の行
     return `<div style="border:1.5px solid ${blank?'#F0D9C8':'#E8E6E1'};border-radius:11px;padding:9px 10px;margin-bottom:8px;background:${blank?'#FFFCF9':'#FCFCFB'}">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
@@ -4674,7 +4674,7 @@ function renderSpotWorksCard() {
           支払明細に載せる
         </label>`}
         <div style="display:flex;gap:6px">
-          <button onclick="showPaymentStatementModal('spot:${w.id}')" ${ready?'':'disabled'}
+          <button id="spot-smt-${w.id}" onclick="showPaymentStatementModal('spot:${w.id}')" ${ready?'':'disabled'}
             style="padding:5px 10px;font-size:11px;font-weight:800;border-radius:8px;border:1.5px solid ${ready?'#4a7fc1':'#ddd'};background:white;color:${ready?'#4a7fc1':'#bbb'};cursor:${ready?'pointer':'not-allowed'}">📄 支払明細</button>
           <button onclick="deleteSpotWork('${w.id}')"
             style="padding:5px 10px;font-size:11px;font-weight:800;border-radius:8px;border:1.5px solid #f0d0d0;background:white;color:#c62828;cursor:pointer">🗑</button>
@@ -4729,6 +4729,25 @@ function updateSpotWork(id, field, val, rerender) {
   if (!w) return;
   w[field] = (field === 'fee') ? (parseInt(val) || 0) : val;
   if (rerender) { saveSpotWorks(); renderDashboard(); }
+  else refreshSpotStatementBtn(w);
+}
+
+// 担当（オーナー立替以外）と金額がそろったら「📄 支払明細」を押せる
+function isSpotWorkReady(w) {
+  return !!(w.staffName && (parseInt(w.fee) || 0) > 0 && w.staffName !== SPOT_OWNER); // オーナー立替はスタッフへの支払いではない
+}
+
+// ★金額・メモの入力中は画面を描き直さない（入力欄の位置が飛ぶため）。
+//   そのぶんボタンの押せる／押せないだけをここで切り替える。これがないと
+//   「全部入力してもチェックを1回外すまで押せない」状態になる
+function refreshSpotStatementBtn(w) {
+  const btn = document.getElementById('spot-smt-' + w.id);
+  if (!btn) return;
+  const ready = isSpotWorkReady(w);
+  btn.disabled = !ready;
+  btn.style.borderColor = ready ? '#4a7fc1' : '#ddd';
+  btn.style.color = ready ? '#4a7fc1' : '#bbb';
+  btn.style.cursor = ready ? 'pointer' : 'not-allowed';
 }
 
 function deleteSpotWork(id) {
@@ -6136,6 +6155,7 @@ function showPaymentStatementModal(code, which) {
   const chk = sw ? {} : (bookingChecks[code] || {});
   if (!sw && !chk.cleaningStaffName) { showToast('担当スタッフが設定されていません', 'error'); return; }
   if (sw && !sw.staffName) { showToast('担当スタッフが設定されていません', 'error'); return; }
+  if (sw && !((parseInt(sw.fee) || 0) > 0)) { showToast('金額が入っていません', 'error'); return; }
 
   // 2人目スタッフがいる場合は、どちらの支払明細を作るか先に選ぶ
   const _s2fee = chk.staff2Fee != null ? (parseInt(chk.staff2Fee) || 0) : 0;
