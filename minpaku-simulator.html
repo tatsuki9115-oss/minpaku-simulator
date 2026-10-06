@@ -964,6 +964,9 @@ let listingMap = loadListingMap();
 let pricelabsForecast = loadForecastData();
 // Beds24から同期されたゲストとの会話（予約コード → {updatedAt, bookingId, msgs:{mID:{time,source,text,read}}}）
 let guestMessages = {};
+// Airbnbの承認前リクエスト（Workerが minpaku_sync_meta_v1/pendingRequests に置く一覧）。
+// メッセージ画面で会話を読むためだけに使い、予約（getAllBookings）には入れない＝売上・180日などの集計に入らない
+let pendingRequests = [];
 let currentAnnualYear = new Date().getFullYear();
 let pendingListings = [];
 let annualPropFilter = 'all';
@@ -1149,7 +1152,18 @@ function loadBookingComData() {
 function saveBookingComData() { fbSave(KEYS.bookingCom, bookingComBookings); }
 // Airbnb + Booking.com 統合配列
 function getAllBookings() { return [...airbnbBookings, ...bookingComBookings]; }
-function findBookingByCode(code) { return getAllBookings().find(x => x.code === code) || null; }
+function findBookingByCode(code) { return getAllBookings().find(x => x.code === code) || findPendingRequest(code); }
+// 承認前リクエストを予約と同じ形で返す（メッセージ画面で選んだときだけ使われる）。
+// getAllBookings には入れないので、売上・180日・稼働率・要対応・カレンダーには出ない
+function findPendingRequest(code) {
+  const r = (pendingRequests || []).find(x => String(x.code) === String(code));
+  if (!r) return null;
+  return {
+    code: String(r.code), guestName: r.guestName || '', checkin: r.checkin, checkout: r.checkout,
+    nights: r.nights, propId: r.propId, adults: r.adults, children: r.children || 0, infants: 0,
+    listing: '', source: r.channel || 'airbnb', revenue: 0, isRequest: true,
+  };
+}
 
 function loadForecastData() {
   try { const s = localStorage.getItem(KEYS.forecast); if (s) return JSON.parse(s); } catch(e) {}
@@ -1431,6 +1445,12 @@ function initFirebaseSync() {
   // Beds24自動同期（minpaku-sync Worker）の同期時刻をヘッダーの「更新」表示に反映
   fbdb.ref('minpaku_sync_meta_v1').on('value', snap => {
     const val = snap.val();
+    // 承認前リクエストの一覧。変わったらメッセージ画面の選択肢だけ作り直す（入力中の文は消さない）
+    const reqs = (val && Array.isArray(val.pendingRequests)) ? val.pendingRequests.filter(r => r && r.code) : [];
+    if (JSON.stringify(reqs) !== JSON.stringify(pendingRequests)) {
+      pendingRequests = reqs;
+      refreshMsgBookingOptions();
+    }
     if (!val || !val.lastSyncAt) return;
     if (dataUpdatedAt['airbnb'] === val.lastSyncAt && dataUpdatedAt['bookingCom'] === val.lastSyncAt) return;
     dataUpdatedAt['airbnb'] = val.lastSyncAt;
@@ -6436,22 +6456,7 @@ function renderMessageTab() {
   cleanupMsgUsageLog();
   const el = document.getElementById('message-content');
 
-  // 今日に近い予約から順に表示（滞在中・直近チェックインが最上位、遠い未来や昔の予約は下へ）
-  const _msgToday = new Date(); _msgToday.setHours(0,0,0,0);
-  const sorted = [...getAllBookings()]
-    .filter(b => b.checkin)
-    .sort((a, b) => {
-      const da = Math.abs(parseDateStr(a.checkin) - _msgToday);
-      const db = Math.abs(parseDateStr(b.checkin) - _msgToday);
-      return da - db;
-    });
-
-  const bookingOptions = sorted.map(b => {
-    const prop = properties.find(p => p.id === getBookingPropId(b));
-    const propLabel = prop ? prop.name : '?';
-    const usageLabel = getMsgUsageLabel(b.code);
-    return `<option value="${escHtml(b.code)}">${escHtml(b.guestName || '?')} / ${b.checkin} / ${propLabel}　${usageLabel}</option>`;
-  }).join('');
+  const msgOpts = buildMsgBookingOptions();
 
   const mB = (m) => `padding:12px 4px;border-radius:12px;border:2px solid ${msgMode===m?'#F07C3F':'#E8E6E1'};background:${msgMode===m?'#FFF3ED':'#FAFAF9'};color:${msgMode===m?'#F07C3F':'#888'};font-size:12px;font-weight:800;cursor:pointer;transition:all .15s;width:100%`;
   // 災害の種類ボタン / 状況ボタン
@@ -6471,10 +6476,9 @@ function renderMessageTab() {
       <div class="card-title">予約選択</div>
       <input type="text" id="msg-booking-search" placeholder="🔍 検索（ゲスト名 / 日付 / 物件名）" oninput="filterMsgBookingOptions()" style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:10px 12px;font-size:13px;background:#FAFAF9;box-sizing:border-box;margin-bottom:8px">
       <select class="prop-select" id="msg-booking-select" onchange="onMsgBookingSelect()">
-        <option value="">-- 予約を選んでください --</option>
-        ${bookingOptions}
+        ${msgOpts.html}
       </select>
-      <div id="msg-booking-search-info" style="font-size:10px;color:#aaa;margin-top:4px;text-align:right">全${sorted.length}件</div>
+      <div id="msg-booking-search-info" style="font-size:10px;color:#aaa;margin-top:4px;text-align:right">全${msgOpts.count}件</div>
     </div>
 
     <div id="msg-history-wrap" style="display:none">
@@ -6611,6 +6615,49 @@ function renderMessageTab() {
       </div>
     </div>
   `;
+}
+
+// メッセージ画面の「予約選択」の中身。承認前のリクエストがあれば一番上に別枠で出す
+function buildMsgBookingOptions() {
+  // 今日に近い予約から順に表示（滞在中・直近チェックインが最上位、遠い未来や昔の予約は下へ）
+  const _msgToday = new Date(); _msgToday.setHours(0,0,0,0);
+  const sorted = [...getAllBookings()]
+    .filter(b => b.checkin)
+    .sort((a, b) => {
+      const da = Math.abs(parseDateStr(a.checkin) - _msgToday);
+      const db = Math.abs(parseDateStr(b.checkin) - _msgToday);
+      return da - db;
+    });
+
+  const bookingOptions = sorted.map(b => {
+    const prop = properties.find(p => p.id === getBookingPropId(b));
+    const propLabel = prop ? prop.name : '?';
+    const usageLabel = getMsgUsageLabel(b.code);
+    return `<option value="${escHtml(b.code)}">${escHtml(b.guestName || '?')} / ${b.checkin} / ${propLabel}　${usageLabel}</option>`;
+  }).join('');
+
+  // 承認前のリクエスト（予約には数えない。会話を読んで返信を作るためだけに出す）
+  const reqs = (pendingRequests || []).filter(r => r && r.code && !getAllBookings().some(b => b.code === String(r.code)));
+  const requestOptions = reqs.map(r => {
+    const prop = properties.find(p => p.id === r.propId);
+    const people = `大人${Number(r.adults) || 0}${Number(r.children) ? '・子ども' + Number(r.children) : ''}`;
+    return `<option value="${escHtml(String(r.code))}">⏳【リクエスト中】${escHtml(r.guestName || '?')} / ${escHtml(String(r.checkin || ''))} / ${prop ? escHtml(prop.name) : '?'}（${Number(r.nights) || 0}泊・${people}）　${getMsgUsageLabel(String(r.code))}</option>`;
+  }).join('');
+
+  const html = `<option value="">-- 予約を選んでください --</option>` + (requestOptions
+    ? `<optgroup label="⏳ リクエスト中（承認前・予約には数えません）">${requestOptions}</optgroup><optgroup label="予約">${bookingOptions}</optgroup>`
+    : bookingOptions);
+  return { html, count: sorted.length + reqs.length };
+}
+
+// リクエストの一覧が変わったとき：選択肢だけ作り直し、選んでいた予約と検索の絞り込みは保つ
+function refreshMsgBookingOptions() {
+  const sel = document.getElementById('msg-booking-select');
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = buildMsgBookingOptions().html;
+  if (prev && Array.from(sel.options).some(o => o.value === prev)) sel.value = prev;
+  filterMsgBookingOptions();
 }
 
 function filterMsgBookingOptions() {
@@ -7984,7 +8031,11 @@ function generateMsgPrompt() {
   const guestText  = document.getElementById('msg-guest-text').value.trim();
   const notes      = document.getElementById('msg-notes').value.trim();
 
-  const stage      = getMsgStageLabel(checkin, checkout);
+  // 承認前のリクエストなら、AIに「まだ予約は確定していない」ことが伝わるように段階の頭に付ける
+  const isRequest  = !!code && !getAllBookings().some(b => b.code === code) && !!findPendingRequest(code);
+  const baseStage  = getMsgStageLabel(checkin, checkout);
+  //   リクエストのときは末尾の「（予約確定フェーズ）」などを外す（「承認前」と矛盾するため）
+  const stage      = isRequest ? '予約リクエスト（承認前・まだ予約は確定していない）／' + baseStage.replace(/（[^（）]*フェーズ）$/, '') : baseStage;
   const today      = new Date();
   const todayStr   = `${today.getFullYear()}/${today.getMonth()+1}/${today.getDate()}`;
   const guestsText = [adults?`大人${adults}名`:'', children?`子ども${children}名`:'', infants?`乳幼児${infants}名`:''].filter(Boolean).join('・') || '不明';
