@@ -6579,7 +6579,7 @@ function renderMessageTab() {
       </div>
       <div>
         <label style="font-size:11px;font-weight:700;color:#B0ADA8;display:block;margin-bottom:4px">国籍 / 言語</label>
-        <input type="text" id="msg-language" placeholder="例：日本人、英語圏（アメリカ）、中国語（簡体字）" style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:10px 12px;font-size:14px;background:#FAFAF9;box-sizing:border-box">
+        <input type="text" id="msg-language" placeholder="空欄なら会話から自動で判断（例：中国語（簡体字）と書くとその言語に固定）" style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:10px 12px;font-size:14px;background:#FAFAF9;box-sizing:border-box">
       </div>
     </div>
     <div class="card">
@@ -8043,7 +8043,11 @@ function generateMsgPrompt() {
   const isJP       = language ? language.includes('日本') : false;
   const langRule   = language
     ? (isJP ? '日本語のみで作成してください。' : `**日本語と${language}の両方**で作成してください（日本語→${language}の順）。`)
-    : '**日本語と英語の両方**で作成してください（日本語→英語の順）。';
+    : `**日本語と、ゲストが使っている言語の両方**で作成してください（日本語→ゲストの言語の順）。
+- ゲストの言語は、この依頼文の「会話履歴」と「今回ゲストから届いた未返信メッセージ」の文面から判断すること
+- ゲストが日本語でやり取りしている場合は、日本語のみで作成すること
+- 判断できる材料がない場合は、日本語と英語で作成すること
+- 回答の一番最初に「ゲストの言語：○○と判断」と1行だけ書くこと`;
 
   let prompt;
 
