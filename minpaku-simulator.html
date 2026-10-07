@@ -7024,6 +7024,17 @@ async function fetchEventDetailInfo(href, proxyFn) {
   } catch { return null; }
 }
 
+// ===== ウェルカムメッセージのイベント：ゲスト向けでないものを落とす（3物件共通） =====
+// 2026-10-08 ECRUの案内に大学の公開講座・受付終了の教室・行政の行事・ボランティア作業などが入った（オーナー指摘）
+// 以前は物件ごとに別々の言葉で落としていて、ATT（いまたま）には除外がなかった
+const WELCOME_EVENT_NG = /セミナー|講座|講演|講習|研修|説明会|勉強会|相談会|シンポジウム|フォーラム|カレッジ|アカデミー|ゼミ|教室|受付終了|募集|採用|求人|就職|オンライン|議会|審議会|委員会|総会|入札|パブリックコメント|健診|検診|献血|商談|会員限定|駆除|ボランティア|防犯|つどい|男女共同参画|パネル展|サイエンスカフェ|見学会|プレコンセプション/;
+// いまたまの分類名（例：「セミナー・講座」）で落とす
+const WELCOME_EVENT_NG_CATEGORY = /セミナー|講座/;
+function isNotForGuestEvent(title, categoryNames) {
+  if (WELCOME_EVENT_NG.test(title || '')) return true;
+  return (categoryNames || []).some(n => WELCOME_EVENT_NG_CATEGORY.test(n || ''));
+}
+
 // エリアに応じたフェッチ関数を呼び分けるディスパッチャー
 function fetchEvents() {
   const code = document.getElementById('msg-booking-select')?.value;
@@ -7054,7 +7065,7 @@ async function fetchChofuEvents() {
   const targetUrl = `${area.eventChofuCal}?type=2&year=${cin.getFullYear()}&month=${cin.getMonth()+1}`;
 
   // ゲスト向けでないもの（オンライン講座・業務セミナー等）は落とす
-  const isNotForGuest = t => /オンライン|アカデミー|セミナー|講座|研修|説明会|議会|入札|募集|審議会|委員会|健診|検診|相談会|教室生/.test(t);
+  const isNotForGuest = t => isNotForGuestEvent(t);
 
   const viaProxy = url => `${MSG_SYNC_WORKER_URL}/proxy?url=${encodeURIComponent(url)}`;
   // ★調布市はCloudFrontの制限で半分ほど403を返す（2026-09-20実測で5/10成功）。
@@ -7213,6 +7224,10 @@ async function fetchTamaEvents() {
             if (startDt && startDt > coutYMD) return; // チェックアウト後に開始
             // タイトル先頭の【〜】ラベルを除去
             const cleanTitle = ev.event_nm.replace(/^【[^】]*】\s*/, '').trim();
+            // ゲスト向けでないもの（分類「セミナー・講座」・業務セミナー等）は落とす
+            // 実例：2026-10 高幡不動の滞在期間に「新規顧客開拓セミナー」「アクセラレーションプログラム」が入っていた
+            const catNames = (ev.events_event_categories || []).map(c => c && c.name).filter(Boolean);
+            if (isNotForGuestEvent(ev.event_nm, catNames)) return;
             allEvents.set(ev.id, {
               id:     ev.id,
               title:  cleanTitle,
@@ -7266,7 +7281,7 @@ async function fetchTamaEvents() {
           ${(ev.venue || ev.area) ? `<div style="font-size:11px;color:#888;margin-top:1px">📍 ${ev.venue || ev.area}${ev.station ? `（最寄：${ev.station}）` : ''}</div>` : ''}
         </div>`).join('');
       if (preview) preview.innerHTML = `
-        <div style="font-size:11px;color:#aaa;margin-bottom:6px">✅ ${events.length}件取得（${welcomeEventData.startDate} 〜 ${welcomeEventData.endDate}）</div>
+        <div style="font-size:11px;color:#aaa;margin-bottom:6px">✅ ${events.length}件取得（${welcomeEventData.startDate} 〜 ${welcomeEventData.endDate}／セミナー等は除外済み）</div>
         <div style="background:#F5F5F4;border-radius:8px;padding:8px 12px">${rows}</div>
         <div style="font-size:10px;color:#aaa;margin-top:6px;text-align:right">
           <a href="${targetUrl}" target="_blank" style="color:#4a7fc1">いまたまで確認 →</a>
@@ -7367,11 +7382,10 @@ async function fetchYokohamaEvents() {
     // ===== ② 先に「ゲスト向けでないもの」を落としてから並べ替える =====
     // 実例：2026-08にEricさん宛の案内へ「（講師募集）たちかわワークショップフェスタ」
     // （＝講師の募集告知で参加イベントですらない）が入ってしまった
-    const NG_TITLE_PRE = /募集|セミナー|シンポジウム|講演会|研修|説明会|勉強会|採用|求人|総会|商談|相談会|会員限定|入札|パブリックコメント|献血/;
     // 観光客が喜ぶイベントを優先的に上位へ（ひらがな表記も拾う）
     const PRIORITY_PRE = /まつり|祭り|祭|花火|はなび|フェス|マルシェ|縁日|えんにち|盆踊|ぼんおどり|ライトアップ|イルミネーション|屋台|夜店|展覧会|美術館|博物館|ミュージアム|水族館|アートフェア|博覧会|物産展/;
     const candidates = events
-      .filter(ev => !NG_TITLE_PRE.test(ev.title || ''))
+      .filter(ev => !isNotForGuestEvent(ev.title))
       .sort((a, b) => (PRIORITY_PRE.test(b.title||'')?1:0) - (PRIORITY_PRE.test(a.title||'')?1:0));
 
     // ===== ③ 詳細ページでフル日程・会場を補完する =====
