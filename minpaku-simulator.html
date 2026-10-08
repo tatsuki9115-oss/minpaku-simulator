@@ -7031,6 +7031,8 @@ async function fetchEventDetailInfo(href, proxyFn) {
 const WELCOME_EVENT_NG = /セミナー|講座|講演|講習|研修|説明会|勉強会|相談会|シンポジウム|フォーラム|カレッジ|アカデミー|ゼミ|教室|受付終了|募集|採用|求人|就職|オンライン|議会|審議会|委員会|総会|入札|パブリックコメント|健診|検診|献血|商談|会員限定|駆除|ボランティア|防犯|つどい|男女共同参画|パネル展|サイエンスカフェ|見学会|プレコンセプション|おもちゃの病院/;
 // いまたまの分類名（例：「セミナー・講座」）で落とす
 const WELCOME_EVENT_NG_CATEGORY = /セミナー|講座/;
+// いまたまのエリア名のうち、高幡不動から片道1時間以上かかるもの（いまたまでは「青梅・あきる野・檜原・奥多摩」で1つ）
+const WELCOME_TAMA_FAR_AREA = /青梅|奥多摩|檜原/;
 function isNotForGuestEvent(title, categoryNames) {
   if (WELCOME_EVENT_NG.test(title || '')) return true;
   return (categoryNames || []).some(n => WELCOME_EVENT_NG_CATEGORY.test(n || ''));
@@ -7229,6 +7231,10 @@ async function fetchTamaEvents() {
             // 実例：2026-10 高幡不動の滞在期間に「新規顧客開拓セミナー」「アクセラレーションプログラム」が入っていた
             const catNames = (ev.events_event_categories || []).map(c => c && c.name).filter(Boolean);
             if (isNotForGuestEvent(ev.event_nm, catNames)) return;
+            // 高幡不動から片道1時間以上かかるエリア（青梅・奥多摩方面）だけのイベントは落とす
+            //   実例：2026-10-09 青梅の「ホットマン 本社・工場感謝祭」が2歳のお子さま連れの案内に入った
+            const areaNames = (ev.areas || []).map(a => a && a.name).filter(Boolean);
+            if (areaNames.length && areaNames.every(n => WELCOME_TAMA_FAR_AREA.test(n))) return;
             allEvents.set(ev.id, {
               id:     ev.id,
               title:  cleanTitle,
@@ -7282,7 +7288,7 @@ async function fetchTamaEvents() {
           ${(ev.venue || ev.area) ? `<div style="font-size:11px;color:#888;margin-top:1px">📍 ${ev.venue || ev.area}${ev.station ? `（最寄：${ev.station}）` : ''}</div>` : ''}
         </div>`).join('');
       if (preview) preview.innerHTML = `
-        <div style="font-size:11px;color:#aaa;margin-bottom:6px">✅ ${events.length}件取得（${welcomeEventData.startDate} 〜 ${welcomeEventData.endDate}／セミナー等は除外済み）</div>
+        <div style="font-size:11px;color:#aaa;margin-bottom:6px">✅ ${events.length}件取得（${welcomeEventData.startDate} 〜 ${welcomeEventData.endDate}／セミナー等・青梅方面は除外済み）</div>
         <div style="background:#F5F5F4;border-radius:8px;padding:8px 12px">${rows}</div>
         <div style="font-size:10px;color:#aaa;margin-top:6px;text-align:right">
           <a href="${targetUrl}" target="_blank" style="color:#4a7fc1">いまたまで確認 →</a>
@@ -7564,7 +7570,12 @@ async function fetchWelcomeWeather() {
     // ★どの発表回の予報かを必ず保持する。気象庁の週間予報は1日2回（11時・17時）更新されるため、
     //   朝に取得した数値を夜に送ると古い内容になる（2026-09-09に実際に発生）
     const reportDatetime = weekly.reportDatetime || data[0]?.reportDatetime || null;
-    welcomeWeatherData = { area, days, reportDatetime, fetchedAt: new Date() };
+    // 平年値（例：東京 10月初旬＝最高22.7°C）。「この時期としては暖かい」等の言い回しを決めるのに使う
+    //   2026-10-08 10月の案内に「初夏の陽気」と出てしまった（オーナー指摘）
+    const avgArea = findArea(weekly.tempAverage?.areas);
+    const normal = (avgArea && avgArea.max !== '' && avgArea.max != null)
+      ? { max: parseFloat(avgArea.max), min: parseFloat(avgArea.min) } : null;
+    welcomeWeatherData = { area, days, reportDatetime, normal, fetchedAt: new Date() };
     // プレビュー表示
     const dow = ['日','月','火','水','木','金','土'];
     const rows = days.map(d => {
@@ -7670,7 +7681,7 @@ function renderTyphoonBox() {
     </div>`;
 }
 
-function buildWeatherComment(days, areaName, hasTyphoon = false) {
+function buildWeatherComment(days, areaName, hasTyphoon = false, normal = null, stayOnly = false) {
   const valid = days.filter(d => d.tempMax !== null && d.tempMin !== null);
   const closing = hasTyphoon
     ? `\nどうぞ安全にお過ごしください。お気をつけて。`
@@ -7689,16 +7700,9 @@ function buildWeatherComment(days, areaName, hasTyphoon = false) {
   // 天気の文言が「くもり時々晴れ」でも降水確率が高い日はある。
   // 文言だけ見て「雨の心配なし」と案内してしまうのを防ぐため降水確率も見る
   const popDays = days.filter(d => d.pop != null && d.pop >= 30);
-  const maxPop  = popDays.length ? Math.max(...popDays.map(d => d.pop)) : 0;
   // 梅雨判定（6月・7月20日以前）
   const firstDate = days[0]?.date;
   const isTsuyu = firstDate && (firstDate.getMonth() === 5 || (firstDate.getMonth() === 6 && firstDate.getDate() <= 20));
-  let c = `今週の${areaName}は、朝晩${minMin}〜${maxMin}°C、`;
-  if (avgMax >= 28)           c += `日中${minMax}〜${maxMax}°Cまで上がりかなり暑くなります。熱中症対策・こまめな水分補給をお忘れなく。`;
-  else if (avgMax >= 23 && isTsuyu) c += `日中${minMax}〜${maxMax}°Cまで上がる蒸し暑い梅雨の時期です。汗拭きタオルや着替えがあると快適に過ごせます。`;
-  else if (avgMax >= 23)      c += `日中${minMax}〜${maxMax}°Cまで上がり、初夏の陽気です。紫外線対策もお忘れなく。`;
-  else if (avgMax >= 18)      c += `日中${minMax}〜${maxMax}°Cまで上がります。${minMin < 12 ? '朝晩はひんやりするので' : ''}長袖シャツや薄手のジャケットがちょうどよい気候です。`;
-  else                        c += `日中も${minMax}〜${maxMax}°C程度とかなりひんやりします。暖かい服装でお越しください。`;
   // ★気温の急変（前日比で最高気温が5°C以上下がる日）を知らせる
   //   実例：2026/9/2の34°Cから9/4は26°Cと2日で8°C下がるのに「かなり暑くなります」だけだった
   const dowJ = ['日','月','火','水','木','金','土'];
@@ -7711,6 +7715,24 @@ function buildWeatherComment(days, areaName, hasTyphoon = false) {
       break;
     }
   }
+  // 最低と最高が同じ値なら「14〜14°C」ではなく「14°C」と書く（滞在日だけに絞ると日数が少なく起きやすい）
+  const rng = (a, b) => a === b ? `${a}` : `${a}〜${b}`;
+  const lowRange = rng(minMin, maxMin), highRange = rng(minMax, maxMax);
+  let c = `${stayOnly ? 'ご滞在中' : '今週'}の${areaName}は、朝晩${lowRange}°C、`;
+  if (avgMax >= 28)           c += `日中${highRange}°Cまで上がりかなり暑くなります。熱中症対策・こまめな水分補給をお忘れなく。`;
+  else if (avgMax >= 23 && isTsuyu) c += `日中${highRange}°Cまで上がる蒸し暑い梅雨の時期です。汗拭きタオルや着替えがあると快適に過ごせます。`;
+  else if (avgMax >= 23) {
+    // ★「初夏」など別の季節の名前は使わない。平年と比べて言い回しを決める
+    //   2026-10-08 10月の案内に「初夏の陽気」と出た（オーナー指摘「今10月だけど初夏？」）
+    const warm = normal && !isNaN(normal.max) && avgMax - normal.max >= 2;
+    c += `日中${highRange}°Cまで上がり、${warm ? 'この時期としては暖かい陽気です。' : '過ごしやすい陽気です。'}`;
+    const month = firstDate ? firstDate.getMonth() + 1 : 0;
+    if (month >= 4 && month <= 9) c += '日差しが強い日もあるので、紫外線対策もお忘れなく。';
+    // 朝晩と日中の差が大きい（10°C以上）ときは羽織りものを一言（急変の注意と重なるときは省く）
+    if (!dropNote && maxMax - minMin >= 10) c += '朝晩と日中の気温差が大きいので、羽織れるものがあると安心です。';
+  }
+  else if (avgMax >= 18)      c += `日中${highRange}°Cまで上がります。${minMin < 12 ? '朝晩はひんやりするので' : ''}長袖シャツや薄手のジャケットがちょうどよい気候です。`;
+  else                        c += `日中も${highRange}°C程度とかなりひんやりします。暖かい服装でお越しください。`;
   if (dropNote) c += dropNote;
   if (!hasTyphoon) {
     // ★降水確率50%以上の日は日付と数字をはっきり伝える
@@ -7721,10 +7743,20 @@ function buildWeatherComment(days, areaName, hasTyphoon = false) {
       c += `\n${list}と雨の降る可能性が高い予報です。この日のお出かけには傘をお持ちください。`;
     } else if (hasRain) {
       c += '\n折りたたみ傘を持っておくと便利です。';
-    } else if (popDays.length >= Math.max(2, Math.ceil(days.length / 2))) {
-      c += `\nまた、期間中は毎日${maxPop}%ほどの降水確率が出ていますので、折りたたみ傘があると安心です。`;
     } else if (popDays.length > 0) {
-      c += `\nまた、一部の日は降水確率が${maxPop}%ほどありますので、折りたたみ傘があると安心です。`;
+      // ★30%以上の日を日付つきで書く。「毎日◯%」と言い切らない
+      //   2026-10-09 7日中4日が30〜40%なだけで「期間中は毎日40%ほど」と出た
+      //   （40%は1日だけ・しかもチェックアウト後の日だった）
+      const popVals = popDays.map(d => d.pop);
+      const lo = Math.min(...popVals), hi = Math.max(...popVals);
+      const range = lo === hi ? `${hi}%` : `${lo}〜${hi}%`;
+      if (days.length >= 2 && popDays.length === days.length) {
+        c += `\nまた、期間中は毎日${range}の降水確率が出ていますので、折りたたみ傘があると安心です。`;
+      } else if (popDays.length <= 3) {
+        c += `\nまた、${popDays.map(d => `${fmtDay(d)}は${d.pop}%`).join('、')}の降水確率が出ていますので、折りたたみ傘があると安心です。`;
+      } else {
+        c += `\nまた、降水確率${range}の日が${popDays.length}日ありますので、折りたたみ傘があると安心です。`;
+      }
     }
   }
   c += closing;
@@ -7771,7 +7803,7 @@ function formatEventDatesForStay(datesStr, stayStartStr, stayEndStr) {
 
 function generateWelcomeMsg() {
   if (!welcomeWeatherData) { showToast('先に天気予報を取得してください', 'error'); return; }
-  const { area, days, reportDatetime } = welcomeWeatherData;
+  const { area, days: forecastDays, reportDatetime, normal } = welcomeWeatherData;
   // ★古い発表回のまま送ってしまう事故を防ぐ（気象庁は11時・17時に更新）
   if (isWeatherStale(reportDatetime)) {
     showToast(`気象庁の予報が更新されています（お手元は${fmtJmaReport(reportDatetime)}発表）。「天気予報を取得」を押し直してください`, 'error');
@@ -7779,6 +7811,21 @@ function generateWelcomeMsg() {
   }
   const code = document.getElementById('msg-booking-select')?.value;
   const b = code ? findBookingByCode(code) : null;
+  // ★天気は滞在日（チェックイン日〜チェックアウト日）だけ載せる
+  //   2026-10-08・09 チェックイン前日やチェックアウト後まで7日分を載せ、
+  //   チェックアウト後の降水確率で傘の案内をしていた（オーナー指摘）
+  let days = forecastDays;
+  const ciDate = b ? parseDateStr(b.checkin) : null;
+  if (ciDate) {
+    const coDate = parseDateStr(getCheckout(b) || b.checkin) || ciDate;
+    const ymd = d => d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+    const s = ymd(ciDate), e = ymd(coDate);
+    days = forecastDays.filter(d => ymd(d.date) >= s && ymd(d.date) <= e);
+    if (days.length === 0) {
+      showToast('ご滞在日がまだ週間予報（7日先まで）に入っていません。チェックインの1週間前以降に作り直してください', 'error');
+      return;
+    }
+  }
   const guestFirst = b ? (b.guestName || '').split(/[\s　]/)[0] : '';
   // 挨拶（時間帯によらず「こんにちは」で統一）
   const nameSuffix = guestFirst ? `${guestFirst}さん` : '';
@@ -7794,7 +7841,7 @@ function generateWelcomeMsg() {
     const popStr = (d.pop != null && d.pop >= 30) ? `（降水確率${d.pop}%）` : '';
     return `${d.date.getMonth()+1}月${d.date.getDate()}日(${dow[d.date.getDay()]})：${d.weather}${temp}${popStr}`;
   }).join('\n');
-  const comment = buildWeatherComment(days, area.areaName, welcomeTyphoonInclude && !!welcomeTyphoonData);
+  const comment = buildWeatherComment(days, area.areaName, welcomeTyphoonInclude && !!welcomeTyphoonData, normal, !!ciDate);
   // ★週間予報(7日)より滞在が長い場合の注記
   //   実例：29泊のDemetrioさん宛に7日分の予報だけを送っていた
   //   ⛔「後半の天気は改めてお知らせします」のような“次回の連絡の約束”は書かない。
