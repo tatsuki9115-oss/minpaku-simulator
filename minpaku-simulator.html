@@ -5603,7 +5603,7 @@ function showCleaningReminderForm(code) {
   const propName = prop ? prop.name : '物件';
   const coStr = getCheckout(b);
   const nextEntry = _lineNextEntry(code, propId, coStr);
-  // 🍽 ダイニングテーブル（ECRU）：次のゲストの大人が5名以上なら「大きくする」を初期選択
+  // 🍽 ダイニングテーブル（ECRU）：次のゲストが子どもを含めて5名以上なら「大きくする」を初期選択
   // 2026-10-10 オーナー：子どもを含めて4名以下のときだけ小さく（旧＝大人の人数だけで判定）
   const _nextAll = (nextEntry && nextEntry.x.adults != null)
     ? Number(nextEntry.x.adults || 0) + Number(nextEntry.x.children || 0) + Number(nextEntry.x.infants || 0)
