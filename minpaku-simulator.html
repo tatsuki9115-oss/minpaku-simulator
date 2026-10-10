@@ -5604,10 +5604,13 @@ function showCleaningReminderForm(code) {
   const coStr = getCheckout(b);
   const nextEntry = _lineNextEntry(code, propId, coStr);
   // 🍽 ダイニングテーブル（ECRU）：次のゲストの大人が5名以上なら「大きくする」を初期選択
-  const _nextAdults = nextEntry && nextEntry.x.adults != null ? Number(nextEntry.x.adults) : null;
-  const tableDefault = (_nextAdults != null && _nextAdults >= 5) ? 'big' : 'small';
-  const tableHint = _nextAdults != null
-    ? `次回は大人${_nextAdults}名 → 自動で「${_nextAdults >= 5 ? '大きくする' : '小さくする'}」を選んでいます`
+  // 2026-10-10 オーナー：子どもを含めて4名以下のときだけ小さく（旧＝大人の人数だけで判定）
+  const _nextAll = (nextEntry && nextEntry.x.adults != null)
+    ? Number(nextEntry.x.adults || 0) + Number(nextEntry.x.children || 0) + Number(nextEntry.x.infants || 0)
+    : null;
+  const tableDefault = (_nextAll != null && _nextAll >= 5) ? 'big' : 'small';
+  const tableHint = _nextAll != null
+    ? `次回は子どもを含めて${_nextAll}名 → 自動で「${_nextAll >= 5 ? '大きくする' : '小さくする'}」を選んでいます`
     : '次の予約がないため「小さくする」にしています';
   // 🛏 お布団（ECRU）：次のゲストが7名以上なら「出す」を初期選択（大人＋子ども）
   const _nextTotal = nextEntry
@@ -5750,7 +5753,7 @@ function showCleaningReminderForm(code) {
           <button id="cr-table-small" onclick="crSelect('table','small')" style="padding:10px;border-radius:10px;border:2px solid ${tableDefault === 'small' ? '#00B900' : '#e0e0e0'};background:${tableDefault === 'small' ? '#f0fff0' : '#f9f9f9'};color:${tableDefault === 'small' ? '#007a00' : '#555'};font-size:13px;font-weight:700;cursor:pointer">◻️ 小さくする</button>
           <button id="cr-table-big" onclick="crSelect('table','big')" style="padding:10px;border-radius:10px;border:2px solid ${tableDefault === 'big' ? '#00B900' : '#e0e0e0'};background:${tableDefault === 'big' ? '#f0fff0' : '#f9f9f9'};color:${tableDefault === 'big' ? '#007a00' : '#555'};font-size:13px;font-weight:700;cursor:pointer">⬛ 大きくする</button>
         </div>
-        <div style="font-size:10.5px;color:#888;margin-top:5px;line-height:1.5">大人5名以上＝大きく／4名以下＝小さく。${tableHint}<br>※ゲストは操作しません（スタッフのみ）</div>
+        <div style="font-size:10.5px;color:#888;margin-top:5px;line-height:1.5">子どもを含めて4名以下＝小さく／5名以上＝大きく。${tableHint}<br>※ゲストは操作しません（スタッフのみ）</div>
       </div>
 
       <!-- 前回のゲストがお布団を何組使ったか（ECRUのみ・洗うリネンの数が変わる） -->
