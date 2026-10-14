@@ -6483,7 +6483,7 @@ function renderMessageTab() {
       <div id="welcome-typhoon-box"></div>
     </div>
     <div class="card" id="welcome-event-card" style="display:none">
-      <div class="card-title">🎪 イベント情報取得</div>
+      <div class="card-title">🎪 イベント候補の取得（参考としてクロコに渡す・取らなくてもOK）</div>
       <div id="welcome-event-area-info" style="font-size:12px;color:#888;margin-bottom:10px;padding:6px 10px;background:#F5F5F4;border-radius:8px">予約のチェックイン〜チェックアウト期間のイベントを取得します</div>
       <button onclick="fetchEvents()" id="welcome-event-btn" disabled
         style="width:100%;padding:13px;background:#4a7fc1;border:none;border-radius:10px;color:white;font-size:14px;font-weight:800;cursor:pointer;opacity:0.4;transition:opacity .2s">
@@ -6584,12 +6584,12 @@ function renderMessageTab() {
 
     <div class="card" style="background:#1C1C1E">
       <button onclick="${msgMode === 'welcome' ? 'generateWelcomeMsg()' : msgMode === 'disaster' ? 'generateDisasterMsg()' : 'generateMsgPrompt()'}" style="width:100%;padding:18px;background:#F07C3F;border:none;border-radius:12px;color:white;font-size:17px;font-weight:800;cursor:pointer;letter-spacing:.3px">
-        ${msgMode === 'welcome' ? '🌤️ ウェルカムメッセージを生成' : msgMode === 'disaster' ? '🚨 災害・緊急メッセージを生成' : msgMode === 'review' ? '⭐ レビュープロンプトを生成' : '✨ メッセージプロンプトを生成'}
+        ${msgMode === 'welcome' ? '🌤️ クロコに頼む文を作る' : msgMode === 'disaster' ? '🚨 災害・緊急メッセージを生成' : msgMode === 'review' ? '⭐ レビュープロンプトを生成' : '✨ メッセージプロンプトを生成'}
       </button>
     </div>
 
     <div class="card" id="msg-output-card" style="display:none">
-      <div class="card-title">${msgMode === 'welcome' ? 'ウェルカムメッセージ' : msgMode === 'disaster' ? '災害・緊急メッセージ' : '生成されたプロンプト'}</div>
+      <div class="card-title">${msgMode === 'welcome' ? 'クロコに頼む文（コピーしてクロコに貼る）' : msgMode === 'disaster' ? '災害・緊急メッセージ' : '生成されたプロンプト'}</div>
       <textarea id="msg-prompt-area" readonly style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:12px;font-size:13px;line-height:1.7;min-height:300px;background:#F5F5F4;font-family:'Noto Sans JP',sans-serif;box-sizing:border-box;color:#333;resize:none"></textarea>
       <div style="display:grid;grid-template-columns:${(msgMode === 'welcome' || msgMode === 'disaster') ? '1fr' : '1fr 1fr'};gap:10px;margin-top:12px">
         <button onclick="copyMsgPrompt()" style="padding:14px;background:#1C1C1E;border:none;border-radius:12px;color:white;font-size:14px;font-weight:800;cursor:pointer">
@@ -7853,11 +7853,23 @@ function generateWelcomeMsg() {
     typhoonBlock = `⚠️ 台風に関するお知らせ\n現在 ${t.name} が発生しており、${dstr ? `${dstr}にこのエリアへ最接近する見込みです。` : 'このエリアへの接近が予想されています。'}\nご滞在中は強い雨・風が予想されますので、外出時は傘や雨具をご用意いただき、無理のないご移動をおすすめします。交通機関に遅れが出る場合もありますので、最新の運行情報もあわせてご確認ください。\n▶ 気象庁 台風情報：${tyUrl}\n\n`;
   }
   // イベント情報
-  let eventLines = '';
-  if (welcomeEventData && welcomeEventData.events.length > 0) {
+  // ★2026-10-14 オーナー決定：イベント欄はクロコが毎回作る。自動取得は地元の祭りが載らず
+  //   講座・セミナーが混ざり、除外ワードを足す追いかけっこになっていた。
+  //   シミュは天気まで仕上げ、イベント欄は空けて「クロコに頼む文」として出す。
+  //   自動取得の結果は、頼む文に「参考の候補」として添えるだけ
+  // ★1泊は天気だけ（2026-10-02 オーナー指示）
+  let nights = null;
+  if (ciDate) {
+    const coDate = parseDateStr(getCheckout(b) || b.checkin) || ciDate;
+    nights = Math.round((coDate - ciDate) / 86400000);
+  }
+  const oneNight = nights != null && nights <= 1;
+  const eventLines = oneNight ? '' : '＜期間中のイベント情報＞\n（ここはクロコが作ります）';
+  let candidateLines = '';
+  if (!oneNight && welcomeEventData && welcomeEventData.events.length > 0) {
     // ★以前はここで先頭5件に切っていたため、プレビューに出ているのに文面へ入らない
     //   イベントがあった（取りこぼしの一因）。件数の上限は取得側(SHOW_MAX)に一本化する
-    const evList = welcomeEventData.events.map(ev => {
+    candidateLines = welcomeEventData.events.map(ev => {
       const loc    = ev.area  ? `（${ev.area}）` : '';
       // 日程：滞在期間に該当する日付だけに整形（長い羅列・途切れを防止）
       const rawDates = formatEventDatesForStay(ev.dates, welcomeEventData.startDate, welcomeEventData.endDate);
@@ -7871,26 +7883,49 @@ function generateWelcomeMsg() {
       const title = (ev.title || '').replace(/^[\s　◆◇■□★☆●○▼▲△▽◎※＊*・〇〔〕\-―—~〜]+/, '').trim();
       return `・${title}${dt}${place}`;
     }).join('\n');
-    eventLines = `＜期間中のイベント情報＞\n${evList}\n\n${welcomeEventData.targetUrl}`;
-  } else {
-    // 0件でもイベントの欄ごと消えないよう、物件に合ったイベントサイトのURLを載せる
-    const evSiteUrl = area.eventChofuCal ? `${area.eventChofuCal}?type=2`
-      : (area.eventBaseUrl || area.eventApiUrl) ? 'https://imatama.jp/event-list/index/1' : '';
-    eventLines = evSiteUrl ? `＜期間中のイベント情報＞\n${evSiteUrl}` : '';
   }
   const hasTyphoon = welcomeTyphoonInclude && !!welcomeTyphoonData;
   const closingLine = hasTyphoon
     ? '何かご不明点やお困りのことがあれば、いつでもご連絡ください。どうかお気をつけてお過ごしください。'
     : '何かご不明点やリクエストがありましたら、いつでもご連絡ください。素敵な滞在となりますよう願っております！';
-  const introLine = hasTyphoon
-    ? '安全にお過ごしいただけるよう、天気予報と台風・イベント情報をお知らせします。'
-    : '快適に過ごしていただけるよう、天気予報と近隣のイベント情報をお知らせしますので、ぜひご参考にしてください。';
-  let msg = `${greeting}\n\n当施設をご予約いただき、ありがとうございます。\n${introLine}\n\n${typhoonBlock}＜週間天気予報${reportDatetime ? `（気象庁 ${fmtJmaReport(reportDatetime)}発表）` : ''}＞\n${weatherLines}\n\n${comment}${longStayNote}\n▶ 最新の天気予報はこちら：${area.jmaUrl}\n\n${eventLines}\n\n※ 上記は参考情報です。開催日程・内容は予告なく変更になる場合がありますので、最新情報は各リンクよりご確認ください。有料施設のチケットはお客様ご自身でのご購入をお願いしております。\n\n${closingLine}\n\nTy`;
+  const introLine = oneNight
+    ? (hasTyphoon
+      ? '安全にお過ごしいただけるよう、天気予報と台風情報をお知らせします。'
+      : '快適に過ごしていただけるよう、天気予報をお知らせしますので、ぜひご参考にしてください。')
+    : (hasTyphoon
+      ? '安全にお過ごしいただけるよう、天気予報と台風・イベント情報をお知らせします。'
+      : '快適に過ごしていただけるよう、天気予報と近隣のイベント情報をお知らせしますので、ぜひご参考にしてください。');
+  const eventBlock = oneNight ? ''
+    : `${eventLines}\n\n※ 上記は参考情報です。開催日程・内容は予告なく変更になる場合がありますので、最新情報は各リンクよりご確認ください。有料施設のチケットはお客様ご自身でのご購入をお願いしております。\n\n`;
+  const msg = `${greeting}\n\n当施設をご予約いただき、ありがとうございます。\n${introLine}\n\n${typhoonBlock}＜週間天気予報${reportDatetime ? `（気象庁 ${fmtJmaReport(reportDatetime)}発表）` : ''}＞\n${weatherLines}\n\n${comment}${longStayNote}\n▶ 最新の天気予報はこちら：${area.jmaUrl}\n\n${eventBlock}${closingLine}\n\nTy`;
+  // クロコに頼む文：予約の情報（物件・日程・泊数・人数）＋天気まで入った文面＋自動取得の候補
+  const prop = b ? properties.find(p => p.id === getBookingPropId(b)) : null;
+  const fmtStay = d => `${d.getMonth()+1}月${d.getDate()}日(${dow[d.getDay()]})`;
+  const coDateForReq = ciDate ? (parseDateStr(getCheckout(b) || b.checkin) || ciDate) : null;
+  const people = b && b.adults != null
+    ? `大人${Number(b.adults) || 0}・子ども${Number(b.children) || 0}・乳幼児${Number(b.infants) || 0}`
+    : '不明（予約に人数の記録なし）';
+  const reqLines = [
+    'ゲスト案内',
+    oneNight
+      ? '1泊なので天気だけの文面です（イベント欄なし）。内容を確かめて、全文をコピーできる形で返してください。'
+      : 'シミュレーターで天気まで作った文面です。イベント欄を作って、全文をコピーできる形で返してください。',
+    '',
+    `・物件：${prop ? prop.name : '不明'}（${area.label}）`,
+    `・ゲスト：${b ? (b.guestName || '?') : '?'} 様${b && b.code ? `（予約コード ${b.code}）` : ''}`,
+    `・滞在：${ciDate ? `${fmtStay(ciDate)}〜${fmtStay(coDateForReq)}・${nights}泊` : '不明（予約を選ばずに作成）'}`,
+    `・人数：${people}`,
+    `・天気：気象庁 ${reportDatetime ? fmtJmaReport(reportDatetime) : '?'}発表のデータで作成済み`,
+  ];
+  if (!oneNight) {
+    reqLines.push('', '【自動取得したイベント候補（参考・未確認）】', candidateLines || '（なし）');
+  }
+  reqLines.push('', '----- 文面ここから -----', msg, '----- 文面ここまで -----');
   const ta = document.getElementById('msg-prompt-area');
-  if (ta) { ta.value = msg; ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 800) + 'px'; }
+  if (ta) { ta.value = reqLines.join('\n'); ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 800) + 'px'; }
   document.getElementById('msg-output-card').style.display = 'block';
   document.getElementById('msg-output-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  showToast('ウェルカムメッセージを生成しました！', 'success');
+  showToast('クロコに頼む文を作りました。コピーしてクロコに貼ってください', 'success');
 }
 
 // ==================== 災害・緊急メッセージ ====================
@@ -8291,7 +8326,7 @@ function copyMsgPrompt() {
   if (!ta || !ta.value) return;
   if (navigator.clipboard) {
     navigator.clipboard.writeText(ta.value)
-      .then(() => showToast('コピーしました！民泊botに貼り付けてください', 'success'))
+      .then(() => showToast(msgMode === 'welcome' ? 'コピーしました！クロコに貼り付けてください' : 'コピーしました！民泊botに貼り付けてください', 'success'))
       .catch(() => { ta.select(); document.execCommand('copy'); showToast('コピーしました！', 'success'); });
   } else {
     ta.select();
