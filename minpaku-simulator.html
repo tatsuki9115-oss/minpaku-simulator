@@ -2490,7 +2490,7 @@ function renderSettings() {
         <button class="btn-add-row" onclick="addCostRow(${pi},'booking')">＋ 項目を追加</button>
         <div class="divider"></div>
         <div class="cost-section-title" style="color:#1C9A52">🧹 清掃スタッフ（物件ごとに登録）</div>
-        <div style="font-size:11px;color:#bbb;margin-bottom:8px">チェックイン後の清掃を担当するスタッフ候補を登録してください</div>
+        <div style="font-size:11px;color:#bbb;margin-bottom:8px">チェックイン後の清掃を担当するスタッフ候補を登録してください。名前はLINEなどの連絡に使います（あだ名でOK）。本名は支払明細の「支払先」に自動で入ります<br>⚠️ 担当したことのある人の名前を書き換えると、過去の予約とのつながりが切れて清掃費が基本の金額に戻ります</div>
         ${(p.cleaningStaff||[]).map((s,si) => `
           <div style="margin-bottom:10px;padding:8px 10px;background:${s.retired?'#fafafa':'#f7f7f7'};border-radius:10px;border:1px solid #ebebeb;opacity:${s.retired?'0.65':'1'}">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
@@ -2498,6 +2498,7 @@ function renderSettings() {
               ${s.retired ? `<span style="font-size:10px;font-weight:800;color:#888;background:#eee;border-radius:5px;padding:2px 6px;white-space:nowrap">退職</span>` : ''}
               <button class="btn-remove-row" onclick="removeCleaningStaff(${pi},${si})">×</button>
             </div>
+            <input type="text" value="${escHtml(s.realName||'')}" placeholder="本名（支払明細用・空欄なら明細を作るときに入力）" style="width:100%;margin-bottom:6px;padding:6px 8px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:12px;color:#333;box-sizing:border-box" oninput="updateCleaningStaff(${pi},${si},'realName',this.value)" onblur="saveData()">
             <div style="display:flex;align-items:center;gap:6px">
               <input type="tel" value="${escHtml(s.phone||'')}" placeholder="090-xxxx-xxxx" style="flex:1;padding:6px 8px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:12px;color:#333;box-sizing:border-box" oninput="updateCleaningStaff(${pi},${si},'phone',this.value)" onblur="saveData()">
               <div style="display:flex;align-items:center;gap:3px;flex-shrink:0">
@@ -6134,6 +6135,20 @@ function _refreshCalendarDots() {
 // ==================== 支払明細書 ====================
 const PAYEE_HISTORY_KEY = 'payeeHistory';
 
+// 担当スタッフの本名（設定の「本名（支払明細用）」）。予約の物件で見つからなければ、
+// 同じ名前で本名が入っている他の物件のスタッフから探す。なければ空
+function getStaffRealName(propId, staffName) {
+  if (!staffName) return '';
+  const prop = properties.find(p => String(p.id) === String(propId));
+  const own = prop ? (prop.cleaningStaff || []).find(s => s.name === staffName) : null;
+  if (own && String(own.realName || '').trim()) return String(own.realName).trim();
+  for (const p of properties) {
+    const s = (p.cleaningStaff || []).find(x => x.name === staffName && String(x.realName || '').trim());
+    if (s) return String(s.realName).trim();
+  }
+  return '';
+}
+
 function getPayeeHistory() {
   try { return JSON.parse(localStorage.getItem(PAYEE_HISTORY_KEY) || '[]'); } catch { return []; }
 }
@@ -6185,6 +6200,8 @@ function showPaymentStatementModal(code, which) {
   }
   which = which === 2 ? 2 : 1;
   const _targetName = sw ? sw.staffName : (which === 2 ? chk.staff2Name : chk.cleaningStaffName);
+  // 設定で本名（支払明細用）が入っていれば支払先に最初から入れる（連絡はあだ名・明細は本名）
+  const _realName = getStaffRealName(sw ? sw.propId : getBookingPropId(b), _targetName);
   const _targetSub  = sw ? `（${sw.type || 'スポット作業'}）` : (which === 2 ? `（2人目・${chk.staff2Type || '追加業務'}）` : '');
 
   const hist = getPayeeHistory();
@@ -6201,12 +6218,12 @@ function showPaymentStatementModal(code, which) {
 
       <div style="margin-bottom:12px">
         <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:4px">支払先</label>
-        <input id="paysmt-payee" list="paysmt-payee-list" type="text" placeholder="例: 小西聡子" autocomplete="off"
+        <input id="paysmt-payee" list="paysmt-payee-list" type="text" placeholder="例: 小西聡子" autocomplete="off" value="${escHtml(_realName)}"
           style="width:100%;padding:9px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;box-sizing:border-box;color:#333">
         <datalist id="paysmt-payee-list">
           ${hist.map(h => `<option value="${escHtml(h)}">`).join('')}
         </datalist>
-        ${hist.length > 0 ? `<div style="font-size:10px;color:#aaa;margin-top:4px">▲ 過去の入力から選べます</div>` : ''}
+        ${_realName ? `<div style="font-size:10px;color:#1C9A52;margin-top:4px">▲ 設定の本名を入れています</div>` : hist.length > 0 ? `<div style="font-size:10px;color:#aaa;margin-top:4px">▲ 過去の入力から選べます（設定で本名を登録すると自動で入ります）</div>` : ''}
       </div>
 
       <div style="margin-bottom:12px">
