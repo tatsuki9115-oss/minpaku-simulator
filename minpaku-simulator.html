@@ -2490,11 +2490,11 @@ function renderSettings() {
         <button class="btn-add-row" onclick="addCostRow(${pi},'booking')">＋ 項目を追加</button>
         <div class="divider"></div>
         <div class="cost-section-title" style="color:#1C9A52">🧹 清掃スタッフ（物件ごとに登録）</div>
-        <div style="font-size:11px;color:#bbb;margin-bottom:8px">チェックイン後の清掃を担当するスタッフ候補を登録してください。名前はLINEなどの連絡に使います（あだ名でOK）。本名は支払明細の「支払先」に自動で入ります<br>⚠️ 担当したことのある人の名前を書き換えると、過去の予約とのつながりが切れて清掃費が基本の金額に戻ります</div>
+        <div style="font-size:11px;color:#bbb;margin-bottom:8px">チェックイン後の清掃を担当するスタッフ候補を登録してください。名前はLINEなどの連絡に使います（あだ名でOK）。本名は支払明細の「支払先」に自動で入ります<br>名前を書き換えると、この物件の過去の予約・スポット作業の担当も新しい名前に付け替わります（金額はそのまま）</div>
         ${(p.cleaningStaff||[]).map((s,si) => `
           <div style="margin-bottom:10px;padding:8px 10px;background:${s.retired?'#fafafa':'#f7f7f7'};border-radius:10px;border:1px solid #ebebeb;opacity:${s.retired?'0.65':'1'}">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-              <input class="cost-name" type="text" value="${escHtml(s.name)}" placeholder="スタッフ名（例: 田中さん）" style="flex:1" oninput="updateCleaningStaff(${pi},${si},'name',this.value)" onblur="saveData()">
+              <input class="cost-name" type="text" value="${escHtml(s.name)}" placeholder="スタッフ名（例: 田中さん）" style="flex:1" onfocus="this.dataset.orig=this.value" oninput="updateCleaningStaff(${pi},${si},'name',this.value)" onblur="renameStaffRefs(${pi},${si},this.dataset.orig,this.value);saveData()">
               ${s.retired ? `<span style="font-size:10px;font-weight:800;color:#888;background:#eee;border-radius:5px;padding:2px 6px;white-space:nowrap">退職</span>` : ''}
               <button class="btn-remove-row" onclick="removeCleaningStaff(${pi},${si})">×</button>
             </div>
@@ -2603,6 +2603,38 @@ function countBookingsForStaff(name) {
     const k = bookingChecks[c] || {};
     return k.cleaningStaffName === name || k.staff2Name === name;
   }).length;
+}
+// スタッフの名前を書き換えたら、この物件の予約・スポット作業の担当名も新しい名前に付け替える
+// （予約側は名前でつながっているので、そのままだと担当が空に見え、清掃費も基本の金額に戻る）
+// 同じ名前の人が別の物件にも登録されていることがあるので、付け替えるのはこの物件の分だけ
+function renameStaffRefs(pi, si, oldName, newName) {
+  const p = properties[pi];
+  if (!p || !oldName || oldName === newName) return;
+  const codes = Object.keys(bookingChecks).filter(c => {
+    const k = bookingChecks[c] || {};
+    if (k.cleaningStaffName !== oldName && k.staff2Name !== oldName) return false;
+    const b = findBookingByCode(c);
+    return !!b && String(getBookingPropId(b)) === String(p.id);
+  });
+  const works = spotWorks.filter(w => String(w.propId) === String(p.id) && w.staffName === oldName);
+  if (codes.length === 0 && works.length === 0) return;
+  // 空欄や、同じ物件の別の人と同じ名前にすると担当がどちらか分からなくなるので、元の名前に戻す
+  const dup = (p.cleaningStaff || []).some((s, i) => i !== si && s.name === newName);
+  if (!String(newName || '').trim() || dup) {
+    p.cleaningStaff[si].name = oldName;
+    renderSettingsKeepOpen();
+    showToast(dup ? `「${newName}」は同じ物件にもういるので、名前を元に戻しました` : '担当した予約があるので名前は空にできません（元に戻しました）', 'error');
+    return;
+  }
+  codes.forEach(c => {
+    const k = bookingChecks[c];
+    if (k.cleaningStaffName === oldName) k.cleaningStaffName = newName;
+    if (k.staff2Name === oldName) k.staff2Name = newName;
+  });
+  works.forEach(w => { w.staffName = newName; });
+  if (codes.length) saveBookingChecks();
+  if (works.length) saveSpotWorks();
+  showToast(`担当も「${newName}」に付け替えました（予約${codes.length}件・スポット作業${works.length}件）`, 'success');
 }
 function removeCleaningStaff(pi, si) {
   const s = properties[pi].cleaningStaff[si] || {};
@@ -6218,7 +6250,7 @@ function showPaymentStatementModal(code, which) {
 
       <div style="margin-bottom:12px">
         <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:4px">支払先</label>
-        <input id="paysmt-payee" list="paysmt-payee-list" type="text" placeholder="例: 小西聡子" autocomplete="off" value="${escHtml(_realName)}"
+        <input id="paysmt-payee" list="paysmt-payee-list" type="text" placeholder="例: 山田花子" autocomplete="off" value="${escHtml(_realName)}"
           style="width:100%;padding:9px 12px;border:1.5px solid #e0e0e0;border-radius:10px;font-size:14px;box-sizing:border-box;color:#333">
         <datalist id="paysmt-payee-list">
           ${hist.map(h => `<option value="${escHtml(h)}">`).join('')}
