@@ -6440,7 +6440,8 @@ function generatePaymentStatement(code, which) {
       function psSharePdf() {
         var note = document.getElementById('ps-pdf-note');
         if (navigator.canShare && navigator.canShare({ files: [psPdfFile] })) {
-          navigator.share({ files: [psPdfFile], title: psPdfFile.name }).catch(function (e) {
+          // title を付けるとiPhoneがファイル名の文字を「.pdf.txt」として一緒に渡すので、PDFだけを渡す
+          navigator.share({ files: [psPdfFile] }).catch(function (e) {
             if (!e || e.name !== 'AbortError') note.textContent = '送る画面を開けませんでした：' + ((e && e.message) || e);
           });
         } else {
