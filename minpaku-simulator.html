@@ -1394,6 +1394,8 @@ function initFirebaseSync() {
     if (sameData(val, bookingComBookings)) return;
     try { localStorage.setItem(KEYS.bookingCom, JSON.stringify(val)); } catch(e) {}
     bookingComBookings = val;
+    // ★ホーム（要対応・次の予約）も描き直す。ないとB.comの新しい予約が要対応に出ない（2026-10-23）
+    keepScroll(() => { renderDashboard && renderDashboard(); });
     keepScroll(() => { renderCalendarTab && renderCalendarTab(); });
     keepScroll(() => { renderMonthly && renderMonthly(); });
     keepScroll(() => { renderAnnual && renderAnnual(); });
