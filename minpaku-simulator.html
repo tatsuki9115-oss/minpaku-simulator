@@ -2129,7 +2129,7 @@ function renderCalendarTab() {
         const coDate = coParts ? new Date(coParts[0], coParts[1]-1, coParts[2]) : null;
         const daysToCO = coDate ? Math.round((coDate - nowForCal) / 86400000) : 999;
         // アラート状態判定
-        const formAlert = b.code && !chk.formDone && daysToCI <= 30 && daysToCI >= -3;
+        const formAlert = b.code && !chk.formDone && isFormAlertDue(b, nowForCal);
         const cleanAlert = b.code && !chk.cleaningDone && daysToCI <= 30 && daysToCI >= -3;
         const checkinMsgAlert = b.code && !chk.checkinMsgDone && daysToCI >= 0 && daysToCI <= 3;
         const welcomeMsgAlert = b.code && !chk.welcomeMsgDone && daysToCI >= 0 && daysToCI <= 3;
@@ -3135,6 +3135,28 @@ function getCheckout(b) {
   const [y, m, d] = b.checkin.split('/').map(Number);
   const dt = new Date(y, m - 1, d + b.nights);
   return `${dt.getFullYear()}/${dt.getMonth()+1}/${dt.getDate()}`;
+}
+// 宿泊者名簿のアラートを出すか（2026-10-23 オーナー指示）
+// 「予約から2週間たった日」と「チェックイン1週間前」の早いほうから、チェックイン3日後まで出す
+// bookingTime は「YYYY-MM-DD」と「…T…Z」（UTC）の2形式があるので、日本時間の日付に直してから数える
+// （split('T') で切ると、UTCで前日になる深夜の予約が1日早くなる）。予約日が無い予約は1週間前の決まりだけ
+function isFormAlertDue(b, today) {
+  if (!b.checkin) return false;
+  const cp = b.checkin.split('/').map(Number);
+  const daysToCI = Math.round((new Date(cp[0], cp[1]-1, cp[2]) - today) / 86400000);
+  if (daysToCI < -3) return false;
+  if (daysToCI <= 7) return true;
+  const bt = String(b.bookingTime || '');
+  if (!bt) return false;
+  let booked;
+  if (bt.includes('T')) {
+    const d = new Date(bt);
+    booked = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  } else {
+    const p = bt.split('-').map(Number);
+    booked = new Date(p[0], p[1]-1, p[2]);
+  }
+  return Math.round((today - booked) / 86400000) >= 14;
 }
 function parseDateStr(s) {
   if (!s) return null;
@@ -4206,11 +4228,10 @@ function renderDashboard() {
   }
   events.sort((a, b2) => a.date - b2.date || (a.type === 'out' ? -1 : 1));
 
-  // アラート対象（名簿・清掃ともチェックイン1か月前（30日前）から）
+  // アラート対象（名簿＝予約から2週間かチェックイン1週間前の早いほうから・isFormAlertDue／清掃＝チェックイン1か月前（30日前）から）
   const alertForm = _allBooks.filter(b => {
     if (!b.code || bookingChecks[b.code]?.formDone) return false;
-    const diff = Math.round((getCI(b) - now) / 86400000);
-    return diff >= -3 && diff <= 30;
+    return isFormAlertDue(b, now);
   }).sort((a,b2) => getCI(a) - getCI(b2));
   const alertClean = _allBooks.filter(b => {
     if (!b.code || bookingChecks[b.code]?.cleaningDone) return false;
@@ -4451,7 +4472,7 @@ function renderDashboard() {
     }
     if (alertForm.length > 0) {
       if (alertCheckinMsg.length > 0) alertRows += `<div style="height:8px"></div>`;
-      alertRows += `<div style="font-size:10px;font-weight:800;color:#E65100;letter-spacing:.5px;margin:4px 0 2px">📋 宿泊者名簿（チェックイン1週間前までに・提出済みならクロコに「名簿チェック」で照合）</div>`;
+      alertRows += `<div style="font-size:10px;font-weight:800;color:#E65100;letter-spacing:.5px;margin:4px 0 2px">📋 宿泊者名簿（予約から2週間かチェックイン1週間前の早いほうから・提出済みならクロコに「名簿チェック」で照合）</div>`;
       alertRows += alertForm.map(b => renderAlertRow(b, 'form')).join('');
     }
     if (alertClean.length > 0) {
