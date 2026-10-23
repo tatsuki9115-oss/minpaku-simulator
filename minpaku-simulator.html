@@ -6362,6 +6362,12 @@ function generatePaymentStatement(code, which) {
       <td class="num">${expenseTotal.toLocaleString('ja-JP')}円</td>
       <td>${expenseNotes}</td>
     </tr>` : '';
+  // iPhoneは明細のタブで印刷（window.print）が動かないため、「PDFファイルにする」でPDFを作り、
+  // 共有画面（LINE・ファイルに保存）へ渡す（2026-10-23）。作るのに時間がかかり1回目のタップでは
+  // 共有画面を出せないので、作ったあと2回目のタップで共有する。
+  // ※下の html はテンプレート文字列なので、script の閉じタグは <\/script> と書く（そのまま書くとシミュ全体が止まる）
+  // PDFのファイル名（ファイル名に使えない記号と < > は _ に置き換える）
+  const pdfName = `支払明細書_${payee}_${payDate}.pdf`.replace(/[\\/:*?"<>|]/g, '_');
 
   const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="UTF-8">
     <title>支払明細書_${payee}_${payDate}</title>
@@ -6381,6 +6387,7 @@ function generatePaymentStatement(code, which) {
       .print-btn{display:block;margin:0 auto;padding:12px 40px;font-size:15px;font-weight:700;background:#1a365d;color:white;border:none;border-radius:10px;cursor:pointer}
       @media print{.no-print{display:none !important}body{padding:20px 28px}}
     </style></head><body>
+    <div id="ps-doc">
     <h2>支払明細書（${sw ? 'スポット作業' : isSecond ? '追加業務' : '清掃費用'}・税込表記）</h2>
     <table class="meta">
       <tr><td>支払日</td><td>${payDate}</td></tr>
@@ -6400,10 +6407,50 @@ function generatePaymentStatement(code, which) {
       </tbody>
     </table>
     ${memo ? `<div class="memo-box"><strong>メモ</strong>　${escHtml(memo).replace(/\n/g,'<br>')}</div>` : ''}
+    </div>
     <div class="no-print" id="ps-actions" style="text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center">
       <button class="print-btn" onclick="var a=document.getElementById('ps-actions');a.style.display='none';window.print();setTimeout(function(){a.style.display=''},300)">🖨️ 印刷 / PDF保存</button>
+      <button class="print-btn" id="ps-pdf-btn" style="background:#1C9A52" onclick="psPdfTap()">📄 PDFファイルにする（スマホはこちら）</button>
+      <div id="ps-pdf-note" style="font-size:12px;color:#888;max-width:320px;line-height:1.6"></div>
       <button onclick="window.close()" style="padding:10px 32px;font-size:13px;font-weight:700;background:white;color:#555;border:1.5px solid #ccc;border-radius:10px;cursor:pointer">← 閉じてカレンダーへ戻る</button>
     </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>
+    <script>
+      var PS_FILENAME = ${JSON.stringify(pdfName)};
+      var psPdfFile = null;
+      function psPdfTap() {
+        var btn = document.getElementById('ps-pdf-btn'), note = document.getElementById('ps-pdf-note');
+        if (psPdfFile) { psSharePdf(); return; }
+        if (typeof html2pdf === 'undefined') { note.textContent = 'PDFの部品を読み込み中です。数秒おいてもう一度押してください'; return; }
+        btn.disabled = true; btn.textContent = '⏳ PDFを作っています…'; note.textContent = '';
+        html2pdf().set({
+          margin: 10, filename: PS_FILENAME,
+          image: { type: 'jpeg', quality: 0.95 },
+          html2canvas: { scale: 2, backgroundColor: '#ffffff' },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        }).from(document.getElementById('ps-doc')).outputPdf('blob').then(function (blob) {
+          psPdfFile = new File([blob], PS_FILENAME, { type: 'application/pdf' });
+          btn.disabled = false; btn.textContent = '📤 PDFを保存・送る';
+          note.textContent = 'もう一度押すと、LINEで送る・「ファイルに保存」などを選べます';
+        }).catch(function (e) {
+          btn.disabled = false; btn.textContent = '📄 PDFファイルにする（スマホはこちら）';
+          note.textContent = 'PDFを作れませんでした：' + ((e && e.message) || e);
+        });
+      }
+      function psSharePdf() {
+        var note = document.getElementById('ps-pdf-note');
+        if (navigator.canShare && navigator.canShare({ files: [psPdfFile] })) {
+          navigator.share({ files: [psPdfFile], title: psPdfFile.name }).catch(function (e) {
+            if (!e || e.name !== 'AbortError') note.textContent = '送る画面を開けませんでした：' + ((e && e.message) || e);
+          });
+        } else {
+          var a = document.createElement('a');
+          a.href = URL.createObjectURL(psPdfFile); a.download = psPdfFile.name;
+          document.body.appendChild(a); a.click(); a.remove();
+          note.textContent = 'PDFを保存しました（ダウンロードを確認してください）';
+        }
+      }
+    <\/script>
   </body></html>`;
 
   const win = window.open('', '_blank');
