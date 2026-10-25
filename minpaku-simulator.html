@@ -6362,9 +6362,10 @@ function generatePaymentStatement(code, which) {
       <td class="num">${expenseTotal.toLocaleString('ja-JP')}円</td>
       <td>${expenseNotes}</td>
     </tr>` : '';
-  // iPhoneは明細のタブで印刷（window.print）が動かないため、「PDFファイルにする」でPDFを作り、
-  // 共有画面（LINE・ファイルに保存）へ渡す（2026-10-23）。作るのに時間がかかり1回目のタップでは
-  // 共有画面を出せないので、作ったあと2回目のタップで共有する。
+  // 送り方＝「🖨️ 印刷」→ 印刷の画面から共有 → LINE（PDFだけが届く）。
+  // ⚠️iPhoneでホーム画面の「Webアプリ」として開くと印刷が効かない（2026-10-25 判明）。アイコンは「Webアプリとして開く」オフで作る。
+  // ページから共有（navigator.share）でLINEに送る形は、ファイル名などの文字の吹き出しが必ず付くのでやめた（2026-10-25）。
+  // 印刷を押したら、開いたときに裏で作っておいたPDFをドライブ「請求書」へ自動で預ける（psUploadOnce）。
   // ※下の html はテンプレート文字列なので、script の閉じタグは <\/script> と書く（そのまま書くとシミュ全体が止まる）
   // PDFのファイル名（ファイル名に使えない記号と < > は _ に置き換える）
   const pdfName = `支払明細書_${payee}_${payDate}.pdf`.replace(/[\\/:*?"<>|]/g, '_');
@@ -6385,7 +6386,7 @@ function generatePaymentStatement(code, which) {
       .memo-box{border:1px solid #ddd;border-radius:6px;padding:10px 14px;font-size:12px;color:#555;margin-bottom:28px}
       .memo-box strong{color:#333}
       .print-btn{display:block;margin:0 auto;padding:12px 40px;font-size:15px;font-weight:700;background:#1a365d;color:white;border:none;border-radius:10px;cursor:pointer}
-      @media print{.no-print{display:none !important}body{padding:20px 28px}}
+      @media print{.no-print,.html2pdf__overlay,.html2pdf__container{display:none !important}body{padding:20px 28px}}
     </style></head><body>
     <div id="ps-doc">
     <h2>支払明細書（${sw ? 'スポット作業' : isSecond ? '追加業務' : '清掃費用'}・税込表記）</h2>
@@ -6409,96 +6410,66 @@ function generatePaymentStatement(code, which) {
     ${memo ? `<div class="memo-box"><strong>メモ</strong>　${escHtml(memo).replace(/\n/g,'<br>')}</div>` : ''}
     </div>
     <div class="no-print" id="ps-actions" style="text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center">
-      <button class="print-btn" onclick="var a=document.getElementById('ps-actions');a.style.display='none';window.print();setTimeout(function(){a.style.display=''},300)">🖨️ 印刷 / PDF保存</button>
-      <button class="print-btn" id="ps-pdf-btn" style="background:#1C9A52" onclick="psPdfTap()">📄 PDFファイルにする（スマホはこちら）</button>
-      <div id="ps-pdf-note" style="font-size:12px;color:#888;max-width:320px;line-height:1.6"></div>
+      <button class="print-btn" onclick="psUploadOnce();var a=document.getElementById('ps-actions');a.style.display='none';window.print();setTimeout(function(){a.style.display=''},300)">🖨️ 印刷 / PDF保存</button>
       <div id="ps-drive-note" style="font-size:12px;color:#888;max-width:320px;line-height:1.6"></div>
-      <!-- 試し（2026-10-25・LINEにファイル名の1行が届かない形を探す・決まったら消す） -->
-      <div id="ps-test" style="display:none;flex-direction:column;gap:8px;align-items:center;border:1.5px dashed #c9a227;border-radius:10px;padding:10px 14px;max-width:320px">
-        <div style="font-size:12px;color:#8a6d00;line-height:1.6">🧪 試し：LINEの「Keepメモ」に1つずつ送って、文字が届かないものを教えてください</div>
-        <button class="print-btn" style="background:#8a6d00;font-size:13px;padding:10px 24px" onclick="psShareTest(1)">試し① 半角の空白</button>
-        <button class="print-btn" style="background:#8a6d00;font-size:13px;padding:10px 24px" onclick="psShareTest(2)">試し② 全角の空白</button>
-        <button class="print-btn" style="background:#8a6d00;font-size:13px;padding:10px 24px" onclick="psShareTest(3)">試し③ 幅のない文字</button>
-      </div>
       <button onclick="window.close()" style="padding:10px 32px;font-size:13px;font-weight:700;background:white;color:#555;border:1.5px solid #ccc;border-radius:10px;cursor:pointer">← 閉じてカレンダーへ戻る</button>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>
     <script>
+      // ドライブ「請求書」への自動保存（2026-10-25）：開いたときに裏でPDFを作っておき、
+      // 「🖨️ 印刷」を押したら一時置き場（minpaku-sync）に預ける。Macの請求書自動保存が1時間ごとに取りに来てドライブに入れる。
+      // 預けるのは印刷を押したときだけ・1回だけ（開いて見ただけ・作り直しのたびに増えないように）。ログインは元のシミュの画面のものを使う
       var PS_FILENAME = ${JSON.stringify(pdfName)};
-      var psPdfFile = null;
-      function psPdfTap() {
-        var btn = document.getElementById('ps-pdf-btn'), note = document.getElementById('ps-pdf-note');
-        if (psPdfFile) { psSharePdf(); return; }
-        if (typeof html2pdf === 'undefined') { note.textContent = 'PDFの部品を読み込み中です。数秒おいてもう一度押してください'; return; }
-        btn.disabled = true; btn.textContent = '⏳ PDFを作っています…'; note.textContent = '';
+      var psB64 = null, psAuth = null, psPrepError = null, psWantUpload = false, psUploaded = false;
+      function psNote(t) { document.getElementById('ps-drive-note').textContent = t; }
+      function psPrepare(tries) {
+        if (typeof html2pdf === 'undefined') {
+          if (tries < 60) setTimeout(function () { psPrepare(tries + 1); }, 300);
+          else psPrepFailed('PDFの部品を読み込めませんでした');
+          return;
+        }
+        var getAuth = null;
+        try { getAuth = window.opener && window.opener.getStatementUploadAuth; } catch (e) {}
+        if (!getAuth) { psPrepFailed('シミュレーターの画面が閉じています'); return; }
+        getAuth().then(function (a) { psAuth = a; psMaybeUpload(); }, function (e) { psPrepFailed((e && e.message) || e); });
         html2pdf().set({
           margin: 10, filename: PS_FILENAME,
           image: { type: 'jpeg', quality: 0.95 },
           html2canvas: { scale: 2, backgroundColor: '#ffffff' },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         }).from(document.getElementById('ps-doc')).outputPdf('blob').then(function (blob) {
-          psPdfFile = new File([blob], PS_FILENAME, { type: 'application/pdf' });
-          btn.disabled = false; btn.textContent = '📤 LINEなどで送る';
-          note.textContent = 'もう一度押すと、LINEで送れます';
-          document.getElementById('ps-test').style.display = 'flex';
-          psSaveToDrive(blob);
+          var reader = new FileReader();
+          reader.onload = function () { psB64 = String(reader.result).split(',')[1] || ''; psMaybeUpload(); };
+          reader.onerror = function () { psPrepFailed('PDFを読めませんでした'); };
+          reader.readAsDataURL(blob);
+        }).catch(function (e) { psPrepFailed('PDFを作れませんでした：' + ((e && e.message) || e)); });
+      }
+      function psPrepFailed(msg) {
+        psPrepError = msg;
+        if (psWantUpload) psNote('⚠️ ドライブへの自動保存ができませんでした（' + msg + '）');
+      }
+      function psUploadOnce() {
+        if (psWantUpload) return;
+        psWantUpload = true;
+        if (psPrepError) { psPrepFailed(psPrepError); return; }
+        psNote('⏳ ドライブの「請求書」に預けています…');
+        psMaybeUpload();
+      }
+      function psMaybeUpload() {
+        if (!psWantUpload || psUploaded || !psB64 || !psAuth) return;
+        psUploaded = true;
+        fetch(psAuth.url + '/statement-pdf?name=' + encodeURIComponent(PS_FILENAME), {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + psAuth.idToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify(psB64)
+        }).then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          psNote('✅ ドライブの「請求書」フォルダに自動で入ります（Macが1時間以内に保存します）');
         }).catch(function (e) {
-          btn.disabled = false; btn.textContent = '📄 PDFファイルにする（スマホはこちら）';
-          note.textContent = 'PDFを作れませんでした：' + ((e && e.message) || e);
+          psNote('⚠️ ドライブへの自動保存に失敗しました：' + ((e && e.message) || e));
         });
       }
-      function psSharePdf() {
-        var note = document.getElementById('ps-pdf-note');
-        if (navigator.canShare && navigator.canShare({ files: [psPdfFile] })) {
-          // title を外すとiPhoneの共有画面にLINEが出なくなる（2026-10-25）ので付ける。
-          // title は「.pdf.txt」としても一緒に渡るが、ドライブへは自動保存（psSaveToDrive）なので共有から保存しなくてよい
-          navigator.share({ files: [psPdfFile], title: psPdfFile.name }).catch(function (e) {
-            if (!e || e.name !== 'AbortError') note.textContent = '送る画面を開けませんでした：' + ((e && e.message) || e);
-          });
-        } else {
-          var a = document.createElement('a');
-          a.href = URL.createObjectURL(psPdfFile); a.download = psPdfFile.name;
-          document.body.appendChild(a); a.click(); a.remove();
-          note.textContent = 'PDFを保存しました（ダウンロードを確認してください）';
-        }
-      }
-      // 試し（2026-10-25・決まったら消す）：LINEを出すために渡す文字を、見えない文字にして共有する
-      // 1＝半角の空白 / 2＝全角の空白 / 3＝幅のない文字（ゼロ幅スペース）
-      function psShareTest(n) {
-        var note = document.getElementById('ps-pdf-note');
-        var t = String.fromCharCode(n === 1 ? 0x20 : n === 2 ? 0x3000 : 0x200B);
-        if (!(navigator.canShare && navigator.canShare({ files: [psPdfFile] }))) { note.textContent = 'この端末では試せません'; return; }
-        navigator.share({ files: [psPdfFile], title: t }).catch(function (e) {
-          if (!e || e.name !== 'AbortError') note.textContent = '試し' + n + '：送る画面を開けませんでした：' + ((e && e.message) || e);
-        });
-      }
-      // ドライブ「請求書」への自動保存（2026-10-25）：PDFを一時置き場（minpaku-sync）に預け、
-      // Macの請求書自動保存が1時間ごとに取りに来てドライブに入れる。ログインは元のシミュの画面のものを使う
-      function psSaveToDrive(blob) {
-        var dnote = document.getElementById('ps-drive-note');
-        var getAuth = null;
-        try { getAuth = window.opener && window.opener.getStatementUploadAuth; } catch (e) {}
-        if (!getAuth) { dnote.textContent = '⚠️ ドライブへの自動保存ができませんでした（シミュレーターの画面が閉じています）'; return; }
-        dnote.textContent = '⏳ ドライブの「請求書」に預けています…';
-        var reader = new FileReader();
-        reader.onload = function () {
-          var b64 = String(reader.result).split(',')[1] || '';
-          getAuth().then(function (a) {
-            return fetch(a.url + '/statement-pdf?name=' + encodeURIComponent(PS_FILENAME), {
-              method: 'POST',
-              headers: { 'Authorization': 'Bearer ' + a.idToken, 'Content-Type': 'application/json' },
-              body: JSON.stringify(b64)
-            });
-          }).then(function (r) {
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            dnote.textContent = '✅ ドライブの「請求書」フォルダに自動で入ります（Macが1時間以内に保存します）';
-          }).catch(function (e) {
-            dnote.textContent = '⚠️ ドライブへの自動保存に失敗しました：' + ((e && e.message) || e);
-          });
-        };
-        reader.onerror = function () { dnote.textContent = '⚠️ ドライブへの自動保存に失敗しました（PDFを読めませんでした）'; };
-        reader.readAsDataURL(blob);
-      }
+      psPrepare(0);
     <\/script>
   </body></html>`;
 
