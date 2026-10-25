@@ -6412,6 +6412,7 @@ function generatePaymentStatement(code, which) {
       <button class="print-btn" onclick="var a=document.getElementById('ps-actions');a.style.display='none';window.print();setTimeout(function(){a.style.display=''},300)">🖨️ 印刷 / PDF保存</button>
       <button class="print-btn" id="ps-pdf-btn" style="background:#1C9A52" onclick="psPdfTap()">📄 PDFファイルにする（スマホはこちら）</button>
       <div id="ps-pdf-note" style="font-size:12px;color:#888;max-width:320px;line-height:1.6"></div>
+      <div id="ps-drive-note" style="font-size:12px;color:#888;max-width:320px;line-height:1.6"></div>
       <button onclick="window.close()" style="padding:10px 32px;font-size:13px;font-weight:700;background:white;color:#555;border:1.5px solid #ccc;border-radius:10px;cursor:pointer">← 閉じてカレンダーへ戻る</button>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>
@@ -6430,8 +6431,9 @@ function generatePaymentStatement(code, which) {
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         }).from(document.getElementById('ps-doc')).outputPdf('blob').then(function (blob) {
           psPdfFile = new File([blob], PS_FILENAME, { type: 'application/pdf' });
-          btn.disabled = false; btn.textContent = '📤 PDFを保存・送る';
-          note.textContent = 'もう一度押すと、LINEで送る・「ファイルに保存」などを選べます';
+          btn.disabled = false; btn.textContent = '📤 LINEなどで送る';
+          note.textContent = 'もう一度押すと、LINEで送れます';
+          psSaveToDrive(blob);
         }).catch(function (e) {
           btn.disabled = false; btn.textContent = '📄 PDFファイルにする（スマホはこちら）';
           note.textContent = 'PDFを作れませんでした：' + ((e && e.message) || e);
@@ -6440,8 +6442,9 @@ function generatePaymentStatement(code, which) {
       function psSharePdf() {
         var note = document.getElementById('ps-pdf-note');
         if (navigator.canShare && navigator.canShare({ files: [psPdfFile] })) {
-          // title を付けるとiPhoneがファイル名の文字を「.pdf.txt」として一緒に渡すので、PDFだけを渡す
-          navigator.share({ files: [psPdfFile] }).catch(function (e) {
+          // title を外すとiPhoneの共有画面にLINEが出なくなる（2026-10-25）ので付ける。
+          // title は「.pdf.txt」としても一緒に渡るが、ドライブへは自動保存（psSaveToDrive）なので共有から保存しなくてよい
+          navigator.share({ files: [psPdfFile], title: psPdfFile.name }).catch(function (e) {
             if (!e || e.name !== 'AbortError') note.textContent = '送る画面を開けませんでした：' + ((e && e.message) || e);
           });
         } else {
@@ -6451,12 +6454,46 @@ function generatePaymentStatement(code, which) {
           note.textContent = 'PDFを保存しました（ダウンロードを確認してください）';
         }
       }
+      // ドライブ「請求書」への自動保存（2026-10-25）：PDFを一時置き場（minpaku-sync）に預け、
+      // Macの請求書自動保存が1時間ごとに取りに来てドライブに入れる。ログインは元のシミュの画面のものを使う
+      function psSaveToDrive(blob) {
+        var dnote = document.getElementById('ps-drive-note');
+        var getAuth = null;
+        try { getAuth = window.opener && window.opener.getStatementUploadAuth; } catch (e) {}
+        if (!getAuth) { dnote.textContent = '⚠️ ドライブへの自動保存ができませんでした（シミュレーターの画面が閉じています）'; return; }
+        dnote.textContent = '⏳ ドライブの「請求書」に預けています…';
+        var reader = new FileReader();
+        reader.onload = function () {
+          var b64 = String(reader.result).split(',')[1] || '';
+          getAuth().then(function (a) {
+            return fetch(a.url + '/statement-pdf?name=' + encodeURIComponent(PS_FILENAME), {
+              method: 'POST',
+              headers: { 'Authorization': 'Bearer ' + a.idToken, 'Content-Type': 'application/json' },
+              body: JSON.stringify(b64)
+            });
+          }).then(function (r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            dnote.textContent = '✅ ドライブの「請求書」フォルダに自動で入ります（Macが1時間以内に保存します）';
+          }).catch(function (e) {
+            dnote.textContent = '⚠️ ドライブへの自動保存に失敗しました：' + ((e && e.message) || e);
+          });
+        };
+        reader.onerror = function () { dnote.textContent = '⚠️ ドライブへの自動保存に失敗しました（PDFを読めませんでした）'; };
+        reader.readAsDataURL(blob);
+      }
     <\/script>
   </body></html>`;
 
   const win = window.open('', '_blank');
   if (win) { win.document.write(html); win.document.close(); }
   else showToast('ポップアップがブロックされました。ブラウザの設定を確認してください。', 'error');
+}
+
+// 支払明細のタブ（window.opener 経由）から呼ぶ：PDFをドライブへ自動保存するためのログイン情報を渡す（2026-10-25）
+function getStatementUploadAuth() {
+  const user = fbauth.currentUser;
+  if (!user) return Promise.reject(new Error('ログインしていません'));
+  return user.getIdToken().then(idToken => ({ idToken, url: MSG_SYNC_WORKER_URL }));
 }
 
 // ==================== メッセージタブ ====================
