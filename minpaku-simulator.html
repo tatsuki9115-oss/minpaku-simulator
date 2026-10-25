@@ -6319,8 +6319,11 @@ function openPaymentStatementFromHash() {
   setPayStmtStep('ログインできました');
   const m = _payStmtHash.match(/^#paystmt=([^&]+)&w=([12])$/);
   if (!m) { setPayStmtPrep('支払明細の情報を読み取れませんでした', 'アプリでもう一度押してください（' + _payStmtHash.slice(0, 40) + '）'); return; }
-  // ※このファイルでは history が民泊の履歴データの名前なので、ブラウザの履歴は window.history で触る
-  window.history.replaceState(null, '', location.pathname);   // 読み込み直しで何度も開かないように（?ps= と # を消す）
+  // 読み込み直しで何度も開かないように ?ps= と # を消す。
+  // ※このファイルでは history が民泊の履歴データの名前。iPhoneのChromeは replaceState を自前の仕組みで包んでいて、
+  //   その中の history がこのデータを指してしまいエラーになる（2026-10-25）。失敗したら # だけ消して先に進む
+  try { window.history.replaceState(null, '', location.pathname); }
+  catch (e) { try { location.hash = ''; } catch (e2) {} }
   const code = decodeURIComponent(m[1]), which = Number(m[2]);
   // 手元に残っている古いデータで金額を作らないよう、Firebaseから最新が届いてから開く。
   // 届くのが遅いとき（8秒）は待たずに進む（どこで止まったか分かるよう、準備画面に今の段階を出す・2026-10-25 準備画面で止まった）
