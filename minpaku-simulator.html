@@ -6258,11 +6258,12 @@ function showPayStmtPrep() {
   el.innerHTML = `
     <div style="font-size:40px">📄</div>
     <div id="paystmt-prep-msg" style="font-size:16px;font-weight:800;color:#1C1C1E">支払明細を準備しています…</div>
-    <div id="paystmt-prep-sub" style="font-size:12px;color:#888;line-height:1.8;max-width:300px"></div>
+    <div id="paystmt-prep-sub" style="font-size:12px;color:#888;line-height:1.8;max-width:300px">ログインを確かめています…</div>
     <button id="paystmt-prep-btn" onclick="hidePayStmtPrep()" style="display:none;margin-top:10px;padding:10px 22px;border:1.5px solid #ccc;border-radius:10px;background:white;color:#555;font-size:13px;font-weight:700;cursor:pointer">このままシミュレーターを使う</button>`;
   document.body.appendChild(el);
 }
 function hidePayStmtPrep() { const el = document.getElementById('paystmt-prep'); if (el) el.remove(); }
+function setPayStmtStep(t) { const el = document.getElementById('paystmt-prep-sub'); if (el) el.textContent = t; }
 function setPayStmtPrep(msg, sub) {
   const el = document.getElementById('paystmt-prep');
   if (!el) return;
@@ -6296,28 +6297,38 @@ window.addEventListener('hashchange', () => {
 let _payStmtHashHandled = false;
 function openPaymentStatementFromHash() {
   if (_payStmtHashHandled) return;
-  const m = location.hash.match(/^#paystmt=([^&]+)&w=([12])$/);
-  if (!m) return;
+  if (!/^#paystmt=/.test(location.hash)) return;
   _payStmtHashHandled = true;
   showPayStmtPrep();
+  const m = location.hash.match(/^#paystmt=([^&]+)&w=([12])$/);
+  if (!m) { setPayStmtPrep('支払明細の情報を読み取れませんでした', 'アプリでもう一度押してください（' + location.hash.slice(0, 40) + '）'); return; }
   // ※このファイルでは history が民泊の履歴データの名前なので、ブラウザの履歴は window.history で触る
   window.history.replaceState(null, '', location.pathname);   // 読み込み直しで何度も開かないように（?ps= と # を消す）
   const code = decodeURIComponent(m[1]), which = Number(m[2]);
-  // 手元に残っている古いデータで金額を作らないよう、Firebaseから最新が届いてから開く
+  // 手元に残っている古いデータで金額を作らないよう、Firebaseから最新が届いてから開く。
+  // 届くのが遅いとき（8秒）は待たずに進む（どこで止まったか分かるよう、準備画面に今の段階を出す・2026-10-25 準備画面で止まった）
+  setPayStmtStep('データを読み込んでいます…');
   const keys = [KEYS.properties, KEYS.airbnb, KEYS.bookingCom, KEYS.spotWorks, KEYS.bookingChecks];
-  Promise.all(keys.map(k => fbdb.ref(k).once('value'))).catch(() => {}).then(() => {
+  const loaded = Promise.all(keys.map(k => fbdb.ref(k).once('value'))).catch(() => {});
+  Promise.race([loaded, new Promise(r => setTimeout(r, 8000))]).then(() => {
     let tries = 0;
     const tick = () => {
-      const sw = getSpotWork(code), b = sw ? null : findBookingByCode(code);
-      const ready = sw ? !!sw.staffName : !!(b && bookingChecks[code] && bookingChecks[code].cleaningStaffName);
-      if (ready) {
-        showPaymentStatementModal(code, which);
-        if (document.querySelector('[data-paysmt-modal],[data-paysmt-pick]')) watchPayStmtModalClose();
-        else setPayStmtPrep('支払明細を作れませんでした', '担当スタッフや金額を、シミュレーターのカレンダーで確かめてください');
-        return;
+      try {
+        setPayStmtStep('予約を探しています…（' + (tries + 1) + '）');
+        const sw = getSpotWork(code), b = sw ? null : findBookingByCode(code);
+        const ready = sw ? !!sw.staffName : !!(b && bookingChecks[code] && bookingChecks[code].cleaningStaffName);
+        if (ready) {
+          setPayStmtStep('');
+          showPaymentStatementModal(code, which);
+          if (document.querySelector('[data-paysmt-modal],[data-paysmt-pick]')) watchPayStmtModalClose();
+          else setPayStmtPrep('支払明細を作れませんでした', '担当スタッフや金額を、シミュレーターのカレンダーで確かめてください');
+          return;
+        }
+        if (++tries < 20) setTimeout(tick, 500);
+        else setPayStmtPrep('支払明細の予約が見つかりませんでした', 'シミュレーターのカレンダーから作ってください（' + code + '）');
+      } catch (e) {
+        setPayStmtPrep('支払明細を開けませんでした', 'エラー：' + ((e && e.message) || e));
       }
-      if (++tries < 20) setTimeout(tick, 500);
-      else setPayStmtPrep('支払明細の予約が見つかりませんでした', 'シミュレーターのカレンダーから作ってください');
     };
     setTimeout(tick, 300);
   });
