@@ -6413,6 +6413,13 @@ function generatePaymentStatement(code, which) {
       <button class="print-btn" id="ps-pdf-btn" style="background:#1C9A52" onclick="psPdfTap()">📄 PDFファイルにする（スマホはこちら）</button>
       <div id="ps-pdf-note" style="font-size:12px;color:#888;max-width:320px;line-height:1.6"></div>
       <div id="ps-drive-note" style="font-size:12px;color:#888;max-width:320px;line-height:1.6"></div>
+      <!-- 試し（2026-10-25・LINEにファイル名の1行が届かない形を探す・決まったら消す） -->
+      <div id="ps-test" style="display:none;flex-direction:column;gap:8px;align-items:center;border:1.5px dashed #c9a227;border-radius:10px;padding:10px 14px;max-width:320px">
+        <div style="font-size:12px;color:#8a6d00;line-height:1.6">🧪 試し：LINEの「Keepメモ」に1つずつ送って、文字が届かないものを教えてください</div>
+        <button class="print-btn" style="background:#8a6d00;font-size:13px;padding:10px 24px" onclick="psShareTest(1)">試し① 半角の空白</button>
+        <button class="print-btn" style="background:#8a6d00;font-size:13px;padding:10px 24px" onclick="psShareTest(2)">試し② 全角の空白</button>
+        <button class="print-btn" style="background:#8a6d00;font-size:13px;padding:10px 24px" onclick="psShareTest(3)">試し③ 幅のない文字</button>
+      </div>
       <button onclick="window.close()" style="padding:10px 32px;font-size:13px;font-weight:700;background:white;color:#555;border:1.5px solid #ccc;border-radius:10px;cursor:pointer">← 閉じてカレンダーへ戻る</button>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>
@@ -6433,6 +6440,7 @@ function generatePaymentStatement(code, which) {
           psPdfFile = new File([blob], PS_FILENAME, { type: 'application/pdf' });
           btn.disabled = false; btn.textContent = '📤 LINEなどで送る';
           note.textContent = 'もう一度押すと、LINEで送れます';
+          document.getElementById('ps-test').style.display = 'flex';
           psSaveToDrive(blob);
         }).catch(function (e) {
           btn.disabled = false; btn.textContent = '📄 PDFファイルにする（スマホはこちら）';
@@ -6453,6 +6461,16 @@ function generatePaymentStatement(code, which) {
           document.body.appendChild(a); a.click(); a.remove();
           note.textContent = 'PDFを保存しました（ダウンロードを確認してください）';
         }
+      }
+      // 試し（2026-10-25・決まったら消す）：LINEを出すために渡す文字を、見えない文字にして共有する
+      // 1＝半角の空白 / 2＝全角の空白 / 3＝幅のない文字（ゼロ幅スペース）
+      function psShareTest(n) {
+        var note = document.getElementById('ps-pdf-note');
+        var t = String.fromCharCode(n === 1 ? 0x20 : n === 2 ? 0x3000 : 0x200B);
+        if (!(navigator.canShare && navigator.canShare({ files: [psPdfFile] }))) { note.textContent = 'この端末では試せません'; return; }
+        navigator.share({ files: [psPdfFile], title: t }).catch(function (e) {
+          if (!e || e.name !== 'AbortError') note.textContent = '試し' + n + '：送る画面を開けませんでした：' + ((e && e.message) || e);
+        });
       }
       // ドライブ「請求書」への自動保存（2026-10-25）：PDFを一時置き場（minpaku-sync）に預け、
       // Macの請求書自動保存が1時間ごとに取りに来てドライブに入れる。ログインは元のシミュの画面のものを使う
