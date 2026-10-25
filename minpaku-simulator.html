@@ -1070,8 +1070,12 @@ fbauth.onAuthStateChanged(user => {
       firebaseSyncInitialized = true;
       initFirebaseSync();
     }
-    // Webアプリから支払明細のために開かれたとき（#paystmt=…・Chrome/Safari）は、同じ明細の入力画面を出す
-    openPaymentStatementFromHash();
+    // Webアプリから支払明細のために開かれたとき（#paystmt=…・Chrome/Safari）は、同じ明細の入力画面を出す。
+    // ログインの知らせが読み込みの途中で届いても困らないよう、読み込みが終わってから呼ぶ（setTimeout）
+    setTimeout(() => {
+      try { openPaymentStatementFromHash(); }
+      catch (e) { setPayStmtPrep('支払明細を開けませんでした', 'エラー：' + ((e && e.message) || e)); }
+    }, 0);
   } else {
     // 未ログイン：ログイン画面を表示
     overlay.classList.remove('hidden');
@@ -6283,25 +6287,38 @@ function watchPayStmtModalClose() {
   });
   ob.observe(document.body, { childList: true });
 }
-if (/^#paystmt=/.test(location.hash)) showPayStmtPrep();
+// 開いたときの # を覚えておく（ログインを待つあいだに # が消えても続けられるように・2026-10-25 Chromeで「ログインを確かめています」のまま止まった）
+let _payStmtHash = /^#paystmt=/.test(location.hash) ? location.hash : '';
+let _payStmtHashHandled = false;
+if (_payStmtHash) { showPayStmtPrep(); setTimeout(payStmtWatchdog, 3000); }
+// ログインの知らせを取りこぼしても進めるよう、ログインできているかを自分でも見に行く
+function payStmtWatchdog() {
+  if (_payStmtHashHandled || !_payStmtHash) return;
+  if (fbauth.currentUser) { openPaymentStatementFromHash(); return; }
+  setPayStmtStep('ログインを確かめています…（まだログインの返事がありません）');
+  setTimeout(payStmtWatchdog, 2000);
+}
 // すでに開いているタブが使い回されて、#だけが変わったとき
 window.addEventListener('hashchange', () => {
   if (!/^#paystmt=/.test(location.hash)) return;
+  _payStmtHash = location.hash;
   _payStmtHashHandled = false;
   _payStmtCreated = false;
   hidePayStmtPrep();   // 前の回の「✅ 開きました」を消してから出し直す
   showPayStmtPrep();
   if (fbauth.currentUser) openPaymentStatementFromHash();
+  else setTimeout(payStmtWatchdog, 3000);
 });
 
-let _payStmtHashHandled = false;
 function openPaymentStatementFromHash() {
   if (_payStmtHashHandled) return;
-  if (!/^#paystmt=/.test(location.hash)) return;
+  if (/^#paystmt=/.test(location.hash)) _payStmtHash = location.hash;
+  if (!_payStmtHash) return;
   _payStmtHashHandled = true;
   showPayStmtPrep();
-  const m = location.hash.match(/^#paystmt=([^&]+)&w=([12])$/);
-  if (!m) { setPayStmtPrep('支払明細の情報を読み取れませんでした', 'アプリでもう一度押してください（' + location.hash.slice(0, 40) + '）'); return; }
+  setPayStmtStep('ログインできました');
+  const m = _payStmtHash.match(/^#paystmt=([^&]+)&w=([12])$/);
+  if (!m) { setPayStmtPrep('支払明細の情報を読み取れませんでした', 'アプリでもう一度押してください（' + _payStmtHash.slice(0, 40) + '）'); return; }
   // ※このファイルでは history が民泊の履歴データの名前なので、ブラウザの履歴は window.history で触る
   window.history.replaceState(null, '', location.pathname);   // 読み込み直しで何度も開かないように（?ps= と # を消す）
   const code = decodeURIComponent(m[1]), which = Number(m[2]);
