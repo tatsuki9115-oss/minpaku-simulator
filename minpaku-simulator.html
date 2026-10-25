@@ -1070,6 +1070,8 @@ fbauth.onAuthStateChanged(user => {
       firebaseSyncInitialized = true;
       initFirebaseSync();
     }
+    // Webアプリから支払明細のために開かれたとき（#paystmt=…）は、同じ明細の入力画面を出す
+    openPaymentStatementFromHash();
   } else {
     // 未ログイン：ログイン画面を表示
     overlay.classList.remove('hidden');
@@ -6222,6 +6224,48 @@ function getSpotWork(code) {
   return c.startsWith('spot:') ? spotWorks.find(w => String(w.id) === c.slice(5)) : null;
 }
 
+// ==================== 支払明細をSafariで作る（2026-10-25） ====================
+// iPhoneのホーム画面の「Webアプリ」では印刷（印刷→共有→LINEでPDFだけ送る）が効かない。
+// そこでWebアプリでは、x-safari-https でSafariを開き、#で予約の番号と1人目/2人目だけを渡す
+// （支払先・メモはURLに入れない）。Safari側はログイン後にデータが届いたら、同じ明細の入力画面を出す
+function openPaymentStatementInSafari(code, which) {
+  const url = location.href.split('#')[0] + '#paystmt=' + encodeURIComponent(code) + '&w=' + which;
+  if (!/^https:\/\//.test(url)) { showToast('Safariでシミュレーターを開いてから、もう一度押してください', 'error'); return; }
+  let left = false;
+  const onHide = () => { if (document.visibilityState === 'hidden') left = true; };
+  document.addEventListener('visibilitychange', onHide);
+  location.href = 'x-safari-' + url;
+  // Safariに切り替わらなかったとき（iOSの更新で使えなくなったときなど）は案内を出す
+  setTimeout(() => {
+    document.removeEventListener('visibilitychange', onHide);
+    if (!left) showToast('Safariを開けませんでした。Safariでシミュレーターを開いて、もう一度押してください', 'error');
+  }, 2500);
+}
+
+let _payStmtHashHandled = false;
+function openPaymentStatementFromHash() {
+  if (_payStmtHashHandled) return;
+  const m = location.hash.match(/^#paystmt=([^&]+)&w=([12])$/);
+  if (!m) return;
+  _payStmtHashHandled = true;
+  // ※このファイルでは history が民泊の履歴データの名前なので、ブラウザの履歴は window.history で触る
+  window.history.replaceState(null, '', location.href.split('#')[0]);   // 読み込み直しで何度も開かないように
+  const code = decodeURIComponent(m[1]), which = Number(m[2]);
+  // 手元に残っている古いデータで金額を作らないよう、Firebaseから最新が届いてから開く
+  const keys = [KEYS.properties, KEYS.airbnb, KEYS.bookingCom, KEYS.spotWorks, KEYS.bookingChecks];
+  Promise.all(keys.map(k => fbdb.ref(k).once('value'))).catch(() => {}).then(() => {
+    let tries = 0;
+    const tick = () => {
+      const sw = getSpotWork(code), b = sw ? null : findBookingByCode(code);
+      const ready = sw ? !!sw.staffName : !!(b && bookingChecks[code] && bookingChecks[code].cleaningStaffName);
+      if (ready) { showPaymentStatementModal(code, which); return; }
+      if (++tries < 20) setTimeout(tick, 500);
+      else showToast('支払明細の予約が見つかりませんでした。カレンダーから作ってください', 'error');
+    };
+    setTimeout(tick, 300);
+  });
+}
+
 function showPaymentStatementModal(code, which) {
   const sw = getSpotWork(code);
   const b = sw ? null : findBookingByCode(code);
@@ -6254,6 +6298,8 @@ function showPaymentStatementModal(code, which) {
     return;
   }
   which = which === 2 ? 2 : 1;
+  // iPhoneのホーム画面の「Webアプリ」では印刷が効かないので、明細はSafariで作る（2026-10-25）
+  if (window.navigator.standalone === true) { openPaymentStatementInSafari(code, which); return; }
   const _targetName = sw ? sw.staffName : (which === 2 ? chk.staff2Name : chk.cleaningStaffName);
   // 設定で本名（支払明細用）が入っていれば支払先に最初から入れる（連絡はあだ名・明細は本名）
   const _realName = getStaffRealName(sw ? sw.propId : getBookingPropId(b), _targetName);
