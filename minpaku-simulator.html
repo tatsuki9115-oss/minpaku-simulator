@@ -6230,7 +6230,8 @@ function getSpotWork(code) {
 // #で予約の番号と1人目/2人目だけを渡す（支払先・メモはURLに入れない）。
 // 開いた側は、シミュの画面を見せずに「準備しています」だけを出し、ログイン後に最新のデータが届いたら同じ明細の入力画面を出す
 function openPaymentStatementInBrowser(code, which) {
-  const url = location.href.split('#')[0] + '#paystmt=' + encodeURIComponent(code) + '&w=' + which;
+  // ?ps= を毎回変えて付け、Chrome/Safariが覚えている古いシミュではなく最新を読み込ませる（2026-10-25 古い画面が出た）
+  const url = location.origin + location.pathname + '?ps=' + Date.now() + '#paystmt=' + encodeURIComponent(code) + '&w=' + which;
   if (!/^https:\/\//.test(url)) { showToast('Chromeでシミュレーターを開いてから、もう一度押してください', 'error'); return; }
   let left = false;
   const onHide = () => { if (document.visibilityState === 'hidden') left = true; };
@@ -6300,7 +6301,7 @@ function openPaymentStatementFromHash() {
   _payStmtHashHandled = true;
   showPayStmtPrep();
   // ※このファイルでは history が民泊の履歴データの名前なので、ブラウザの履歴は window.history で触る
-  window.history.replaceState(null, '', location.href.split('#')[0]);   // 読み込み直しで何度も開かないように
+  window.history.replaceState(null, '', location.pathname);   // 読み込み直しで何度も開かないように（?ps= と # を消す）
   const code = decodeURIComponent(m[1]), which = Number(m[2]);
   // 手元に残っている古いデータで金額を作らないよう、Firebaseから最新が届いてから開く
   const keys = [KEYS.properties, KEYS.airbnb, KEYS.bookingCom, KEYS.spotWorks, KEYS.bookingChecks];
