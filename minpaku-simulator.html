@@ -1070,7 +1070,7 @@ fbauth.onAuthStateChanged(user => {
       firebaseSyncInitialized = true;
       initFirebaseSync();
     }
-    // Webアプリから支払明細のために開かれたとき（#paystmt=…）は、同じ明細の入力画面を出す
+    // Webアプリから支払明細のために開かれたとき（#paystmt=…・Chrome/Safari）は、同じ明細の入力画面を出す
     openPaymentStatementFromHash();
   } else {
     // 未ログイン：ログイン画面を表示
@@ -6224,23 +6224,73 @@ function getSpotWork(code) {
   return c.startsWith('spot:') ? spotWorks.find(w => String(w.id) === c.slice(5)) : null;
 }
 
-// ==================== 支払明細をSafariで作る（2026-10-25） ====================
+// ==================== 支払明細をChromeで作る（2026-10-25） ====================
 // iPhoneのホーム画面の「Webアプリ」では印刷（印刷→共有→LINEでPDFだけ送る）が効かない。
-// そこでWebアプリでは、x-safari-https でSafariを開き、#で予約の番号と1人目/2人目だけを渡す
-// （支払先・メモはURLに入れない）。Safari側はログイン後にデータが届いたら、同じ明細の入力画面を出す
-function openPaymentStatementInSafari(code, which) {
+// そこでWebアプリでは、googlechromes:// でChromeを開き（開けなければ x-safari-https でSafari）、
+// #で予約の番号と1人目/2人目だけを渡す（支払先・メモはURLに入れない）。
+// 開いた側は、シミュの画面を見せずに「準備しています」だけを出し、ログイン後に最新のデータが届いたら同じ明細の入力画面を出す
+function openPaymentStatementInBrowser(code, which) {
   const url = location.href.split('#')[0] + '#paystmt=' + encodeURIComponent(code) + '&w=' + which;
-  if (!/^https:\/\//.test(url)) { showToast('Safariでシミュレーターを開いてから、もう一度押してください', 'error'); return; }
+  if (!/^https:\/\//.test(url)) { showToast('Chromeでシミュレーターを開いてから、もう一度押してください', 'error'); return; }
   let left = false;
   const onHide = () => { if (document.visibilityState === 'hidden') left = true; };
   document.addEventListener('visibilitychange', onHide);
-  location.href = 'x-safari-' + url;
-  // Safariに切り替わらなかったとき（iOSの更新で使えなくなったときなど）は案内を出す
+  location.href = 'googlechromes://' + url.slice('https://'.length);
+  // Chromeに切り替わらなかったとき（入っていない等）はSafariを試し、それもだめなら案内を出す
   setTimeout(() => {
-    document.removeEventListener('visibilitychange', onHide);
-    if (!left) showToast('Safariを開けませんでした。Safariでシミュレーターを開いて、もう一度押してください', 'error');
+    if (left) { document.removeEventListener('visibilitychange', onHide); return; }
+    location.href = 'x-safari-' + url;
+    setTimeout(() => {
+      document.removeEventListener('visibilitychange', onHide);
+      if (!left) showToast('Chromeを開けませんでした。Chromeでシミュレーターを開いて、もう一度押してください', 'error');
+    }, 2500);
   }, 2500);
 }
+
+// 開いた側の「準備しています」画面。ログイン画面（9999）と明細の入力画面（9999）より下に敷く
+let _payStmtCreated = false;   // 作成で明細の画面を開けたら true／開けなかったら 'blocked'
+function showPayStmtPrep() {
+  if (document.getElementById('paystmt-prep')) return;
+  const el = document.createElement('div');
+  el.id = 'paystmt-prep';
+  el.style.cssText = 'position:fixed;inset:0;z-index:9998;background:#F2F1EE;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:24px;text-align:center';
+  el.innerHTML = `
+    <div style="font-size:40px">📄</div>
+    <div id="paystmt-prep-msg" style="font-size:16px;font-weight:800;color:#1C1C1E">支払明細を準備しています…</div>
+    <div id="paystmt-prep-sub" style="font-size:12px;color:#888;line-height:1.8;max-width:300px"></div>
+    <button id="paystmt-prep-btn" onclick="hidePayStmtPrep()" style="display:none;margin-top:10px;padding:10px 22px;border:1.5px solid #ccc;border-radius:10px;background:white;color:#555;font-size:13px;font-weight:700;cursor:pointer">このままシミュレーターを使う</button>`;
+  document.body.appendChild(el);
+}
+function hidePayStmtPrep() { const el = document.getElementById('paystmt-prep'); if (el) el.remove(); }
+function setPayStmtPrep(msg, sub) {
+  const el = document.getElementById('paystmt-prep');
+  if (!el) return;
+  document.getElementById('paystmt-prep-msg').textContent = msg;
+  document.getElementById('paystmt-prep-sub').textContent = sub || '';
+  document.getElementById('paystmt-prep-btn').style.display = '';
+}
+// 入力画面（または2人のうちどちらかを選ぶ画面）が閉じたら、終わりの案内に変える
+function watchPayStmtModalClose() {
+  const isOpen = () => !!document.querySelector('[data-paysmt-modal],[data-paysmt-pick]');
+  const ob = new MutationObserver(() => {
+    if (isOpen()) return;
+    ob.disconnect();
+    if (_payStmtCreated === true) setPayStmtPrep('✅ 支払明細を開きました', '「🖨️ 印刷」→ 共有 → LINE で送ってください。終わったら、ホーム画面のアイコンからアプリに戻れます');
+    else if (_payStmtCreated === 'blocked') setPayStmtPrep('支払明細の画面を開けませんでした', 'ブラウザがポップアップを止めています。設定でポップアップを許可してから、アプリでもう一度押してください');
+    else setPayStmtPrep('支払明細の作成をやめました', 'ホーム画面のアイコンからアプリに戻れます');
+  });
+  ob.observe(document.body, { childList: true });
+}
+if (/^#paystmt=/.test(location.hash)) showPayStmtPrep();
+// すでに開いているタブが使い回されて、#だけが変わったとき
+window.addEventListener('hashchange', () => {
+  if (!/^#paystmt=/.test(location.hash)) return;
+  _payStmtHashHandled = false;
+  _payStmtCreated = false;
+  hidePayStmtPrep();   // 前の回の「✅ 開きました」を消してから出し直す
+  showPayStmtPrep();
+  if (fbauth.currentUser) openPaymentStatementFromHash();
+});
 
 let _payStmtHashHandled = false;
 function openPaymentStatementFromHash() {
@@ -6248,6 +6298,7 @@ function openPaymentStatementFromHash() {
   const m = location.hash.match(/^#paystmt=([^&]+)&w=([12])$/);
   if (!m) return;
   _payStmtHashHandled = true;
+  showPayStmtPrep();
   // ※このファイルでは history が民泊の履歴データの名前なので、ブラウザの履歴は window.history で触る
   window.history.replaceState(null, '', location.href.split('#')[0]);   // 読み込み直しで何度も開かないように
   const code = decodeURIComponent(m[1]), which = Number(m[2]);
@@ -6258,9 +6309,14 @@ function openPaymentStatementFromHash() {
     const tick = () => {
       const sw = getSpotWork(code), b = sw ? null : findBookingByCode(code);
       const ready = sw ? !!sw.staffName : !!(b && bookingChecks[code] && bookingChecks[code].cleaningStaffName);
-      if (ready) { showPaymentStatementModal(code, which); return; }
+      if (ready) {
+        showPaymentStatementModal(code, which);
+        if (document.querySelector('[data-paysmt-modal],[data-paysmt-pick]')) watchPayStmtModalClose();
+        else setPayStmtPrep('支払明細を作れませんでした', '担当スタッフや金額を、シミュレーターのカレンダーで確かめてください');
+        return;
+      }
       if (++tries < 20) setTimeout(tick, 500);
-      else showToast('支払明細の予約が見つかりませんでした。カレンダーから作ってください', 'error');
+      else setPayStmtPrep('支払明細の予約が見つかりませんでした', 'シミュレーターのカレンダーから作ってください');
     };
     setTimeout(tick, 300);
   });
@@ -6298,8 +6354,8 @@ function showPaymentStatementModal(code, which) {
     return;
   }
   which = which === 2 ? 2 : 1;
-  // iPhoneのホーム画面の「Webアプリ」では印刷が効かないので、明細はSafariで作る（2026-10-25）
-  if (window.navigator.standalone === true) { openPaymentStatementInSafari(code, which); return; }
+  // iPhoneのホーム画面の「Webアプリ」では印刷が効かないので、明細はChrome（だめならSafari）で作る（2026-10-25）
+  if (window.navigator.standalone === true) { openPaymentStatementInBrowser(code, which); return; }
   const _targetName = sw ? sw.staffName : (which === 2 ? chk.staff2Name : chk.cleaningStaffName);
   // 設定で本名（支払明細用）が入っていれば支払先に最初から入れる（連絡はあだ名・明細は本名）
   const _realName = getStaffRealName(sw ? sw.propId : getBookingPropId(b), _targetName);
@@ -6520,8 +6576,8 @@ function generatePaymentStatement(code, which) {
   </body></html>`;
 
   const win = window.open('', '_blank');
-  if (win) { win.document.write(html); win.document.close(); }
-  else showToast('ポップアップがブロックされました。ブラウザの設定を確認してください。', 'error');
+  if (win) { win.document.write(html); win.document.close(); _payStmtCreated = true; }
+  else { showToast('ポップアップがブロックされました。ブラウザの設定を確認してください。', 'error'); _payStmtCreated = 'blocked'; }
 }
 
 // 支払明細のタブ（window.opener 経由）から呼ぶ：PDFをドライブへ自動保存するためのログイン情報を渡す（2026-10-25）
