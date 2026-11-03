@@ -5665,15 +5665,7 @@ function showCleaningReminderForm(code) {
   const propName = prop ? prop.name : '物件';
   const coStr = getCheckout(b);
   const nextEntry = _lineNextEntry(code, propId, coStr);
-  // 🍽 ダイニングテーブル（ECRU）：次のゲストが子どもを含めて5名以上なら「大きくする」を初期選択
-  // 2026-10-10 オーナー：子どもを含めて4名以下のときだけ小さく（旧＝大人の人数だけで判定）
-  const _nextAll = (nextEntry && nextEntry.x.adults != null)
-    ? Number(nextEntry.x.adults || 0) + Number(nextEntry.x.children || 0) + Number(nextEntry.x.infants || 0)
-    : null;
-  const tableDefault = (_nextAll != null && _nextAll >= 5) ? 'big' : 'small';
-  const tableHint = _nextAll != null
-    ? `次回は子どもを含めて${_nextAll}名 → 自動で「${_nextAll >= 5 ? '大きくする' : '小さくする'}」を選んでいます`
-    : '次の予約がないため「小さくする」にしています';
+  // 🍽 ダイニングテーブル（ECRU）は常に大きいまま＝LINEでは指示しない（2026-11-03 オーナー）
   // 🛏 お布団（ECRU）：次のゲストが7名以上なら「出す」を初期選択（大人＋子ども）
   const _nextTotal = nextEntry
     ? (Number(nextEntry.x.adults || 0) + Number(nextEntry.x.children || 0))
@@ -5814,16 +5806,6 @@ function showCleaningReminderForm(code) {
       <!-- 今回のゲストが子連れのとき（ECRUのみ・自動でLINEに入る） -->
       <div style="margin-bottom:14px;padding:9px 12px;border-radius:10px;background:#FAFAF9;border:1px solid #eee;font-size:11px;color:#666;line-height:1.6">👶 今回のゲストが子連れのときは、LINEに「ベビーサークルのパッドも洗う」が自動で入ります（今回：${_curKids > 0 ? '子連れ' : '子連れではない'}）</div>
 
-      <!-- ダイニングテーブル（ECRUのみ） -->
-      <div style="margin-bottom:20px">
-        <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">🍽 ダイニングテーブルの大きさ</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <button id="cr-table-small" onclick="crSelect('table','small')" style="padding:10px;border-radius:10px;border:2px solid ${tableDefault === 'small' ? '#00B900' : '#e0e0e0'};background:${tableDefault === 'small' ? '#f0fff0' : '#f9f9f9'};color:${tableDefault === 'small' ? '#007a00' : '#555'};font-size:13px;font-weight:700;cursor:pointer">◻️ 小さくする</button>
-          <button id="cr-table-big" onclick="crSelect('table','big')" style="padding:10px;border-radius:10px;border:2px solid ${tableDefault === 'big' ? '#00B900' : '#e0e0e0'};background:${tableDefault === 'big' ? '#f0fff0' : '#f9f9f9'};color:${tableDefault === 'big' ? '#007a00' : '#555'};font-size:13px;font-weight:700;cursor:pointer">⬛ 大きくする</button>
-        </div>
-        <div style="font-size:10.5px;color:#888;margin-top:5px;line-height:1.5">子どもを含めて4名以下＝小さく／5名以上＝大きく。${tableHint}<br>※ゲストは操作しません（スタッフのみ）</div>
-      </div>
-
       <!-- 今回のゲストが7名以上のとき（ECRUのみ・自動でLINEに入る） -->
       <div style="margin-bottom:14px;padding:9px 12px;border-radius:10px;background:#FAFAF9;border:1px solid #eee;font-size:11px;color:#666;line-height:1.6">🛏 今回のゲストが7名以上のときは、LINEに「お布団のカバーを外して洗う」が自動で入ります（今回：${_curTotal}名）</div>
 
@@ -5845,7 +5827,7 @@ function showCleaningReminderForm(code) {
   overlay.addEventListener('click', e => { if (e.target === overlay) document.body.removeChild(overlay); });
 
   // デフォルト選択状態を初期化
-  window._crState = { trash: 'clear', shop: 'none', card: 'ja', linen: '2', baby: 'none', table: tableDefault, futon: futonDefault, futonUsed: '0' };
+  window._crState = { trash: 'clear', shop: 'none', card: 'ja', linen: '2', baby: 'none', futon: futonDefault, futonUsed: '0' };
 }
 
 function crSelect(group, val) {
@@ -5860,7 +5842,6 @@ function crSelect(group, val) {
     baby:  { none:  ['cr-baby-none','cr-baby-bed','cr-baby-pen'],
              bed:   ['cr-baby-bed','cr-baby-none','cr-baby-pen'],
              pen:   ['cr-baby-pen','cr-baby-none','cr-baby-bed'] },
-    table: { small: ['cr-table-small','cr-table-big'], big: ['cr-table-big','cr-table-small'] },
     futon: { keep:  ['cr-futon-keep','cr-futon-out'],   out: ['cr-futon-out','cr-futon-keep'] },
     futonUsed: { '0': ['cr-futonused-0','cr-futonused-1','cr-futonused-2'],
                  '1': ['cr-futonused-1','cr-futonused-0','cr-futonused-2'],
@@ -5960,11 +5941,6 @@ function generateCleaningReminderMsg(code) {
       }
     }
     lines.push('');
-    // ダイニングテーブルの大きさ
-    if (st.table) {
-      const big = st.table === 'big';
-      lines.push(`▶▶ 🍽 ダイニングテーブル：【${big ? '大きくする' : '小さくする'}】 ◀◀`);
-    }
     // お布団の置き場所
     if (st.futon) {
       const out = st.futon === 'out';
