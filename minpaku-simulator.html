@@ -5659,7 +5659,8 @@ function showCleaningReminderForm(code) {
   // 物件ごとのデフォルトキーボックス番号
   const defaultKeybox = _isEcruProp(prop) ? '3528'
                       : propId === 1 ? '4535'
-                      : propId === 2 ? '8531' : '';
+                      : propId === 2 ? '8531'
+                      : String(propId) === '1790994662269' ? '5896' : '';  // ATTビル302（2026-11-11 オーナー）
 
   // 予約情報
   const propName = prop ? prop.name : '物件';
