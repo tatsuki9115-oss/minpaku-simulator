@@ -2109,6 +2109,13 @@ function renderCalendarTab() {
         const chk = b.code ? (bookingChecks[b.code] || {}) : {};
         const coStr = getCheckout(b);
         const fmtD = s => { if (!s) return '?'; const p = s.split('/'); return `${parseInt(p[1])}/${parseInt(p[2])}`; };
+        // 日付＋曜日（予約カードの🔑チェックイン→🚪チェックアウトの行で使う・土＝青／日＝赤）
+        const fmtDW = s => {
+          const d = parseDateStr(s);
+          if (!d || isNaN(d)) return '?';
+          const wd = d.getDay();
+          return `${d.getMonth()+1}/${d.getDate()}<span style="font-size:11px;font-weight:700;color:${wd===0?'#DC2626':wd===6?'#2563EB':'#666'}">（${'日月火水木金土'[wd]}）</span>`;
+        };
         const staffList = prop ? (prop.cleaningStaff || []) : [];
         // 退職者は新しい予約の選択肢から外す。ただし既にその予約へ割り当て済みなら選択肢に残す
         // （消してしまうと担当者が未選択に見え、金額の参照先も失われるため）
@@ -2166,18 +2173,16 @@ function renderCalendarTab() {
           ? `<span style="font-size:10px;font-weight:800;background:#003580;color:white;padding:1px 5px;border-radius:3px;margin-left:4px">📘 B.com</span>`
           : `<span style="font-size:10px;font-weight:800;background:#FF5A5F;color:white;padding:1px 5px;border-radius:3px;margin-left:4px">🅐 Airbnb</span>`;
         return `<div style="background:white;border-radius:14px;padding:10px 12px;margin-bottom:6px;${borderStyle}">
-          <!-- ヘッダー：物件名・ゲスト名 左／日付 右 -->
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px">
-            <div style="flex:1;min-width:0">
-              <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
-                <span style="font-size:12px;font-weight:700;color:${prop ? getPropColor(getBookingPropId(b)) : '#aaa'}">${prop ? prop.name : '⚠️ 未設定'}</span>
-                <span style="font-size:11px;font-weight:800;color:${diffColor}">${diffLabel}</span>
-                ${hasAlert ? '<span style="font-size:10px;font-weight:800;color:#D32F2F;background:#FFEBEE;padding:1px 5px;border-radius:5px">要対応</span>' : ''}
-              </div>
-              <div style="font-size:14px;font-weight:700;color:#1a1a2e;margin-top:2px">${escHtml(b.guestName||'ゲスト')}${_chBadge}</div>
+          <!-- ヘッダー：物件名 → ゲスト名 → 🔑チェックイン → 🚪チェックアウト（2026-11-12 日付を名前の下に大きく） -->
+          <div style="margin-bottom:6px">
+            <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+              <span style="font-size:12px;font-weight:700;color:${prop ? getPropColor(getBookingPropId(b)) : '#aaa'}">${prop ? prop.name : '⚠️ 未設定'}</span>
+              <span style="font-size:11px;font-weight:800;color:${diffColor}">${diffLabel}</span>
+              ${hasAlert ? '<span style="font-size:10px;font-weight:800;color:#D32F2F;background:#FFEBEE;padding:1px 5px;border-radius:5px">要対応</span>' : ''}
             </div>
-            <div style="font-size:10px;color:#aaa;text-align:right;flex-shrink:0;margin-left:8px;line-height:1.5">
-              ${fmtD(b.checkin)} → ${fmtD(coStr)}<br><span style="font-weight:600;color:#888">${b.nights}泊</span>
+            <div style="font-size:14px;font-weight:700;color:#1a1a2e;margin-top:2px">${escHtml(b.guestName||'ゲスト')}${_chBadge}</div>
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:5px;font-size:14px;font-weight:800;color:#1a1a2e">
+              <span>🔑 ${fmtDW(b.checkin)}</span><span style="color:#aaa;font-weight:400">→</span><span>🚪 ${fmtDW(coStr)}</span><span style="font-size:11px;font-weight:800;color:#555;background:#F3F1EC;padding:2px 8px;border-radius:999px">${b.nights}泊</span>
             </div>
           </div>
           ${b.code ? `<!-- 上段（その他）: 名簿 | CI情報 | ウェルカム | 支払通知 | [ボード（ECRU）/ ゴミ依頼（フィオーレ）] -->
@@ -2284,6 +2289,10 @@ function renderCalendarTab() {
 }
 
 // ==================== カレンダービュー (Airbnb風バー表示) ====================
+// 2026-11-12 オーナー「カレンダーが見にくい・チェックインとチェックアウトの日をもっとわかりやすく」で描き方を変更：
+// ・バーは「チェックインの日の真ん中 → チェックアウトの日の真ん中」（日付の数字の真下から真下まで）
+// ・1物件1段（同じ物件はいつも同じ段）。空いている夜はうすい帯で見える
+// ・色は予約カード・ホームの物件名（PROP_COLORS）と同じ並び
 function renderCalendar(year, month, propFilter) {
   const activeFilter = propFilter !== undefined ? propFilter : (document.getElementById('page-calendar').classList.contains('active') ? calendarPropFilter : monthlyPropFilter);
   const daysInMonth = new Date(year, month, 0).getDate();
@@ -2291,122 +2300,157 @@ function renderCalendar(year, month, propFilter) {
   const today = new Date();
   const todayY = today.getFullYear(), todayM = today.getMonth() + 1, todayD = today.getDate();
   const numWeeks = Math.ceil((firstDay + daysInMonth) / 7);
+  const monthStart = new Date(year, month - 1, 1), nextMonthStart = new Date(year, month, 1);
 
-  // この月に重なる予約を収集（月をまたぐものも含む・Airbnb+Booking.com統合）
-  const monthBookings = getAllBookings().filter(b => {
+  // バーの色：予約カード・ホームの物件名と同じ色あい（白い文字が読めるよう少し濃いめ）
+  const BAR_COLORS = ['#D9601F', '#2563EB', '#7C3AED', '#059669', '#B45309', '#DC2626'];
+  const barColorOf = pid => { const i = properties.findIndex(p => p.id === pid); return i >= 0 ? BAR_COLORS[i % BAR_COLORS.length] : '#6B7280'; };
+
+  // この月に重なる予約（チェックアウトが1日のものも含める＝1日が清掃日だと分かるように）
+  const items = getAllBookings().filter(b => {
     if (!b.checkin) return false;
-    // 物件フィルター連動
     if (activeFilter !== 'all' && getBookingPropId(b) !== parseInt(activeFilter)) return false;
-    const coStr = getCheckout(b);
-    const cinParts = b.checkin.split('/').map(Number);
-    const coutParts = coStr.split('/').map(Number);
-    const cin = new Date(cinParts[0], cinParts[1] - 1, cinParts[2]);
-    const cout = new Date(coutParts[0], coutParts[1] - 1, coutParts[2]);
-    return cin < new Date(year, month, 1) && cout > new Date(year, month - 1, 1);
+    const cin = parseDateStr(b.checkin), cout = parseDateStr(getCheckout(b));
+    if (!cin || !cout) return false;
+    return cin < nextMonthStart && cout >= monthStart;
   }).map(b => {
-    const coStr = getCheckout(b);
-    const cinParts = b.checkin.split('/').map(Number);
-    const coutParts = coStr.split('/').map(Number);
-    const cin = new Date(cinParts[0], cinParts[1] - 1, cinParts[2]);
-    const cout = new Date(coutParts[0], coutParts[1] - 1, coutParts[2]);
-    // 月内でのチェックイン日（前月からの場合は1）
-    const startDay = (cin.getFullYear() === year && cin.getMonth() + 1 === month) ? cin.getDate() : 0;
-    // 月内でのチェックアウト日（翌月へ続く場合はdaysInMonth+1）
-    const endDay = (cout.getFullYear() === year && cout.getMonth() + 1 === month) ? cout.getDate() : daysInMonth + 1;
-    return { b, startDay, endDay };
+    const cin = parseDateStr(b.checkin), cout = parseDateStr(getCheckout(b));
+    const cinIn = cin >= monthStart, coutIn = cout < nextMonthStart;
+    // マス目の左上を0として、何マス目から何マス目までバーを引くか（真ん中=+0.5）
+    const S = cinIn ? firstDay + cin.getDate() - 1 + 0.5 : firstDay;
+    const E = coutIn ? firstDay + cout.getDate() - 1 + 0.5 : firstDay + daysInMonth;
+    const known = properties.some(p => p.id === getBookingPropId(b));
+    return { b, pid: known ? getBookingPropId(b) : '_none', cin, cout, S, E, cinIn, coutIn };
+  });
+  // 名前と●を出すのは、その予約でいちばん長く見えている週
+  items.forEach(it => {
+    let best = -1, bestLen = 0;
+    for (let w = 0; w < numWeeks; w++) {
+      const len = Math.min(it.E, 7 * w + 7) - Math.max(it.S, 7 * w);
+      if (len > bestLen + 0.001) { bestLen = len; best = w; }
+    }
+    it.bestWeek = best;
   });
 
-  // 物件カラー（複数物件を色で区別）
-  const propColors = ['#1E6FBF', '#E8640A', '#1C9A52', '#7C3AED', '#DC2626'];
-  const propColorMap = {};
-  properties.forEach((p, i) => { propColorMap[p.id] = propColors[i % propColors.length]; });
+  // 段：物件ごとに1段（その月に営業中、または予約がある物件）
+  const lanes = properties
+    .filter(p => activeFilter === 'all' || p.id === parseInt(activeFilter))
+    .filter(p => isPropertyOperating(p, year, month) || items.some(it => it.pid === p.id))
+    .map(p => ({ pid: p.id, name: p.name, color: barColorOf(p.id) }));
+  if (items.some(it => it.pid === '_none')) lanes.push({ pid: '_none', name: '物件未設定', color: '#6B7280' });
 
-  const dayNames = ['日','月','火','水','木','金','土'];
+  const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+  const LANE_H = 24;
 
   let html = '<div class="card" style="margin-bottom:12px">'
-    + '<div class="card-title" style="margin-bottom:6px">稼働カレンダー <span style="font-size:10px;font-weight:400;color:#bbb">（バーをタップで詳細）</span></div>'
-    + '<div style="display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:2px">'
-    + dayNames.map((d, i) => '<div style="text-align:center;font-size:11px;font-weight:700;color:'+(i===0?'#ef9a9a':i===6?'#90caf9':'#bbb')+';padding:3px 0">'+d+'</div>').join('')
+    + '<div class="card-title" style="margin-bottom:6px">稼働カレンダー <span style="font-size:10px;font-weight:400;color:#999;letter-spacing:0">（左はし＝チェックイン／右はし＝チェックアウト・タップで詳細）</span></div>';
+  if (lanes.length > 1) {
+    html += '<div style="display:flex;flex-wrap:wrap;gap:4px 12px;margin:0 0 8px;font-size:11px;font-weight:700;color:#555">'
+      + lanes.map(l => '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:3px;background:' + l.color + ';display:inline-block"></span>' + escHtml(l.name) + '</span>').join('')
+      + '</div>';
+  }
+  html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:2px">'
+    + dayNames.map((d, i) => '<div style="text-align:center;font-size:11px;font-weight:700;color:' + (i === 0 ? '#ef9a9a' : i === 6 ? '#90caf9' : '#bbb') + ';padding:3px 0">' + d + '</div>').join('')
     + '</div>';
 
   for (let w = 0; w < numWeeks; w++) {
-    // この週の7日分（0=空白セル、1〜daysInMonth=実際の日）
-    const weekDays = Array.from({length: 7}, (_, c) => {
+    const wS = 7 * w, wE = 7 * w + 7;
+    const weekDays = Array.from({ length: 7 }, (_, c) => {
       const d = w * 7 + c - firstDay + 1;
       return (d >= 1 && d <= daysInMonth) ? d : 0;
     });
-    const weekMin = weekDays.find(d => d > 0) || 1;
-    const weekMax = [...weekDays].reverse().find(d => d > 0) || 7;
 
-    // 日付番号行
+    // 日付の行（今までと同じ）
     html += '<div style="display:grid;grid-template-columns:repeat(7,1fr)">';
     weekDays.forEach((day, col) => {
-      if (!day) { html += '<div style="min-height:28px"></div>'; return; }
+      if (!day) { html += '<div style="min-height:26px"></div>'; return; }
       const isToday = year === todayY && month === todayM && day === todayD;
       const isSun = col === 0, isSat = col === 6;
       const color = isToday ? '#e65100' : isSun ? '#ef5350' : isSat ? '#F07C3F' : '#444';
-      html += '<div style="text-align:center;font-size:11px;font-weight:'+(isToday?'800':'500')+';color:'+color+';padding:4px 2px;min-height:28px;'+(isToday?'background:#fff3e0;border-radius:50%;':'')+'">'+day+'</div>';
+      html += '<div style="text-align:center;font-size:11px;font-weight:' + (isToday ? '800' : '500') + ';color:' + color + ';padding:4px 2px;min-height:26px;' + (isToday ? 'background:#fff3e0;border-radius:50%;' : '') + '">' + day + '</div>';
     });
     html += '</div>';
 
-    // この週に重なる予約を抽出
-    const weekBooks = monthBookings.filter(({ startDay, endDay }) => {
-      const s = startDay === 0 ? 1 : startDay;
-      const e = endDay === daysInMonth + 1 ? daysInMonth : endDay - 1;
-      return s <= weekMax && e >= weekMin;
-    });
+    // その週の、月に入っているマスの範囲（うすい帯＝空いている夜が見える）
+    const trackS = Math.max(wS, firstDay), trackE = Math.min(wE, firstDay + daysInMonth);
+    const trackLeft = ((trackS - wS) / 7 * 100).toFixed(3), trackWidth = ((trackE - trackS) / 7 * 100).toFixed(3);
 
-    if (weekBooks.length > 0) {
-      html += '<div style="display:flex;flex-direction:column;gap:3px;margin:2px 0 6px;position:relative">';
-      weekBooks.forEach(({ b, startDay, endDay }) => {
-        const effectiveStart = startDay === 0 ? 1 : startDay;
-        const effectiveEnd = endDay === daysInMonth + 1 ? daysInMonth : endDay - 1;
-        // この週内にクリップ
-        const clipStart = Math.max(effectiveStart, weekMin);
-        const clipEnd = Math.min(effectiveEnd, weekMax);
-        if (clipStart > clipEnd) return;
+    // 予約がひとつも無い週は、帯を細くして間延びを防ぐ（段の順番はそのまま・予約がある週は全段ふつうの太さ）
+    const weekHasAny = items.some(it => Math.min(it.E, wE) - Math.max(it.S, wS) > 0.001);
+    const laneH = weekHasAny ? LANE_H : 8;
 
-        // グリッド列位置
-        const colStart = weekDays.indexOf(clipStart);
-        const colEnd = weekDays.indexOf(clipEnd);
-        if (colStart < 0 || colEnd < 0) return;
-
-        const leftPct = (colStart / 7 * 100).toFixed(2);
-        const widthPct = ((colEnd - colStart + 1) / 7 * 100).toFixed(2);
-
-        // バーが始まる/終わる（週をまたぐか）
-        const isStart = clipStart === effectiveStart;
-        const isEnd = clipEnd === effectiveEnd;
-        const br = (isStart ? '11px' : '0') + ' ' + (isEnd ? '11px' : '0') + ' ' + (isEnd ? '11px' : '0') + ' ' + (isStart ? '11px' : '0');
-
-        const prop = properties.find(p => p.id === getBookingPropId(b));
-        const bgColor = propColorMap[getBookingPropId(b)] || '#1a1a2e';
-        const initial = b.guestName ? b.guestName.charAt(0).toUpperCase() : '?';
-        const perNight = b.nights > 0 ? Math.round(b.revenue / b.nights) : 0;
-        const fmtY = n => n >= 10000 ? '¥'+(n/10000).toFixed(1)+'万' : '¥'+n.toLocaleString('ja-JP');
-
-        // チェック状態ドット
-        const chk = b.code ? (bookingChecks[b.code] || {}) : {};
-        const formDot = `<span style="width:10px;height:10px;border-radius:50%;${chk.formDone?'background:#4ade80':'background:transparent;border:1.5px solid rgba(255,255,255,0.65)'};flex-shrink:0;display:inline-flex;align-items:center;justify-content:center" title="名簿${chk.formDone?'済':'未'}">${chk.formDone?'<span style="font-size:7px;color:#166534;font-weight:900;line-height:1">✓</span>':''}</span>`;
-        const cleanDot = `<span style="width:10px;height:10px;border-radius:50%;${chk.cleaningDone?'background:#38bdf8':'background:transparent;border:1.5px solid rgba(255,255,255,0.65)'};flex-shrink:0;display:inline-flex;align-items:center;justify-content:center" title="清掃${chk.cleaningDone?'済':'未'}">${chk.cleaningDone?'<span style="font-size:7px;color:#0c4a6e;font-weight:900;line-height:1">✓</span>':''}</span>`;
-        // ゴミ回収依頼ドット：フィオーレ新子安(propId=2)のみ・終了バーに表示
-        const isFlore = getBookingPropId(b) === 2;
-        const garbageDot = isFlore ? `<span style="width:10px;height:10px;border-radius:50%;${chk.garbageDone?'background:#fbbf24':'background:transparent;border:1.5px solid rgba(255,255,255,0.65)'};flex-shrink:0;display:inline-flex;align-items:center;justify-content:center" title="ゴミ回収依頼${chk.garbageDone?'済':'未'}">${chk.garbageDone?'<span style="font-size:7px;color:#78350f;font-weight:900;line-height:1">✓</span>':''}</span>` : '';
-        const statusDots = isStart && b.code ? `<span style="display:flex;gap:3px;flex-shrink:0;align-items:center">${formDot}${cleanDot}${garbageDot}</span>` : '';
-
-        html += '<div style="margin-left:'+leftPct+'%;width:'+widthPct+'%;box-sizing:border-box;background:'+bgColor+';border-radius:'+br+';height:26px;display:flex;align-items:center;gap:5px;padding:0 '+(isStart?'8px':'4px')+' 0 '+(isStart?'6px':'4px')+';cursor:pointer;overflow:hidden;white-space:nowrap" onclick="showDayDetail('+year+','+month+','+clipStart+')">'
-          + (isStart ? '<div style="width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,.25);color:white;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+initial+'</div>'
-            + '<span style="font-size:11px;font-weight:700;color:white;overflow:hidden;text-overflow:ellipsis;flex:1">'+escHtml(b.guestName||'ゲスト')+(prop?' · '+prop.name:'')+'</span>'
-            + statusDots
-            : '<span style="font-size:10px;font-weight:700;color:rgba(255,255,255,.85);overflow:hidden;text-overflow:ellipsis;flex:1">↩ '+escHtml(b.guestName||'ゲスト')+'</span>')
-          + '</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:3px;margin:1px 0 9px">';
+    lanes.forEach(lane => {
+      const segs = items.filter(it => it.pid === lane.pid)
+        .map(it => ({ it, s: Math.max(it.S, wS), e: Math.min(it.E, wE) }))
+        .filter(sg => sg.e - sg.s > 0.001)
+        .sort((a, b) => a.s - b.s);
+      // 同じ物件で日が重なる予約（ふつうは無い）があれば、その週だけ段を増やして両方見せる
+      const rows = [];
+      segs.forEach(sg => {
+        const r = rows.find(row => row[row.length - 1].e <= sg.s + 0.001);
+        if (r) r.push(sg); else rows.push([sg]);
       });
-      html += '</div>';
-    } else {
-      html += '<div style="min-height:4px;margin-bottom:6px"></div>';
-    }
+      if (rows.length === 0) rows.push([]);
+
+      rows.forEach(row => {
+        html += '<div style="position:relative;height:' + laneH + 'px">'
+          + '<div style="position:absolute;top:0;height:' + laneH + 'px;left:' + trackLeft + '%;width:' + trackWidth + '%;background:' + lane.color + '14;border-radius:' + (weekHasAny ? 6 : 4) + 'px"></div>';
+        row.forEach((sg, i) => {
+          const it = sg.it, b = it.b;
+          const cells = sg.e - sg.s;
+          const left = ((sg.s - wS) / 7 * 100).toFixed(3), width = (cells / 7 * 100).toFixed(3);
+          const isStart = it.cinIn && Math.abs(sg.s - it.S) < 0.001;  // このバーの左はしが本当のチェックイン
+          const isEnd = it.coutIn && Math.abs(sg.e - it.E) < 0.001;    // このバーの右はしが本当のチェックアウト
+          const br = (isStart ? '12px' : '0') + ' ' + (isEnd ? '12px' : '0') + ' ' + (isEnd ? '12px' : '0') + ' ' + (isStart ? '12px' : '0');
+
+          // タップで開く日＝このバーが見えている最初の夜（チェックアウト日のマスだけのときは前の夜）
+          let night = new Date(year, month - 1, Math.floor(sg.s + 0.001) - firstDay + 1);
+          if (night >= it.cout) night = new Date(it.cout.getFullYear(), it.cout.getMonth(), it.cout.getDate() - 1);
+          if (night < it.cin) night = it.cin;
+
+          const name = b.guestName || 'ゲスト';
+          let inner, outside = '';
+          if (cells >= 0.99) {
+            // チェック状態の●（今までと同じ意味）：いちばん長い週のバーで、幅に余裕があるときだけ
+            let dots = '';
+            if (b.code && it.bestWeek === w && cells >= 1.49) {
+              const chk = bookingChecks[b.code] || {};
+              const mk = (done, bg, title) => '<span style="width:8px;height:8px;border-radius:50%;' + (done ? 'background:' + bg : 'background:transparent;border:1.5px solid rgba(255,255,255,0.8)') + ';box-sizing:border-box;flex-shrink:0;display:inline-block" title="' + title + (done ? '済' : '未') + '"></span>';
+              dots = '<span style="display:flex;gap:2px;flex-shrink:0;align-items:center">'
+                + mk(chk.formDone, '#4ade80', '名簿')
+                + mk(chk.cleaningDone, '#7dd3fc', '清掃')
+                + (it.pid === 2 ? mk(chk.garbageDone, '#fcd34d', 'ゴミ回収依頼') : '')
+                + '</span>';
+            }
+            inner = '<span style="font-size:11px;font-weight:700;color:white;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">' + escHtml(name) + '</span>' + dots;
+          } else {
+            // 半マスしかないとき（週のはしでの出入り）：となりが空いていれば、バーの外に名前を書く。空いていなければ頭文字だけ
+            const isStub = x => !!x && (x.e - x.s) < 0.99;
+            const prevE = i > 0 ? row[i - 1].e : trackS;
+            const nextS = i < row.length - 1 ? row[i + 1].s : trackE;
+            const freeL = sg.s - prevE, freeR = nextS - sg.e;
+            const tap = ' onclick="showDayDetail(' + night.getFullYear() + ',' + (night.getMonth() + 1) + ',' + night.getDate() + ')"';
+            const lblBase = 'position:absolute;top:0;height:' + LANE_H + 'px;line-height:' + LANE_H + 'px;font-size:11px;font-weight:700;color:' + lane.color + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;box-sizing:border-box;';
+            if (freeR >= 0.9) {
+              const share = isStub(row[i + 1]) ? freeR / 2 : freeR;
+              outside = '<div' + tap + ' style="' + lblBase + 'left:calc(' + ((sg.e - wS) / 7 * 100).toFixed(3) + '% + 4px);max-width:calc(' + (share / 7 * 100).toFixed(3) + '% - 8px)">' + escHtml(name) + '</div>';
+            } else if (freeL >= 0.9) {
+              const share = isStub(row[i - 1]) ? freeL / 2 : freeL;
+              outside = '<div' + tap + ' style="' + lblBase + 'right:calc(' + (100 - (sg.s - wS) / 7 * 100).toFixed(3) + '% + 4px);max-width:calc(' + (share / 7 * 100).toFixed(3) + '% - 8px);text-align:right">' + escHtml(name) + '</div>';
+            }
+            inner = outside ? '' : '<span style="font-size:11px;font-weight:800;color:white;flex:1;text-align:center">' + escHtml(name.charAt(0).toUpperCase()) + '</span>';
+          }
+          html += '<div style="position:absolute;top:0;left:calc(' + left + '% + 1px);width:calc(' + width + '% - 2px);height:' + LANE_H + 'px;box-sizing:border-box;background:' + lane.color + ';border-radius:' + br + ';display:flex;align-items:center;gap:4px;padding:0 ' + (cells >= 0.99 ? '6px' : '0') + ';cursor:pointer;overflow:hidden;white-space:nowrap" onclick="showDayDetail(' + night.getFullYear() + ',' + (night.getMonth() + 1) + ',' + night.getDate() + ')">' + inner + '</div>';
+          html += outside;
+        });
+        html += '</div>';
+      });
+    });
+    html += '</div>';
   }
 
+  html += '<div style="font-size:10px;color:#999;margin-top:2px;line-height:1.6">うすい帯＝空いている夜　／　バーの右の丸＝<span style="color:#16a34a;font-weight:700">名簿</span>・<span style="color:#0284c7;font-weight:700">清掃手配</span>' + (lanes.some(l => l.pid === 2) ? '・<span style="color:#b45309;font-weight:700">ゴミ依頼</span>' : '') + '（色つき＝済み／白い輪＝まだ）</div>';
   html += '</div>';
   return html;
 }
