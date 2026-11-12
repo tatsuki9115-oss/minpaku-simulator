@@ -415,7 +415,9 @@
     .kpi-grid-4-flat > div:nth-child(1), .kpi-grid-4-flat > div:nth-child(2) { border-bottom: 1px solid #F2F1EE; }
     /* 日付＋次の予約バッジを縦並びに */
     .dash-date-row { flex-direction: column; align-items: flex-start !important; gap: 12px; }
-    .dash-next-badges { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+    .dash-next-badges { width: 100%; display: grid !important; grid-template-columns: repeat(var(--next-cols, 3), minmax(0, 1fr)); gap: 6px !important; }
+    .dash-next-badges > div { min-width: 0 !important; padding: 8px 4px !important; }
+    .dash-next-badges > div > div:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     /* 予約カードのチェックボタンサイズ調整 */
     .dash-chk-btns button, .dash-chk-btns a { min-width: 0 !important; font-size: 11px !important; padding: 6px 4px !important; }
   }
@@ -1512,6 +1514,7 @@ function keepScroll(fn) {
 }
 // 予約カードの「💴 実費入力」を開いている予約（描き直しても開いたままにする）
 const _openCostPanels = new Set();
+let _calDoneOpen = false; // カレンダー下の「済んだ予約」を開いているか（チェックを付けて描き直しても閉じないように覚えておく）
 function toggleCostPanel(code, btn) {
   const body = btn.nextElementSibling;
   const isOpen = body.style.display !== 'none';
@@ -2102,9 +2105,7 @@ function renderCalendarTab() {
     return (ad||0) - (bd||0);
   });
   const nowForCal = new Date(); nowForCal.setHours(0,0,0,0);
-  const bookListHtml = sortedBooks.length === 0 ? '' : `
-    <div style="margin-top:12px">
-      ${sortedBooks.map(b => {
+  const renderBookCard = b => {
         const prop = properties.find(p => p.id === getBookingPropId(b));
         const chk = b.code ? (bookingChecks[b.code] || {}) : {};
         const coStr = getCheckout(b);
@@ -2165,14 +2166,16 @@ function renderCalendarTab() {
         const cleanBorder = chk.cleaningDone ? '#0284c7' : cleanAlert ? '#f97316' : '#ddd';
         const noStaffSelected = staffOpts.length > 0 && !chk.cleaningStaffName;
 
-        const diffLabel = daysToCI < 0 ? `${-daysToCI}日超過` : daysToCI === 0 ? '今日' : `あと${daysToCI}日`;
-        const diffColor = daysToCI < 0 ? '#D32F2F' : daysToCI <= 3 ? '#E65100' : daysToCI <= 7 ? '#F59E0B' : '#B0ADA8';
+        // チェックイン前＝あと◯日／今日チェックイン／滞在中／今日チェックアウト／済み
+        // （以前はチェックイン後ずっと赤字で「◯日超過」と出ていて、済んだ予約まで警告に見えた・2026-11-12）
+        const diffLabel = daysToCI > 0 ? `あと${daysToCI}日` : daysToCI === 0 ? '今日チェックイン' : daysToCO > 0 ? '滞在中' : daysToCO === 0 ? '今日チェックアウト' : '済み';
+        const diffColor = daysToCI > 7 ? '#B0ADA8' : daysToCI > 3 ? '#F59E0B' : daysToCI >= 0 ? '#E65100' : daysToCO > 0 ? '#1C9A52' : daysToCO === 0 ? '#E65100' : '#B0ADA8';
 
         const _isBookingCom = b.source === 'booking';
         const _chBadge = _isBookingCom
           ? `<span style="font-size:10px;font-weight:800;background:#003580;color:white;padding:1px 5px;border-radius:3px;margin-left:4px">📘 B.com</span>`
           : `<span style="font-size:10px;font-weight:800;background:#FF5A5F;color:white;padding:1px 5px;border-radius:3px;margin-left:4px">🅐 Airbnb</span>`;
-        return `<div style="background:white;border-radius:14px;padding:10px 12px;margin-bottom:6px;${borderStyle}">
+        const _cardHtml = `<div style="background:white;border-radius:14px;padding:10px 12px;margin-bottom:6px;${borderStyle}">
           <!-- ヘッダー：物件名 → ゲスト名 → 🔑チェックイン → 🚪チェックアウト（2026-11-12 日付を名前の下に大きく） -->
           <div style="margin-bottom:6px">
             <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
@@ -2252,7 +2255,23 @@ function renderCalendarTab() {
             </div>
           </div>` : ''}
         </div>`;
-      }).join('')}
+    // 済んだ予約＝チェックアウトが昨日以前で、要対応も残っていないもの
+    return { html: _cardHtml, isDone: daysToCO < 0 && !hasAlert };
+  };
+  // 並び（2026-11-12 オーナー指示）：これから・滞在中（と要対応が残っている予約）を上に、済んだ予約は下にまとめてたたむ。
+  // ただし「これから・滞在中」が1件も無い月（過ぎた月など）は、たたまずに全部出す＝月末の実費入力で毎回開かずに済むように
+  const _calCards = sortedBooks.map(renderBookCard);
+  const _calActive = _calCards.filter(c => !c.isDone);
+  const _calDone = _calCards.filter(c => c.isDone);
+  const bookListHtml = sortedBooks.length === 0 ? '' : `
+    <div style="margin-top:12px">
+      ${(_calActive.length > 0 && _calDone.length > 0)
+        ? _calActive.map(c => c.html).join('') + `
+      <details ${_calDoneOpen ? 'open' : ''} ontoggle="_calDoneOpen=this.open" style="margin-top:10px">
+        <summary style="cursor:pointer;font-size:12px;font-weight:800;color:#777;background:white;border-radius:12px;padding:11px 14px;box-shadow:0 1px 3px rgba(0,0,0,.06)">済んだ予約 ${_calDone.length}件（タップで開く・閉じる）</summary>
+        <div style="margin-top:6px">${_calDone.map(c => c.html).join('')}</div>
+      </details>`
+        : _calCards.map(c => c.html).join('')}
     </div>`;
 
   // 月サマリー（実績タブと同じチェックイン月基準・28泊以上はADR/稼働から除外）
@@ -3062,7 +3081,8 @@ function renderProfitChart(monthlyStats, monthlyTarget) {
   const footH = 16; // 月ラベル用の下部余白
   const chartH = H - labelH - footH;
   const baseline = labelH + chartH * 0.62;
-  const fmtBar = n => (n < 0 ? '▲' : '') + (Math.abs(n)/10000).toFixed(1)+'万';
+  // 棒の上の数字は「万」を付けない（となりの月と重なるため・単位は凡例に書く）
+  const fmtBar = n => (n < 0 ? '▲' : '') + (Math.abs(n)/10000).toFixed(1);
 
   let svgBars = '';
   profits.forEach((p, i) => {
@@ -3103,23 +3123,24 @@ function renderProfitChart(monthlyStats, monthlyTarget) {
   }).join('');
 
   let targetLineHtml = '';
+  let targetTextHtml = ''; // 目標の文字は棒より後に描く（棒の下に隠れないように）
   {
     const maxPosBarH = baseline - labelH - 2;
     const fmtT = n => n >= 10000 ? '¥'+(n/10000).toFixed(1)+'万/月' : '¥'+n.toLocaleString('ja-JP')+'/月';
     targetLineHtml = targets.slice().sort((a, b) => a.value - b.value).map(t => {
       const ty = (baseline - t.value / maxAbs * maxPosBarH).toFixed(1);
-      return '<line x1="0" y1="'+ty+'" x2="'+W+'" y2="'+ty+'" stroke="'+t.color+'" stroke-width="1.5" stroke-dasharray="4 3"/>'
-        + '<text x="'+(W-2)+'" y="'+(parseFloat(ty)-3)+'" text-anchor="end" font-size="7.5" font-weight="700" fill="'+t.color+'" stroke="white" stroke-width="2" paint-order="stroke">目標 '+fmtT(t.value)+t.label+'</text>';
+      targetTextHtml += '<text x="'+(W-2)+'" y="'+(parseFloat(ty)-3)+'" text-anchor="end" font-size="7.5" font-weight="700" fill="'+t.color+'" stroke="white" stroke-width="2" paint-order="stroke">目標 '+fmtT(t.value)+t.label+'</text>';
+      return '<line x1="0" y1="'+ty+'" x2="'+W+'" y2="'+ty+'" stroke="'+t.color+'" stroke-width="1.5" stroke-dasharray="4 3"/>';
     }).join('');
   }
 
   return '<div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;font-size:10px;color:#888;flex-wrap:wrap">'
-    + '<span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:8px;background:#4caf50;border-radius:1px"></span>利益（円）</span>'
+    + '<span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:8px;background:#4caf50;border-radius:1px"></span>利益（万円）</span>'
     + '<span style="color:#7c3aed;font-weight:700">(XX%) = 利益率</span>'
     + '</div>'
     + '<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="display:block">'
     + '<line x1="0" y1="'+baseline+'" x2="'+W+'" y2="'+baseline+'" stroke="#eee" stroke-width="1.5"/>'
-    + targetLineHtml + svgBars + svgLine + labels
+    + targetLineHtml + svgBars + svgLine + targetTextHtml + labels
     + '</svg>';
 }
 
@@ -3159,7 +3180,8 @@ function renderADRChart(monthlyStats) {
   let hostLabels = '';
   pts.forEach((p, i) => {
     if (!p) return;
-    const x = xAt(i), y = yAt(p.host);
+    // 数字は、いちばん上の線（ゲスト支払ADRの点線）より上に出す（点線が数字を横切らないように）
+    const x = xAt(i), y = yAt(Math.max(p.host, p.guest));
     hostLabels += '<text x="'+x.toFixed(1)+'" y="'+(y-5).toFixed(1)+'" text-anchor="middle" font-size="7.5" font-weight="800" fill="#E0662B" stroke="white" stroke-width="2" paint-order="stroke">'+(p.host/1000).toFixed(1)+'k</text>';
   });
   const labels = monthlyStats.map((m, i) => {
@@ -3171,7 +3193,7 @@ function renderADRChart(monthlyStats) {
     + '<span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:12px;height:2px;background:#F07C3F"></span>受取ADR</span>'
     + '<span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:12px;height:2px;background:#B0ADA8;border-top:1px dashed #B0ADA8"></span>ゲスト支払ADR</span>'
     + '<span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:12px;height:2px;background:#1C9A52"></span>RevPAR</span>'
-    + '<span style="color:#C8C5C0">（円/泊・28泊以上除く）</span>'
+    + '<span style="color:#C8C5C0">（円/泊・28泊以上除く・数字は受取ADR）</span>'
     + '</div>'
     + '<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="display:block">'
     + '<path d="'+guestL.d+'" fill="none" stroke="#B0ADA8" stroke-width="1.5" stroke-dasharray="4 3"/>'
@@ -4448,7 +4470,7 @@ function renderDashboard() {
         <div style="font-size:24px;font-weight:900;color:#1C1C1E;line-height:1">${now.getMonth()+1}月${now.getDate()}日</div>
         <div style="font-size:13px;color:#B0ADA8;margin-top:3px">${now.getFullYear()}年（${dayNames[now.getDay()]}）</div>
       </div>
-      <div class="dash-next-badges" style="display:flex;gap:8px">${nextBadges}</div>
+      <div class="dash-next-badges" style="display:flex;gap:8px;--next-cols:${Math.min(Math.max(nextPerProp.length, 1), 4)}">${nextBadges}</div>
     </div>
     ${fyBooks.length > 0 ? `
     <div onclick="showTab('annual')" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding:10px 12px;border-top:1px solid #F2F1EE;background:#F9F8F6;border-radius:10px;cursor:pointer">
@@ -4470,77 +4492,78 @@ function renderDashboard() {
   // ========== アラートカード ==========
   const hasAlerts = alertForm.length > 0 || alertClean.length > 0 || alertGarbage.length > 0 || alertCheckinMsg.length > 0 || alertWelcomeMsg.length > 0 || alertCleaningReminder.length > 0 || alertWelcomeBoard.length > 0;
   if (hasAlerts) {
-    const renderAlertRow = (b, type) => {
+    // 2026-11-12 オーナー指示：種類ごとではなく「予約ごとに1枚」にまとめ、急ぎの順に並べる
+    // （同じゲストが種類の数だけ何度も出て長くなっていたため。出す条件＝上の alert〜 の絞り込みは変えていない）
+    // base：あと◯日を数える先（ci＝チェックインまで／co＝チェックアウトまで）
+    const ALERT_TYPES = {
+      checkinMsg:       { icon: '📩', label: 'チェックイン情報送付',     field: 'checkinMsgDone',       btn: '✅ 送付済みにする', base: 'ci' },
+      welcomeMsg:       { icon: '👋', label: 'ウェルカムメッセージ送付', field: 'welcomeMsgDone',       btn: '✅ 送付済みにする', base: 'ci' },
+      form:             { icon: '📋', label: '宿泊者名簿',               field: 'formDone',             btn: '✅ 提出済みにする', base: 'ci' },
+      clean:            { icon: '🧹', label: '清掃手配',                 field: 'cleaningDone',         btn: '✅ 手配済みにする', base: 'ci' },
+      welcomeBoard:     { icon: '🪧', label: 'ウェルカムボード更新',     field: 'welcomeBoardDone',     btn: '✅ 更新済みにする', base: 'co' },
+      cleaningReminder: { icon: '🧹', label: '清掃直前連絡',             field: 'cleaningReminderDone', btn: '✅ 連絡済みにする', base: 'co' },
+      garbage:          { icon: '🗑️', label: 'ゴミ回収依頼',             field: 'garbageDone',          btn: '✅ 依頼済みにする', base: 'co' },
+    };
+    const alertLists = [
+      ['checkinMsg', alertCheckinMsg], ['welcomeMsg', alertWelcomeMsg], ['form', alertForm], ['clean', alertClean],
+      ['welcomeBoard', alertWelcomeBoard], ['cleaningReminder', alertCleaningReminder], ['garbage', alertGarbage],
+    ];
+    const alertGroups = new Map(); // 予約コード → { b, items:[{type, diff}] }
+    let alertTotal = 0;
+    alertLists.forEach(([type, list]) => list.forEach(b => {
+      const baseDate = ALERT_TYPES[type].base === 'co' ? (getCO(b) || getCI(b)) : getCI(b);
+      const diff = Math.round((baseDate - now) / 86400000);
+      if (!alertGroups.has(b.code)) alertGroups.set(b.code, { b, items: [] });
+      alertGroups.get(b.code).items.push({ type, diff });
+      alertTotal++;
+    }));
+    // 予約の中は急ぎの順。予約どうしも「いちばん急ぎの項目」が近い順
+    const alertGroupList = [...alertGroups.values()].map(g => {
+      g.items.sort((x, y) => x.diff - y.diff);
+      g.minDiff = g.items[0].diff;
+      return g;
+    }).sort((x, y) => (x.minDiff - y.minDiff) || (getCI(x.b) - getCI(y.b)));
+
+    const fmtAlertDate = s => { const d = parseDateStr(s); return (!d || isNaN(d)) ? '?' : `${d.getMonth()+1}/${d.getDate()}（${'日月火水木金土'[d.getDay()]}）`; };
+    const renderAlertGroup = g => {
+      const b = g.b;
       const pid = getBookingPropId(b);
       const prop = properties.find(p => p.id === pid);
-      const color = getPropColor(pid);
-      const baseDate = (type === 'garbage' || type === 'cleaningReminder' || type === 'welcomeBoard') ? (getCO(b) || getCI(b)) : getCI(b);
-      const diff = Math.round((baseDate - now) / 86400000);
-      const diffLabel = diff < 0 ? `${-diff}日超過` : diff === 0 ? '今日' : `あと${diff}日`;
-      const isOver = diff < 0;
-      const isUrgent = diff <= 1;
-      const urgentColor = isOver ? '#D32F2F' : isUrgent ? '#E65100' : '#F59E0B';
-      const checkField = type === 'welcomeBoard' ? 'welcomeBoardDone' : type === 'form' ? 'formDone' : type === 'garbage' ? 'garbageDone' : type === 'checkinMsg' ? 'checkinMsgDone' : type === 'welcomeMsg' ? 'welcomeMsgDone' : type === 'cleaningReminder' ? 'cleaningReminderDone' : 'cleaningDone';
-      const icon = type === 'welcomeBoard' ? '🪧' : type === 'form' ? '📋' : type === 'garbage' ? '🗑️' : type === 'checkinMsg' ? '📩' : type === 'welcomeMsg' ? '👋' : type === 'cleaningReminder' ? '🧹' : '🧹';
-      const label = type === 'welcomeBoard' ? 'ウェルカムボード更新' : type === 'form' ? '宿泊者名簿' : type === 'garbage' ? 'ゴミ回収依頼' : type === 'checkinMsg' ? 'チェックイン情報送付' : type === 'welcomeMsg' ? 'ウェルカムメッセージ送付' : type === 'cleaningReminder' ? '清掃直前連絡' : '清掃手配';
-      const btnLabel = type === 'welcomeBoard' ? '✅ 更新済みにする' : type === 'form' ? '✅ 提出済みにする' : type === 'garbage' ? '✅ 依頼済みにする' : type === 'checkinMsg' ? '✅ 送付済みにする' : type === 'welcomeMsg' ? '✅ 送付済みにする' : type === 'cleaningReminder' ? '✅ 連絡済みにする' : '✅ 手配済みにする';
       const ciStr = b.checkin || '';
       const coStr = getCheckout(b) || '';
-      const fmtD = s => { const p = s.split('/'); return p.length >= 3 ? `${parseInt(p[1])}/${parseInt(p[2])}` : s; };
-      const dateLabel = ciStr ? `🔑 ${fmtD(ciStr)}　→　🚪 ${fmtD(coStr)}` : '';
-      return `<div onclick="gotoCalendarFromAlert('${ciStr}')" style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid rgba(0,0,0,.06);cursor:pointer;transition:background .15s" onmouseover="this.style.background='#FAFAF9'" onmouseout="this.style.background='transparent'">
-        <div style="flex-shrink:0;width:36px;height:36px;border-radius:10px;background:${isOver?'#FFEBEE':isUrgent?'#FFF3E0':'#FFFDE7'};display:flex;align-items:center;justify-content:center;font-size:18px">${icon}</div>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:700;color:#1C1C1E;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(b.guestName||'ゲスト')}</div>
-          <div style="font-size:11px;color:#888;margin-top:1px">${dateLabel}</div>
-          <div style="display:flex;align-items:center;gap:6px;margin-top:2px;flex-wrap:wrap">
-            <span style="font-size:11px;font-weight:700;color:${color}">${prop?.name||''}</span>
-            <span style="font-size:11px;color:#B0ADA8">·</span>
-            <span style="font-size:11px;font-weight:800;color:${urgentColor}">${label} ${diffLabel}</span>
-          </div>
+      const edge = g.minDiff < 0 ? '#D32F2F' : g.minDiff <= 1 ? '#E65100' : g.minDiff <= 7 ? '#F59E0B' : '#D9D6D0';
+      const rows = g.items.map(it => {
+        const t = ALERT_TYPES[it.type];
+        const diffLabel = it.diff < 0 ? `${-it.diff}日超過` : it.diff === 0 ? '今日' : `あと${it.diff}日`;
+        const urgentColor = it.diff < 0 ? '#D32F2F' : it.diff <= 1 ? '#E65100' : '#F59E0B';
+        return `<div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+          <span style="flex-shrink:0;width:20px;text-align:center;font-size:15px">${t.icon}</span>
+          <span style="flex:1;min-width:0;font-size:12px;font-weight:700;color:#333;line-height:1.35">${t.label} <span style="font-weight:800;color:${urgentColor};white-space:nowrap">${t.base === 'co' ? '🚪' : '🔑'}${diffLabel}</span></span>
+          <button onclick="event.stopPropagation();toggleCheckForDash('${b.code}','${t.field}')" style="font-size:11px;font-weight:700;padding:7px 9px;border-radius:9px;border:none;cursor:pointer;background:#1C1C1E;color:white;flex-shrink:0;white-space:nowrap;line-height:1.2;text-align:center">${t.btn}</button>
+        </div>`;
+      }).join('');
+      return `<div onclick="gotoCalendarFromAlert('${ciStr}')" style="margin-top:8px;padding:8px 8px 9px 10px;border-left:4px solid ${edge};background:#FAFAF9;border-radius:0 10px 10px 0;cursor:pointer">
+        <div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">
+          <span style="font-size:14px;font-weight:800;color:#1C1C1E">${escHtml(b.guestName||'ゲスト')}</span>
+          <span style="font-size:11px;font-weight:700;color:${getPropColor(pid)}">${prop ? escHtml(prop.name) : ''}</span>
         </div>
-        <button onclick="event.stopPropagation();toggleCheckForDash('${b.code}','${checkField}')" style="font-size:11px;font-weight:700;padding:8px 10px;border-radius:10px;border:none;cursor:pointer;background:#1C1C1E;color:white;flex-shrink:0;white-space:nowrap;line-height:1.2;text-align:center">${btnLabel}</button>
+        <div style="font-size:12px;font-weight:700;color:#555;margin-top:1px">${ciStr ? `🔑 ${fmtAlertDate(ciStr)} → 🚪 ${fmtAlertDate(coStr)}` : ''}</div>
+        ${rows}
       </div>`;
     };
-    let alertRows = '';
-    if (alertCheckinMsg.length > 0) {
-      alertRows += `<div style="font-size:10px;font-weight:800;color:#1565C0;letter-spacing:.5px;margin:4px 0 2px">📩 チェックイン情報送付（チェックイン3日前までに）</div>`;
-      alertRows += alertCheckinMsg.map(b => renderAlertRow(b, 'checkinMsg')).join('');
+    const nearGroups = alertGroupList.filter(g => g.minDiff <= 7);
+    const farGroups = alertGroupList.filter(g => g.minDiff > 7);
+    let alertRows = nearGroups.map(renderAlertGroup).join('');
+    if (farGroups.length > 0) {
+      alertRows += `<div style="font-size:11px;font-weight:800;color:#888;margin:14px 0 0">まだ先のもの（あと8日以上）</div>`
+        + farGroups.map(renderAlertGroup).join('');
     }
-    if (alertWelcomeMsg.length > 0) {
-      if (alertCheckinMsg.length > 0) alertRows += `<div style="height:8px"></div>`;
-      alertRows += `<div style="font-size:10px;font-weight:800;color:#1565C0;letter-spacing:.5px;margin:4px 0 2px">👋 ウェルカムメッセージ送付（チェックイン3日前までに）</div>`;
-      alertRows += alertWelcomeMsg.map(b => renderAlertRow(b, 'welcomeMsg')).join('');
-    }
-    if (alertWelcomeBoard.length > 0) {
-      if (alertCheckinMsg.length > 0 || alertWelcomeMsg.length > 0) alertRows += `<div style="height:8px"></div>`;
-      alertRows += `<div style="font-size:10px;font-weight:800;color:#6D4C41;letter-spacing:.5px;margin:4px 0 2px">🪧 ウェルカムボード更新（ECRU国領・チェックアウト3日前までに）</div>`;
-      alertRows += alertWelcomeBoard.map(b => renderAlertRow(b, 'welcomeBoard')).join('');
-    }
-    if (alertCleaningReminder.length > 0) {
-      if (alertCheckinMsg.length > 0 || alertWelcomeMsg.length > 0 || alertWelcomeBoard.length > 0) alertRows += `<div style="height:8px"></div>`;
-      alertRows += `<div style="font-size:10px;font-weight:800;color:#FF6D00;letter-spacing:.5px;margin:4px 0 2px">🧹 清掃直前連絡（チェックアウト3日前までに）</div>`;
-      alertRows += alertCleaningReminder.map(b => renderAlertRow(b, 'cleaningReminder')).join('');
-    }
-    if (alertForm.length > 0) {
-      if (alertCheckinMsg.length > 0) alertRows += `<div style="height:8px"></div>`;
-      alertRows += `<div style="font-size:10px;font-weight:800;color:#E65100;letter-spacing:.5px;margin:4px 0 2px">📋 宿泊者名簿（予約から2週間かチェックイン1週間前の早いほうから・提出済みならクロコに「名簿チェック」で照合）</div>`;
-      alertRows += alertForm.map(b => renderAlertRow(b, 'form')).join('');
-    }
-    if (alertClean.length > 0) {
-      if (alertCheckinMsg.length > 0 || alertForm.length > 0) alertRows += `<div style="height:8px"></div>`;
-      alertRows += `<div style="font-size:10px;font-weight:800;color:#00796B;letter-spacing:.5px;margin:4px 0 2px">🧹 清掃手配（チェックイン2週間前までに）</div>`;
-      alertRows += alertClean.map(b => renderAlertRow(b, 'clean')).join('');
-    }
-    if (alertGarbage.length > 0) {
-      if (alertCheckinMsg.length > 0 || alertForm.length > 0 || alertClean.length > 0) alertRows += `<div style="height:8px"></div>`;
-      alertRows += `<div style="font-size:10px;font-weight:800;color:#6D4C41;letter-spacing:.5px;margin:4px 0 2px">🗑️ ゴミ回収依頼（フィオーレ新子安・チェックアウト3日前までに）</div>`;
-      alertRows += alertGarbage.map(b => renderAlertRow(b, 'garbage')).join('');
-    }
+    alertRows += `<div style="font-size:10px;color:#999;margin-top:10px;line-height:1.6">🔑＝チェックインまで　🚪＝チェックアウトまで　／　📋 名簿は、提出済みならクロコに「名簿チェック」で照合</div>`;
     html += `<div class="card" style="margin-bottom:12px;border:2px solid #E53935;border-radius:14px;padding:12px 14px">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
         <span style="font-size:16px">🚨</span>
-        <span style="font-size:13px;font-weight:800;color:#D32F2F">要対応 ${alertForm.length + alertClean.length + alertGarbage.length + alertCheckinMsg.length + alertWelcomeMsg.length + alertCleaningReminder.length + alertWelcomeBoard.length}件</span>
+        <span style="font-size:13px;font-weight:800;color:#D32F2F">要対応 ${alertTotal}件</span>
+        <span style="font-size:11px;font-weight:700;color:#999">（${alertGroupList.length}予約）</span>
       </div>
       ${alertRows}
     </div>`;
@@ -5345,12 +5368,12 @@ function renderAnnual() {
       ${renderADRChart(monthlyStats)}
       <div style="height:1px;background:#f0f0f0;margin:14px 0 12px"></div>
       <div class="month-table-wrap">
-      <table class="month-table">
-        <thead><tr><th>月</th><th>件</th><th style="color:#C8C5C0">ゲスト</th><th>受取</th><th>ADR<br><span style="font-size:9px;font-weight:400;color:#C8C5C0">受取/ゲスト</span><br><span style="font-size:8.5px;font-weight:400;color:#4a7fc1">長=長期(計算外)</span></th><th>RevPAR</th><th>利益</th><th>利益率</th><th>稼働</th></tr></thead>
+      <table class="month-table" style="min-width:0">
+        <thead><tr><th>月</th><th>件<br><span style="font-size:9px;font-weight:400;color:#C8C5C0">稼働</span></th><th>受取<br><span style="font-size:9px;font-weight:400;color:#C8C5C0">ゲスト</span></th><th>ADR<br><span style="font-size:9px;font-weight:400;color:#C8C5C0">受取/ゲスト</span><br><span style="font-size:8.5px;font-weight:400;color:#4a7fc1">長=長期(計算外)</span></th><th>RevPAR</th><th>利益<br><span style="font-size:9px;font-weight:400;color:#C8C5C0">利益率</span></th></tr></thead>
         <tbody>
           ${monthlyStats.map((ms, i) => {
             const mo = fyMonthOrder[i];
-            if (!ms) return `<tr><td style="color:#ddd">${mo}月</td><td colspan="8" style="color:#eee;text-align:center">−</td></tr>`;
+            if (!ms) return `<tr><td style="color:#ddd">${mo}月</td><td colspan="5" style="color:#eee;text-align:center">−</td></tr>`;
             const isMP = ms.profit >= 0;
             const gp = getGuestPayment(ms.revenue);
             const mMargin = ms.revenue > 0 ? Math.round(ms.profit/ms.revenue*100) : null;
@@ -5362,25 +5385,19 @@ function renderAnnual() {
               : '';
             return `<tr style="cursor:pointer" onclick="document.getElementById('mcard-${ms.month}').scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>{var body=document.getElementById('mcard-${ms.month}').querySelector('.month-detail-body');if(!body.classList.contains('open')){body.classList.add('open');var ch=document.getElementById('mcard-${ms.month}').querySelector('.mchev');if(ch)ch.style.transform='rotate(180deg)';}},300)">
               <td>${ms.month}月</td>
-              <td>${ms.bookings}</td>
-              <td style="color:#C8C5C0;font-size:11px">${fmtShort(gp)}</td>
-              <td>${fmtShort(ms.revenue)}</td>
+              <td>${ms.bookings}<br><span style="font-size:10px;color:#999">${ms.occRate}%</span></td>
+              <td>${fmtShort(ms.revenue)}<br><span style="font-size:10px;color:#C8C5C0">${fmtShort(gp)}</span></td>
               <td style="font-size:11px">${adr.host>0?fmtShort(adr.host):'—'}<br><span style="font-size:10px;color:#C8C5C0">${adr.guest>0?fmtShort(adr.guest):''}</span>${longCell}</td>
               <td style="font-size:11px">${ms.maxNights>0&&ms.adrRev>0?fmtShort(Math.round(ms.adrRev/ms.maxNights)):'—'}</td>
-              <td class="td-profit ${isMP?'profit':'loss'}">${isMP?'':'▲'}${fmtShort(Math.abs(ms.profit))}</td>
-              <td class="td-profit ${isMP?'profit':'loss'}">${mMargin!==null?(isMP?'':'▲')+Math.abs(mMargin)+'%':'—'}</td>
-              <td>${ms.occRate}%</td>
+              <td class="td-profit ${isMP?'profit':'loss'}">${isMP?'':'▲'}${fmtShort(Math.abs(ms.profit))}<br><span style="font-size:10px">${mMargin!==null?(isMP?'':'▲')+Math.abs(mMargin)+'%':'—'}</span></td>
             </tr>`;
           }).join('')}
           <tr class="total-row">
             <td>合計</td><td>${totalBookings}件</td>
-            <td style="color:#C8C5C0;font-size:11px">${fmtShort(totalGuestPayment)}</td>
-            <td>${fmtShort(totalRevenue)}</td>
+            <td>${fmtShort(totalRevenue)}<br><span style="font-size:10px;font-weight:400;color:#C8C5C0">${fmtShort(totalGuestPayment)}</span></td>
             <td style="font-size:11px">${totalADR.host>0?fmtShort(totalADR.host):'—'}<br><span style="font-size:10px;color:#C8C5C0">${totalADR.guest>0?fmtShort(totalADR.guest):''}</span>${totalLongNights>0?`<br><span style="font-size:9.5px;color:#4a7fc1;font-weight:700" title="長期滞在の合計${totalLongNights}泊（ADR/稼働の計算には含めていません）">長 ${fmtShort(Math.round(totalLongRev/totalLongNights))}</span>`:''}</td>
             <td style="font-size:11px">${totalRevPAR>0?fmtShort(totalRevPAR):'—'}</td>
-            <td class="td-profit ${isAP?'profit':'loss'}">${isAP?'':'▲'}${fmtShort(Math.abs(totalProfit))}</td>
-            <td class="td-profit ${isAP?'profit':'loss'}">${totalRevenue>0?(isAP?'':'▲')+Math.abs(Math.round(totalProfit/totalRevenue*100))+'%':'—'}</td>
-            <td>−</td>
+            <td class="td-profit ${isAP?'profit':'loss'}">${isAP?'':'▲'}${fmtShort(Math.abs(totalProfit))}<br><span style="font-size:10px">${totalRevenue>0?(isAP?'':'▲')+Math.abs(Math.round(totalProfit/totalRevenue*100))+'%':'—'}</span></td>
           </tr>
         </tbody>
       </table>
@@ -5460,12 +5477,12 @@ function renderAnnual() {
     const isFutureMonth = (ms.year > todayY) || (ms.year === todayY && ms.month > todayM);
     const actBtns = (ms.operatingProps || []).map(p =>
       `<button onclick="event.stopPropagation();showActualCostModal(${ms.year},${ms.month},${p.id})"
-        style="font-size:11px;padding:2px 7px;border-radius:5px;border:1px solid ${hasActualCosts(p.id,ms.year,ms.month)?'#1C9A52':'#bbb'};background:${hasActualCosts(p.id,ms.year,ms.month)?'#e8f5e9':'#f8f8f8'};color:${hasActualCosts(p.id,ms.year,ms.month)?'#1C9A52':'#888'};cursor:pointer;font-weight:700;white-space:nowrap">
-        ${hasActualCosts(p.id,ms.year,ms.month)?'✓ 実費':'✏️ 実費'} ${(ms.operatingProps||[]).length>1?p.name:''}
+        style="font-size:10px;padding:2px 6px;border-radius:5px;border:1px solid ${hasActualCosts(p.id,ms.year,ms.month)?'#1C9A52':'#bbb'};background:${hasActualCosts(p.id,ms.year,ms.month)?'#e8f5e9':'#f8f8f8'};color:${hasActualCosts(p.id,ms.year,ms.month)?'#1C9A52':'#888'};cursor:pointer;font-weight:700;white-space:nowrap">
+        ${(ms.operatingProps||[]).length>1 ? (hasActualCosts(p.id,ms.year,ms.month)?'✓ ':'✏️ ') + escHtml(p.name) : (hasActualCosts(p.id,ms.year,ms.month)?'✓ 実費':'✏️ 実費')}
       </button>`
     ).join('');
     html += `<div class="month-card" id="mcard-${m}">
-      <div class="month-card-header" onclick="this.nextElementSibling.classList.toggle('open');var ch=this.querySelector('.mchev');ch.style.transform=this.nextElementSibling.classList.contains('open')?'rotate(180deg)':''">
+      <div class="month-card-header" style="flex-wrap:wrap" onclick="this.nextElementSibling.classList.toggle('open');var ch=this.querySelector('.mchev');ch.style.transform=this.nextElementSibling.classList.contains('open')?'rotate(180deg)':''">
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
             <div class="month-label">${m}月</div>
@@ -5473,7 +5490,6 @@ function renderAnnual() {
               ? `<span style="font-size:10px;font-weight:700;color:#1C9A52;background:#F0FBF5;border-radius:6px;padding:2px 7px">✅ 実費</span>`
               : `<span style="font-size:10px;font-weight:600;color:#B0ADA8;background:#F2F1EE;border-radius:6px;padding:2px 7px">〜 概算</span>`) : ''}
             <div style="font-size:11px;color:#aaa">${ms.bookings}件・${ms.nights}泊${ms.adrBookings>0?'・平均'+(ms.nights/ms.adrBookings).toFixed(1)+'泊':''}${ms.leadCnt>0?'・リード'+Math.round(ms.leadSum/ms.leadCnt)+'日':''}${ms.leadCntL>0?'・長期リード'+Math.round(ms.leadSumL/ms.leadCntL)+'日':''}</div>
-            ${!isFutureMonth ? `<div style="display:flex;gap:4px;flex-wrap:wrap">${actBtns}</div>` : ''}
           </div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:3px">
             <div style="flex:1;max-width:80px;height:4px;background:#E8ECF8;border-radius:2px"><div style="width:${ms.occRate}%;height:100%;background:#F07C3F;border-radius:2px"></div></div>
@@ -5487,6 +5503,7 @@ function renderAnnual() {
           <div style="font-size:14px;font-weight:800;color:${isMP?'#1C9A52':'#E53935'};margin-top:2px">${isMP?'':'▲'}${fmtShort(Math.abs(ms.profit))}円</div>
         </div>
         <span class="mchev" style="margin-left:6px">▼</span>
+        ${!isFutureMonth && actBtns ? `<div style="flex-basis:100%;display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:6px">${(ms.operatingProps||[]).length>1?'<span style="font-size:10px;font-weight:700;color:#B0ADA8">実費の入力</span>':''}${actBtns}</div>` : ''}
       </div>
       <div class="month-detail-body">
         <div style="padding:0 14px 4px;font-size:10px;color:#bbb">固定費 ${fmt(ms.monthFixedCosts)}円${ms.isActual?' <span style="color:#1C9A52;font-weight:700">[実費]</span>':' <span style="color:#bbb">[概算]</span>'} / 変動費 ${fmt(ms.varCosts)}円</div>
@@ -6904,35 +6921,52 @@ function renderMessageTab() {
 
 // メッセージ画面の「予約選択」の中身。承認前のリクエストがあれば一番上に別枠で出す
 function buildMsgBookingOptions() {
-  // 今日に近い予約から順に表示（滞在中・直近チェックインが最上位、遠い未来や昔の予約は下へ）
+  // 2026-11-12 オーナー「対象の予約がものすごく探しにくい・チェックインチェックアウトの日付と宿名入れて」
+  // 1行の形＝「チェックイン→チェックアウト｜宿名｜ゲスト名」。並びは2つに分ける：
+  //   これから・滞在中（チェックインが近い順） → 済んだ予約（新しい順）
   const _msgToday = new Date(); _msgToday.setHours(0,0,0,0);
-  const sorted = [...getAllBookings()]
-    .filter(b => b.checkin)
-    .sort((a, b) => {
-      const da = Math.abs(parseDateStr(a.checkin) - _msgToday);
-      const db = Math.abs(parseDateStr(b.checkin) - _msgToday);
-      return da - db;
-    });
+  const _thisYear = _msgToday.getFullYear();
+  // 日付は「11/10(火)」。今年でない日付だけ年を付ける
+  const fmtOptDate = d => (!d || isNaN(d)) ? '?' : (d.getFullYear() !== _thisYear ? d.getFullYear() + '/' : '') + (d.getMonth() + 1) + '/' + d.getDate() + '(' + '日月火水木金土'[d.getDay()] + ')';
 
-  const bookingOptions = sorted.map(b => {
+  const all = getAllBookings().filter(b => b.checkin)
+    .map(b => ({ b, cin: parseDateStr(b.checkin), cout: parseDateStr(getCheckout(b)) }));
+  const active = all.filter(x => x.cout >= _msgToday).sort((a, b) => a.cin - b.cin);
+  const done = all.filter(x => x.cout < _msgToday).sort((a, b) => b.cout - a.cout);
+
+  const optOf = x => {
+    const b = x.b;
     const prop = properties.find(p => p.id === getBookingPropId(b));
     const propLabel = prop ? prop.name : '?';
     const usageLabel = getMsgUsageLabel(b.code);
-    return `<option value="${escHtml(b.code)}">${escHtml(b.guestName || '?')} / ${b.checkin} / ${propLabel}　${usageLabel}</option>`;
-  }).join('');
+    // 検索は今までどおり「2026/11/10」の形でも当たるよう、元の文字も持っておく
+    const search = `${b.guestName || ''} / ${b.checkin} / ${getCheckout(b)} / ${propLabel}`;
+    return `<option value="${escHtml(b.code)}" data-search="${escHtml(search)}">${fmtOptDate(x.cin)}→${fmtOptDate(x.cout)}｜${escHtml(propLabel)}｜${escHtml(b.guestName || '?')}　${usageLabel}</option>`;
+  };
+  const activeOptions = active.map(optOf).join('');
+  const doneOptions = done.map(optOf).join('');
 
   // 承認前のリクエスト（予約には数えない。会話を読んで返信を作るためだけに出す）
   const reqs = (pendingRequests || []).filter(r => r && r.code && !getAllBookings().some(b => b.code === String(r.code)));
   const requestOptions = reqs.map(r => {
     const prop = properties.find(p => p.id === r.propId);
+    const propLabel = prop ? prop.name : '?';
     const people = `大人${Number(r.adults) || 0}${Number(r.children) ? '・子ども' + Number(r.children) : ''}`;
-    return `<option value="${escHtml(String(r.code))}">⏳【リクエスト中】${escHtml(r.guestName || '?')} / ${escHtml(String(r.checkin || ''))} / ${prop ? escHtml(prop.name) : '?'}（${Number(r.nights) || 0}泊・${people}）　${getMsgUsageLabel(String(r.code))}</option>`;
+    const nights = Number(r.nights) || 0;
+    const rawCin = String(r.checkin || '');
+    const cin = rawCin ? parseDateStr(rawCin.replace(/-/g, '/')) : null;
+    const okCin = cin && !isNaN(cin);
+    const cout = okCin ? new Date(cin.getFullYear(), cin.getMonth(), cin.getDate() + nights) : null;
+    const dates = okCin ? `${fmtOptDate(cin)}→${fmtOptDate(cout)}` : escHtml(rawCin);
+    const search = `${r.guestName || ''} / ${rawCin} / ${propLabel}`;
+    return `<option value="${escHtml(String(r.code))}" data-search="${escHtml(search)}">⏳【リクエスト中】${dates}｜${escHtml(propLabel)}｜${escHtml(r.guestName || '?')}（${nights}泊・${people}）　${getMsgUsageLabel(String(r.code))}</option>`;
   }).join('');
 
-  const html = `<option value="">-- 予約を選んでください --</option>` + (requestOptions
-    ? `<optgroup label="⏳ リクエスト中（承認前・予約には数えません）">${requestOptions}</optgroup><optgroup label="予約">${bookingOptions}</optgroup>`
-    : bookingOptions);
-  return { html, count: sorted.length + reqs.length };
+  const html = `<option value="">-- 予約を選んでください --</option>`
+    + (requestOptions ? `<optgroup label="⏳ リクエスト中（承認前・予約には数えません）">${requestOptions}</optgroup>` : '')
+    + (activeOptions ? `<optgroup label="これから・滞在中（チェックインが近い順）">${activeOptions}</optgroup>` : '')
+    + (doneOptions ? `<optgroup label="済んだ予約（新しい順）">${doneOptions}</optgroup>` : '');
+  return { html, count: all.length + reqs.length };
 }
 
 // リクエストの一覧が変わったとき：選択肢だけ作り直し、選んでいた予約と検索の絞り込みは保つ
@@ -6954,7 +6988,7 @@ function filterMsgBookingOptions() {
   Array.from(sel.options).forEach(opt => {
     if (!opt.value) { opt.style.display = ''; return; } // プレースホルダ
     total++;
-    const text = opt.textContent.toLowerCase();
+    const text = (opt.textContent + ' ' + (opt.dataset.search || '')).toLowerCase();
     const match = !q || text.includes(q);
     opt.style.display = match ? '' : 'none';
     if (match) visible++;
