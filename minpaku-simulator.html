@@ -168,6 +168,8 @@
   /* 物件フィルター */
   .prop-filter { display: flex; gap: 6px; margin-bottom: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
   .prop-filter::-webkit-scrollbar { display: none; }
+  /* 物件の切り替えは横にずらさず折り返す（4物件になって右はしの物件が画面の外に隠れていたため・2026-11-13）。月のボタンは今までどおり横にずらす */
+  .prop-filter.prop-wrap { flex-wrap: wrap; overflow-x: visible; }
   .prop-filter-btn { padding: 7px 14px; border-radius: 20px; border: 1.5px solid #E8E6E1; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; background: white; color: #666; flex-shrink: 0; }
   .prop-filter-btn.active { background: #1C1C1E; color: white; border-color: #1C1C1E; }
 
@@ -1864,7 +1866,7 @@ function renderMonthly() {
   const daysInMonth = getDaysInMonth(year, month);
   const fmt = n => n.toLocaleString('ja-JP');
 
-  const filterHtml = `<div class="prop-filter">
+  const filterHtml = `<div class="prop-filter prop-wrap">
     <button class="prop-filter-btn${monthlyPropFilter==='all'?' active':''}" onclick="monthlyPropFilter='all';renderMonthly()">全物件</button>
     ${properties.map(p => `<button class="prop-filter-btn${monthlyPropFilter===String(p.id)?' active':''}" onclick="monthlyPropFilter='${p.id}';renderMonthly()">${p.name}</button>`).join('')}
   </div>`;
@@ -2077,7 +2079,7 @@ function renderCalendarTab() {
   }).length;
 
   // 物件フィルター
-  const filterHtml = `<div class="prop-filter">
+  const filterHtml = `<div class="prop-filter prop-wrap">
     <button class="prop-filter-btn${calendarPropFilter==='all'?' active':''}" onclick="calendarPropFilter='all';renderCalendarTab()">全物件</button>
     ${properties.map(p => `<button class="prop-filter-btn${calendarPropFilter===String(p.id)?' active':''}" onclick="calendarPropFilter='${p.id}';renderCalendarTab()">${p.name}</button>`).join('')}
   </div>`;
@@ -2761,7 +2763,9 @@ function downloadBackup() {
     msgUsageLog: (typeof msgUsageLog !== 'undefined' ? msgUsageLog : {}),
     systemFee: (typeof systemFee !== 'undefined' ? systemFee : null),
     whatsappNotes: (typeof whatsappNotes !== 'undefined' ? whatsappNotes : {}),
-    propCheckHistory: (typeof propCheckHistory !== 'undefined' ? propCheckHistory : [])
+    propCheckHistory: (typeof propCheckHistory !== 'undefined' ? propCheckHistory : []),
+    // スポット作業（清掃以外の作業の記録）。2026-11-13 までバックアップに入っていなかった
+    spotWorks: (typeof spotWorks !== 'undefined' ? spotWorks : [])
   };
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -2801,7 +2805,9 @@ function handleRestoreFile(input) {
       : '不明';
     const curCount = getAllBookings().length;
     const newCount = data.airbnbBookings.length + (Array.isArray(data.bookingComBookings) ? data.bookingComBookings.length : 0);
-    const ok = confirm(`バックアップ（保存日時: ${expLabel}）から復元します。\n\n現在のデータを上書きします。予約${curCount}件 → ${newCount}件\n\n続行しますか？`);
+    // 空のファイル（予約0件）を選んだときは注意を足す（空のバックアップが置き場に混じっているため・2026-11-13）
+    const emptyWarn = (newCount === 0 && curCount > 0) ? `\n\n⚠️ このバックアップには予約が1件も入っていません（空のファイルです）。続けると、今の予約がすべて消えます。` : '';
+    const ok = confirm(`バックアップ（保存日時: ${expLabel}）から復元します。\n\n現在のデータを上書きします。予約${curCount}件 → ${newCount}件${emptyWarn}\n\n続行しますか？`);
     if (!ok) return;
 
     try {
@@ -2841,6 +2847,16 @@ function handleRestoreFile(input) {
         propCheckHistory = data.propCheckHistory;
         tasks.push(fbSave(KEYS.propCheck, propCheckHistory));
       }
+      // システム利用料：バックアップには入っていたのに、復元で戻していなかった（2026-11-13）
+      if (data.systemFee && typeof data.systemFee === 'object' && Array.isArray(data.systemFee.items)) {
+        systemFee = data.systemFee;
+        tasks.push(fbSave(KEYS.systemFee, systemFee));
+      }
+      // スポット作業：入っているバックアップ（2026-11-13 以降のもの）のときだけ戻す。古いバックアップでは今の記録を残す
+      if (Array.isArray(data.spotWorks)) {
+        spotWorks = data.spotWorks;
+        tasks.push(fbSave(KEYS.spotWorks, spotWorks));
+      }
 
       showToast('♻️ 復元しました。ページを再読み込みします…', 'success');
       // Firebaseへの保存完了を待ってからリロード（最大4秒でフォールバック）
@@ -2866,6 +2882,8 @@ function daysSinceBackup() {
 function autoBackupCheck() {
   const days = daysSinceBackup();
   if (days !== null && days < 7) return;
+  // 予約が1件も無いときは保存しない（ログイン前や確認用の画面で開いたときに、空のバックアップが出来てしまうのを防ぐ・2026-11-13）
+  if ((airbnbBookings || []).length + (typeof bookingComBookings !== 'undefined' ? (bookingComBookings || []).length : 0) === 0) return;
   try {
     downloadBackup();
     showToast('💾 自動バックアップを保存しました（ダウンロードフォルダ）', 'success');
@@ -3091,25 +3109,27 @@ function renderProfitChart(monthlyStats, monthlyTarget) {
     const maxBarH = p >= 0 ? baseline - labelH - 2 : H - footH - baseline - 2;
     const bh = Math.max(Math.abs(p) / maxAbs * maxBarH, 3);
     const y = p >= 0 ? baseline - bh : baseline;
-    const fill = p >= 0 ? '#4caf50' : '#ef5350';
-    svgBars += '<rect x="'+(cx - barW/2).toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+bh.toFixed(1)+'" fill="'+fill+'" rx="2"/>';
+    // 来月以降＝予約途中の月は、うすい色・点線のふちで描く（今月までの成績と見分けるため・2026-11-13）
+    const fut = !!(monthlyStats[i] && monthlyStats[i].isFuture);
+    const fill = fut ? (p >= 0 ? '#DDEFDE' : '#FBE0DF') : (p >= 0 ? '#4caf50' : '#ef5350');
+    svgBars += '<rect x="'+(cx - barW/2).toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+bh.toFixed(1)+'" fill="'+fill+'" rx="2"'+(fut ? ' stroke="'+(p >= 0 ? '#81C784' : '#E57373')+'" stroke-width="1" stroke-dasharray="3 2"' : '')+'/>';
     // 金額＋利益率を2行で併記
     const ms = monthlyStats[i];
     const margin = (ms && ms.revenue > 0) ? Math.round(p / ms.revenue * 100) : null;
-    const marginText = margin !== null ? '('+(margin<0?'▲':'')+Math.abs(margin)+'%)' : '';
+    const marginText = (margin !== null && !fut) ? (margin<0?'▲':'')+Math.abs(margin)+'%' : '';
     const anchor = cx < 30 ? 'start' : cx > W - 30 ? 'end' : 'middle';
     const lx = anchor === 'start' ? (cx - barW/2).toFixed(1) : anchor === 'end' ? (cx + barW/2).toFixed(1) : cx.toFixed(1);
     const labelText = fmtBar(p);
     if (p >= 0) {
-      const lyAmount = (baseline - bh - 12).toFixed(1);
+      const lyAmount = (baseline - bh - 13).toFixed(1);
       const lyMargin = (baseline - bh - 3).toFixed(1);
-      svgBars += '<text x="'+lx+'" y="'+lyAmount+'" text-anchor="'+anchor+'" font-size="9" font-weight="800" fill="#2e7d32" stroke="white" stroke-width="2.5" paint-order="stroke">'+labelText+'</text>';
-      if (marginText) svgBars += '<text x="'+lx+'" y="'+lyMargin+'" text-anchor="'+anchor+'" font-size="7.5" font-weight="700" fill="#7c3aed" stroke="white" stroke-width="2" paint-order="stroke">'+marginText+'</text>';
+      svgBars += '<text x="'+lx+'" y="'+lyAmount+'" text-anchor="'+anchor+'" font-size="9" font-weight="800" fill="'+(fut ? '#9e9e9e' : '#2e7d32')+'" stroke="white" stroke-width="2.5" paint-order="stroke">'+labelText+'</text>';
+      if (marginText) svgBars += '<text x="'+lx+'" y="'+lyMargin+'" text-anchor="'+anchor+'" font-size="9" font-weight="700" fill="#7c3aed" stroke="white" stroke-width="2" paint-order="stroke">'+marginText+'</text>';
     } else {
       const lyAmount = (baseline + Math.max(bh, 4) + 9).toFixed(1);
-      const lyMargin = (baseline + Math.max(bh, 4) + 18).toFixed(1);
-      svgBars += '<text x="'+lx+'" y="'+lyAmount+'" text-anchor="'+anchor+'" font-size="9" font-weight="800" fill="#c62828" stroke="white" stroke-width="2.5" paint-order="stroke">'+labelText+'</text>';
-      if (marginText) svgBars += '<text x="'+lx+'" y="'+lyMargin+'" text-anchor="'+anchor+'" font-size="7.5" font-weight="700" fill="#7c3aed" stroke="white" stroke-width="2" paint-order="stroke">'+marginText+'</text>';
+      const lyMargin = (baseline + Math.max(bh, 4) + 19).toFixed(1);
+      svgBars += '<text x="'+lx+'" y="'+lyAmount+'" text-anchor="'+anchor+'" font-size="9" font-weight="800" fill="'+(fut ? '#9e9e9e' : '#c62828')+'" stroke="white" stroke-width="2.5" paint-order="stroke">'+labelText+'</text>';
+      if (marginText) svgBars += '<text x="'+lx+'" y="'+lyMargin+'" text-anchor="'+anchor+'" font-size="9" font-weight="700" fill="#7c3aed" stroke="white" stroke-width="2" paint-order="stroke">'+marginText+'</text>';
     }
   });
 
@@ -3136,7 +3156,8 @@ function renderProfitChart(monthlyStats, monthlyTarget) {
 
   return '<div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;font-size:10px;color:#888;flex-wrap:wrap">'
     + '<span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:8px;background:#4caf50;border-radius:1px"></span>利益（万円）</span>'
-    + '<span style="color:#7c3aed;font-weight:700">(XX%) = 利益率</span>'
+    + '<span style="color:#7c3aed;font-weight:700">紫の％＝利益率</span>'
+    + (monthlyStats.some(m => m && m.isFuture) ? '<span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:10px;height:8px;background:#F3F3F3;border:1px dashed #AAA;border-radius:1px;box-sizing:border-box"></span>うすい色＝来月以降（予約途中）</span>' : '')
     + '</div>'
     + '<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="display:block">'
     + '<line x1="0" y1="'+baseline+'" x2="'+W+'" y2="'+baseline+'" stroke="#eee" stroke-width="1.5"/>'
@@ -4378,14 +4399,21 @@ function renderDashboard() {
 
   // 今年度（4月開始3月終わり）の集計
   const fyStartYear = thisMonth >= 4 ? thisYear : thisYear - 1;
-  const fyBooks = _allBooks.filter(b => {
+  const fyBooksAll = _allBooks.filter(b => {
     if (!b.checkin || !b.revenue || b.revenue === 0) return false;
     const [by, bm] = b.checkin.split('/').map(Number);
     return (by === fyStartYear && bm >= 4) || (by === fyStartYear + 1 && bm <= 3);
   });
+  // 年度のまとめは「今月まで」の予約だけで出す（2026-11-13 オーナー指示）。
+  // 来月以降は、予約が1件でも入るとその月の固定費を丸ごと引くので、混ぜると予約途中の赤字で年度の利益が小さく見えていた。
+  // 来月以降の予約は、件数と受取だけを別の行に出す
+  const _isAfterThisMonth = b => { const [by, bm] = b.checkin.split('/').map(Number); return by > thisYear || (by === thisYear && bm > thisMonth); };
+  const fyBooks = fyBooksAll.filter(b => !_isAfterThisMonth(b));
+  const fyFutureBooks = fyBooksAll.filter(_isAfterThisMonth);
+  const fyFutureRevenue = fyFutureBooks.reduce((s, b) => s + b.revenue, 0);
   const fyRevenue = fyBooks.reduce((s, b) => s + b.revenue, 0);
   const fyGuestPayment = getGuestPayment(fyRevenue);
-  // 固定費＋変動費（実績タブと同じロジック：未来の予約なし月はスキップ）
+  // 固定費＋変動費（実績タブと同じ：来月以降の月は入れない）
   const _todayY = now.getFullYear();
   const _todayM = now.getMonth() + 1;
   let fyFixed = 0, fyVar = 0;
@@ -4397,7 +4425,7 @@ function renderDashboard() {
       return by === yr && bm === mo;
     });
     const isFutureMonth = (yr > _todayY) || (yr === _todayY && mo > _todayM);
-    if (isFutureMonth && monthBooks.length === 0) continue;
+    if (isFutureMonth) continue;
     properties.forEach(p => {
       if (isPropertyOperating(p, yr, mo)) {
         fyFixed += getPropMonthFixedCosts(p, yr, mo);
@@ -4472,13 +4500,14 @@ function renderDashboard() {
       </div>
       <div class="dash-next-badges" style="display:flex;gap:8px;--next-cols:${Math.min(Math.max(nextPerProp.length, 1), 4)}">${nextBadges}</div>
     </div>
-    ${fyBooks.length > 0 ? `
+    ${fyBooksAll.length > 0 ? `
     <div onclick="showTab('annual')" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding:10px 12px;border-top:1px solid #F2F1EE;background:#F9F8F6;border-radius:10px;cursor:pointer">
       <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:baseline;min-width:0">
-        <span style="font-size:10px;font-weight:700;color:#C8C5C0;white-space:nowrap">${fyStartYear}年度</span>
+        <span style="font-size:10px;font-weight:700;color:#C8C5C0;white-space:nowrap">${fyStartYear}年度${fyFutureBooks.length > 0 ? `（${thisMonth}月まで）` : ''}</span>
         <span style="font-size:12px;color:#888;white-space:nowrap">受取 <strong style="color:#1C1C1E;font-size:14px">${fmtShort(fyRevenue)}円</strong></span>
         <span style="font-size:12px;color:#888;white-space:nowrap">利益 <strong style="color:${fyIsP?'#1C9A52':'#E53935'};font-size:14px">${fyIsP?'':'▲'}${fmtShort(Math.abs(fyProfit))}円</strong>${fyMargin!==null?` <span style="font-size:11px;font-weight:700;color:${fyIsP?'#1C9A52':'#E53935'}">(${fyIsP?'':'▲'}${Math.abs(fyMargin)}%)</span>`:''}</span>
         <span style="font-size:12px;color:#888;white-space:nowrap">稼働 <strong style="color:#1C1C1E;font-size:14px">${occRateShort===null?'—':occRateShort+'%'}</strong></span>
+        ${fyFutureBooks.length > 0 ? `<span style="flex-basis:100%;font-size:11px;color:#8A93A6">来月以降の予約 <strong style="color:#5B6478">${fyFutureBooks.length}件・受取${fmtShort(fyFutureRevenue)}円</strong>（上の数字とは別）</span>` : ''}
       </div>
       <span style="font-size:11px;font-weight:700;color:#F07C3F;white-space:nowrap;flex-shrink:0">年間の実績を見る ›</span>
     </div>` : ''}
@@ -4569,6 +4598,9 @@ function renderDashboard() {
     </div>`;
   }
 
+  // ホームの並び（2026-11-13 オーナー指示）：「今後7日間の予定」を、180日メーター・投資回収より上に出す。
+  // メーターと投資回収はここでいったん別に組み立てて、予定のあとに足す（中身は変えていない）
+  const _htmlBeforeMeters = html; html = '';
   // ========== 180日消費メーター + 繁忙期フェーズ ==========
   {
     // 繁忙期フェーズ判定
@@ -4662,6 +4694,7 @@ function renderDashboard() {
       </div>`;
     }
   }
+  const _metersHtml = html; html = _htmlBeforeMeters;
 
   // 今後7日間のイベント
   if (events.length === 0) {
@@ -4747,6 +4780,7 @@ function renderDashboard() {
     html += `</div>`; // pc-booking-grid
   }
 
+  html += _metersHtml; // 180日メーター・投資回収（予定のあとに出す）
   html += renderSpotWorksCard();
 
   content.innerHTML = html;
@@ -5047,7 +5081,7 @@ function renderAnnual() {
     const dim = getDaysInMonth(mYear, m);
     const activePropCount = Math.max(operatingProps.length, 1);
     const maxNights = dim * activePropCount;
-    return { month: m, year: mYear, revenue: rev, profit, nights, adrRev, adrBookings, leadSum, leadCnt, leadSumL, leadCntL, revAirbnb, revBooking, bookings: mBooks.length, daysInMonth: dim, maxNights, occRate: Math.min(Math.round(nights / maxNights * 100), 100), monthFixedCosts, monthTaxableFixedCosts, varCosts, isActual, operatingProps, longNights, longRev, longBookings };
+    return { isFuture, month: m, year: mYear, revenue: rev, profit, nights, adrRev, adrBookings, leadSum, leadCnt, leadSumL, leadCntL, revAirbnb, revBooking, bookings: mBooks.length, daysInMonth: dim, maxNights, occRate: Math.min(Math.round(nights / maxNights * 100), 100), monthFixedCosts, monthTaxableFixedCosts, varCosts, isActual, operatingProps, longNights, longRev, longBookings };
   });
 
   const validMonths = monthlyStats.filter(Boolean);
@@ -5072,7 +5106,7 @@ function renderAnnual() {
       mhtml += `<div class="year-tabs">${fiscalYears.map(y => `<button class="year-tab${y===currentAnnualYear?' active':''}" onclick="currentAnnualYear=${y};annualSelectedMonth=null;renderAnnual()">${y}年度</button>`).join('')}</div>`;
     }
     // 物件フィルター
-    mhtml += `<div class="prop-filter"><button class="prop-filter-btn${annualPropFilter==='all'?' active':''}" onclick="annualPropFilter='all';renderAnnual()">全物件</button>${properties.map(p=>`<button class="prop-filter-btn${annualPropFilter===String(p.id)?' active':''}" onclick="annualPropFilter='${p.id}';renderAnnual()">${p.name}</button>`).join('')}</div>`;
+    mhtml += `<div class="prop-filter prop-wrap"><button class="prop-filter-btn${annualPropFilter==='all'?' active':''}" onclick="annualPropFilter='all';renderAnnual()">全物件</button>${properties.map(p=>`<button class="prop-filter-btn${annualPropFilter===String(p.id)?' active':''}" onclick="annualPropFilter='${p.id}';renderAnnual()">${p.name}</button>`).join('')}</div>`;
     // 月ナビ
     mhtml += `<div style="display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;margin-bottom:10px">
       <button class="prop-filter-btn" onclick="annualSelectedMonth=null;renderAnnual()" style="background:#F2F1EE;border-color:#E8E6E1;color:#666">← 全期間</button>
@@ -5205,36 +5239,44 @@ function renderAnnual() {
     return;
   }
 
-  const totalRevenue = validMonths.reduce((s, m) => s + m.revenue, 0);
-  const totalProfit = validMonths.reduce((s, m) => s + m.profit, 0);
-  const totalNights = validMonths.reduce((s, m) => s + m.nights, 0);
-  const totalBookings = validMonths.reduce((s, m) => s + m.bookings, 0);
-  const totalAdrRev = validMonths.reduce((s, m) => s + (m.adrRev || 0), 0);
+  // 年度の合計は「今月まで」の月だけで出す（2026-11-13 オーナー指示）。
+  // これからの月は、予約が1件でも入るとその月の固定費を丸ごと引くため、合計に混ぜると予約途中の赤字で年度の利益が小さく見えていた。
+  // まだ始まっていない物件・年度（全部がこれからの月）は、合計を0にして「来月以降の予約」の行だけに出す
+  const sumMonths = validMonths.filter(v => !v.isFuture);
+  const futureMonths = validMonths.filter(v => v.isFuture);
+  const futureBookings = futureMonths.reduce((s, m) => s + m.bookings, 0);
+  const futureRevenue = futureMonths.reduce((s, m) => s + m.revenue, 0);
+  const lastSumMonth = sumMonths.length > 0 ? sumMonths[sumMonths.length - 1] : null;
+  const totalRevenue = sumMonths.reduce((s, m) => s + m.revenue, 0);
+  const totalProfit = sumMonths.reduce((s, m) => s + m.profit, 0);
+  const totalNights = sumMonths.reduce((s, m) => s + m.nights, 0);
+  const totalBookings = sumMonths.reduce((s, m) => s + m.bookings, 0);
+  const totalAdrRev = sumMonths.reduce((s, m) => s + (m.adrRev || 0), 0);
   const totalADR = adrPair(totalAdrRev, totalNights);
   // 長期滞在（28泊以上）の年間合計。参考表示のみでADR・稼働・RevPARには含めない
-  const totalLongNights = validMonths.reduce((s, m) => s + (m.longNights || 0), 0);
-  const totalLongRev    = validMonths.reduce((s, m) => s + (m.longRev || 0), 0);
+  const totalLongNights = sumMonths.reduce((s, m) => s + (m.longNights || 0), 0);
+  const totalLongRev    = sumMonths.reduce((s, m) => s + (m.longRev || 0), 0);
   const avgPerNight = totalNights > 0 ? Math.round(totalRevenue / totalNights) : 0;
   // 追加KPI：RevPAR・平均滞在日数(LOS)・リードタイム・チャネル構成比
-  const totalMaxNights = validMonths.reduce((s, m) => s + (m.maxNights || 0), 0);
+  const totalMaxNights = sumMonths.reduce((s, m) => s + (m.maxNights || 0), 0);
   const totalRevPAR = totalMaxNights > 0 ? Math.round(totalAdrRev / totalMaxNights) : 0;
-  const totalAdrBookings = validMonths.reduce((s, m) => s + (m.adrBookings || 0), 0);
+  const totalAdrBookings = sumMonths.reduce((s, m) => s + (m.adrBookings || 0), 0);
   const totalLOS = totalAdrBookings > 0 ? (totalNights / totalAdrBookings) : 0;
-  const totalLeadSum = validMonths.reduce((s, m) => s + (m.leadSum || 0), 0);
-  const totalLeadCnt = validMonths.reduce((s, m) => s + (m.leadCnt || 0), 0);
+  const totalLeadSum = sumMonths.reduce((s, m) => s + (m.leadSum || 0), 0);
+  const totalLeadCnt = sumMonths.reduce((s, m) => s + (m.leadCnt || 0), 0);
   const avgLead = totalLeadCnt > 0 ? Math.round(totalLeadSum / totalLeadCnt) : null;
-  const totalLeadSumL = validMonths.reduce((s, m) => s + (m.leadSumL || 0), 0);
-  const totalLeadCntL = validMonths.reduce((s, m) => s + (m.leadCntL || 0), 0);
+  const totalLeadSumL = sumMonths.reduce((s, m) => s + (m.leadSumL || 0), 0);
+  const totalLeadCntL = sumMonths.reduce((s, m) => s + (m.leadCntL || 0), 0);
   const avgLeadL = totalLeadCntL > 0 ? Math.round(totalLeadSumL / totalLeadCntL) : null;
-  const totalRevAirbnb = validMonths.reduce((s, m) => s + (m.revAirbnb || 0), 0);
-  const totalRevBooking = validMonths.reduce((s, m) => s + (m.revBooking || 0), 0);
+  const totalRevAirbnb = sumMonths.reduce((s, m) => s + (m.revAirbnb || 0), 0);
+  const totalRevBooking = sumMonths.reduce((s, m) => s + (m.revBooking || 0), 0);
   const chRevTotal = totalRevAirbnb + totalRevBooking;
   const chAirbnbPct = chRevTotal > 0 ? Math.round(totalRevAirbnb / chRevTotal * 100) : 0;
-  const bestMonth = validMonths.length > 0 ? validMonths.reduce((a, b) => b.profit > a.profit ? b : a) : null;
+  const bestMonth = sumMonths.length > 0 ? sumMonths.reduce((a, b) => b.profit > a.profit ? b : a) : null;
   const isAP = totalProfit >= 0;
   // 消費税の概算（参考表示用・利益計算には未反映）
-  const totalTaxableFixedCosts = validMonths.reduce((s, m) => s + m.monthTaxableFixedCosts, 0);
-  const totalVarCostsForTax = validMonths.reduce((s, m) => s + m.varCosts, 0);
+  const totalTaxableFixedCosts = sumMonths.reduce((s, m) => s + m.monthTaxableFixedCosts, 0);
+  const totalVarCostsForTax = sumMonths.reduce((s, m) => s + m.varCosts, 0);
   const consumptionTaxYear = calcConsumptionTax(totalRevenue, totalTaxableFixedCosts + totalVarCostsForTax);
 
   let html = '';
@@ -5265,7 +5307,7 @@ function renderAnnual() {
   }
 
   // 物件フィルター
-  html += `<div class="prop-filter">
+  html += `<div class="prop-filter prop-wrap">
     <button class="prop-filter-btn${annualPropFilter==='all'?' active':''}" onclick="annualPropFilter='all';renderAnnual()">全物件</button>
     ${properties.map(p => `<button class="prop-filter-btn${annualPropFilter===String(p.id)?' active':''}" onclick="annualPropFilter='${p.id}';renderAnnual()">${p.name}</button>`).join('')}
   </div>`;
@@ -5286,7 +5328,9 @@ function renderAnnual() {
     const [by, bm] = b.checkin.split('/').map(Number);
     return by > todayY || (by === todayY && bm > todayM);
   });
-  const kpiPeriodLabel = hasFutureBooks ? `確定予約含む ${currentAnnualYear}/4〜${currentAnnualYear+1}/3` : `実績ベース ${currentAnnualYear}/4〜${todayY}/${todayM}`;
+  const kpiPeriodLabel = futureMonths.length > 0
+    ? (lastSumMonth ? `${currentAnnualYear}/4〜${lastSumMonth.year}/${lastSumMonth.month}（今月まで）` : `今月まで（まだ始まっていません）`)
+    : (hasFutureBooks ? `確定予約含む ${currentAnnualYear}/4〜${currentAnnualYear+1}/3` : `実績ベース ${currentAnnualYear}/4〜${todayY}/${todayM}`);
 
   // KPIカード（最優先表示）
   const totalGuestPayment = getGuestPayment(totalRevenue);
@@ -5342,6 +5386,10 @@ function renderAnnual() {
       <div style="font-size:11px;color:#B0ADA8">リードタイム <span style="font-weight:700;color:#666">${avgLead!==null?'短期'+avgLead+'日':'短期—'}</span>${avgLeadL!==null?` <span style="color:#C8C5C0">/</span> <span style="font-weight:700;color:#7c3aed">長期${avgLeadL}日</span>`:''}</div>
       <div style="font-size:11px;color:#B0ADA8">チャネル <span style="font-weight:700;color:#FF5A5F">Airbnb ${chAirbnbPct}%</span><span style="color:#C8C5C0"> / </span><span style="font-weight:700;color:#003580">B.com ${100-chAirbnbPct}%</span> <span style="font-size:10px;color:#C8C5C0">(売上比)</span></div>
     </div>
+    ${futureMonths.length > 0 ? `<div style="margin-top:10px;padding:9px 11px;background:#F4F6FB;border-radius:10px;font-size:12px;color:#5B6478;line-height:1.6">
+      <span style="font-weight:800">来月以降の予約（確定分）</span>　${futureBookings}件・受取 <strong>${fmtShort(futureRevenue)}円</strong>
+      <div style="font-size:10px;color:#8A93A6">上の数字には入れていません（来月以降は予約がそろっていないため、利益はまだ出しません）</div>
+    </div>` : ''}
   </div>`;
 
   // グラフ＋月別テーブルを1枚のカードに統合（上部に配置）
@@ -5384,16 +5432,16 @@ function renderAnnual() {
               ? `<br><span style="font-size:9.5px;color:#4a7fc1;font-weight:700" title="長期滞在${ms.longNights}泊（定期借家扱い・ADR/稼働の計算には含めていません）">長 ${fmtShort(longAdr)}</span>`
               : '';
             return `<tr style="cursor:pointer" onclick="document.getElementById('mcard-${ms.month}').scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>{var body=document.getElementById('mcard-${ms.month}').querySelector('.month-detail-body');if(!body.classList.contains('open')){body.classList.add('open');var ch=document.getElementById('mcard-${ms.month}').querySelector('.mchev');if(ch)ch.style.transform='rotate(180deg)';}},300)">
-              <td>${ms.month}月</td>
+              <td>${ms.month}月${ms.isFuture ? '<br><span style="font-size:10px;font-weight:700;color:#8A93A6;white-space:nowrap">予約途中</span>' : ''}</td>
               <td>${ms.bookings}<br><span style="font-size:10px;color:#999">${ms.occRate}%</span></td>
               <td>${fmtShort(ms.revenue)}<br><span style="font-size:10px;color:#C8C5C0">${fmtShort(gp)}</span></td>
               <td style="font-size:11px">${adr.host>0?fmtShort(adr.host):'—'}<br><span style="font-size:10px;color:#C8C5C0">${adr.guest>0?fmtShort(adr.guest):''}</span>${longCell}</td>
               <td style="font-size:11px">${ms.maxNights>0&&ms.adrRev>0?fmtShort(Math.round(ms.adrRev/ms.maxNights)):'—'}</td>
-              <td class="td-profit ${isMP?'profit':'loss'}">${isMP?'':'▲'}${fmtShort(Math.abs(ms.profit))}<br><span style="font-size:10px">${mMargin!==null?(isMP?'':'▲')+Math.abs(mMargin)+'%':'—'}</span></td>
+              <td class="td-profit ${isMP?'profit':'loss'}"${ms.isFuture ? ' style="color:#9e9e9e"' : ''}>${isMP?'':'▲'}${fmtShort(Math.abs(ms.profit))}<br><span style="font-size:10px">${mMargin!==null?(isMP?'':'▲')+Math.abs(mMargin)+'%':'—'}</span></td>
             </tr>`;
           }).join('')}
           <tr class="total-row">
-            <td>合計</td><td>${totalBookings}件</td>
+            <td>合計${(futureMonths.length > 0 && lastSumMonth) ? `<br><span style="font-size:10px;font-weight:400;color:#999;white-space:nowrap">${lastSumMonth.month}月まで</span>` : ''}</td><td>${totalBookings}件</td>
             <td>${fmtShort(totalRevenue)}<br><span style="font-size:10px;font-weight:400;color:#C8C5C0">${fmtShort(totalGuestPayment)}</span></td>
             <td style="font-size:11px">${totalADR.host>0?fmtShort(totalADR.host):'—'}<br><span style="font-size:10px;color:#C8C5C0">${totalADR.guest>0?fmtShort(totalADR.guest):''}</span>${totalLongNights>0?`<br><span style="font-size:9.5px;color:#4a7fc1;font-weight:700" title="長期滞在の合計${totalLongNights}泊（ADR/稼働の計算には含めていません）">長 ${fmtShort(Math.round(totalLongRev/totalLongNights))}</span>`:''}</td>
             <td style="font-size:11px">${totalRevPAR>0?fmtShort(totalRevPAR):'—'}</td>
@@ -5488,7 +5536,7 @@ function renderAnnual() {
             <div class="month-label">${m}月</div>
             ${!isFutureMonth ? (ms.isActual
               ? `<span style="font-size:10px;font-weight:700;color:#1C9A52;background:#F0FBF5;border-radius:6px;padding:2px 7px">✅ 実費</span>`
-              : `<span style="font-size:10px;font-weight:600;color:#B0ADA8;background:#F2F1EE;border-radius:6px;padding:2px 7px">〜 概算</span>`) : ''}
+              : `<span style="font-size:10px;font-weight:600;color:#B0ADA8;background:#F2F1EE;border-radius:6px;padding:2px 7px">〜 概算</span>`) : `<span style="font-size:10px;font-weight:700;color:#6B7A99;background:#EEF1F8;border-radius:6px;padding:2px 7px">予約途中</span>`}
             <div style="font-size:11px;color:#aaa">${ms.bookings}件・${ms.nights}泊${ms.adrBookings>0?'・平均'+(ms.nights/ms.adrBookings).toFixed(1)+'泊':''}${ms.leadCnt>0?'・リード'+Math.round(ms.leadSum/ms.leadCnt)+'日':''}${ms.leadCntL>0?'・長期リード'+Math.round(ms.leadSumL/ms.leadCntL)+'日':''}</div>
           </div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:3px">
@@ -5500,7 +5548,7 @@ function renderAnnual() {
           <div style="font-size:10px;color:#C8C5C0">ゲスト <span style="font-weight:700;color:#999">${fmtShort(getGuestPayment(ms.revenue))}円</span></div>
           <div style="font-size:10px;color:#C8C5C0;margin-top:1px">受取 <span style="font-weight:700;color:#666">${fmtShort(ms.revenue)}円</span></div>
           ${(() => { const a = adrPair(ms.adrRev, ms.nights); return a.host>0 ? `<div style="font-size:10px;color:#C8C5C0;margin-top:1px">ADR <span style="font-weight:700;color:#666">¥${fmt(a.host)}</span><span style="color:#C8C5C0">/¥${fmt(a.guest)}</span></div>` : ''; })()}
-          <div style="font-size:14px;font-weight:800;color:${isMP?'#1C9A52':'#E53935'};margin-top:2px">${isMP?'':'▲'}${fmtShort(Math.abs(ms.profit))}円</div>
+          <div style="font-size:14px;font-weight:800;color:${isFutureMonth ? '#9e9e9e' : (isMP?'#1C9A52':'#E53935')};margin-top:2px">${isMP?'':'▲'}${fmtShort(Math.abs(ms.profit))}円</div>
         </div>
         <span class="mchev" style="margin-left:6px">▼</span>
         ${!isFutureMonth && actBtns ? `<div style="flex-basis:100%;display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:6px">${(ms.operatingProps||[]).length>1?'<span style="font-size:10px;font-weight:700;color:#B0ADA8">実費の入力</span>':''}${actBtns}</div>` : ''}
