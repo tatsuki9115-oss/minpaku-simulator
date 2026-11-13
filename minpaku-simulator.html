@@ -4998,10 +4998,16 @@ function renderAnnual() {
 
   // フィルター適用（会計年度：currentAnnualYear/4〜currentAnnualYear+1/3）
   // ¥0の予約（ブロック期間・キャンセル等）は除外
+  // ★2026-11-14：年度（fy）を渡して呼べる関数にまとめた。計算の中身は変えていない。
+  //   「開業からの通算」でも、年度の表とまったく同じ計算を使うため（別の計算を作ると数字が合わなくなる）
+  const todayY = new Date().getFullYear();
+  const todayM = new Date().getMonth() + 1;
+  const fyMonthOrder = [4,5,6,7,8,9,10,11,12,1,2,3];
+  const _calcFiscalYear = (fy) => {
   const yearBooks = _annualAllBooks.filter(b => {
     if (!b.checkin || !b.revenue || b.revenue === 0) return false;
     const [by, bm] = b.checkin.split('/').map(Number);
-    const inFY = (by === currentAnnualYear && bm >= 4) || (by === currentAnnualYear + 1 && bm <= 3);
+    const inFY = (by === fy && bm >= 4) || (by === fy + 1 && bm <= 3);
     if (!inFY) return false;
     if (annualPropFilter !== 'all') return getBookingPropId(b) === parseInt(annualPropFilter);
     return true;
@@ -5013,15 +5019,12 @@ function renderAnnual() {
   const yearBooksAllProps = _annualAllBooks.filter(b => {
     if (!b.checkin || !b.revenue || b.revenue === 0) return false;
     const [by, bm] = b.checkin.split('/').map(Number);
-    return (by === currentAnnualYear && bm >= 4) || (by === currentAnnualYear + 1 && bm <= 3);
+    return (by === fy && bm >= 4) || (by === fy + 1 && bm <= 3);
   });
 
   // 月別統計を計算（会計年度順：4,5,...,12,1,2,3）
-  const todayY = new Date().getFullYear();
-  const todayM = new Date().getMonth() + 1;
-  const fyMonthOrder = [4,5,6,7,8,9,10,11,12,1,2,3];
   const monthlyStats = fyMonthOrder.map(m => {
-    const mYear = m >= 4 ? currentAnnualYear : currentAnnualYear + 1;
+    const mYear = m >= 4 ? fy : fy + 1;
     const mBooks = yearBooks.filter(b => {
       const [by, bm] = b.checkin.split('/').map(Number);
       return by === mYear && bm === m;
@@ -5083,6 +5086,9 @@ function renderAnnual() {
     const maxNights = dim * activePropCount;
     return { isFuture, month: m, year: mYear, revenue: rev, profit, nights, adrRev, adrBookings, leadSum, leadCnt, leadSumL, leadCntL, revAirbnb, revBooking, bookings: mBooks.length, daysInMonth: dim, maxNights, occRate: Math.min(Math.round(nights / maxNights * 100), 100), monthFixedCosts, monthTaxableFixedCosts, varCosts, isActual, operatingProps, longNights, longRev, longBookings };
   });
+  return { yearBooks, yearBooksAllProps, monthlyStats };
+  };
+  const { yearBooks, yearBooksAllProps, monthlyStats } = _calcFiscalYear(currentAnnualYear);
 
   const validMonths = monthlyStats.filter(Boolean);
 
@@ -5242,6 +5248,27 @@ function renderAnnual() {
   // 年度の合計は「今月まで」の月だけで出す（2026-11-13 オーナー指示）。
   // これからの月は、予約が1件でも入るとその月の固定費を丸ごと引くため、合計に混ぜると予約途中の赤字で年度の利益が小さく見えていた。
   // まだ始まっていない物件・年度（全部がこれからの月）は、合計を0にして「来月以降の予約」の行だけに出す
+  // ===== 開業からの通算（今月まで）：初期費用の合計・通算の利益・回収率・通算の利益率（2026-11-14 オーナー指示） =====
+  // 月ごとの利益は、年度の表と同じ計算（_calcFiscalYear）を年度ごとに呼んで足す＝各年度の「合計」を足した数字と一致する。
+  // 来月以降は入れない（上のまとめと同じ決まり）。下の「投資回収状況」は年度末までの見込みを足した別の数字。
+  const allTimeStats = (() => {
+    const targetProps = annualPropFilter === 'all' ? properties : properties.filter(p => String(p.id) === String(annualPropFilter));
+    const initialTotal = targetProps.reduce((sum, p) => sum + (p.initialCosts || []).reduce((ss, c) => ss + (c.amount || 0), 0), 0);
+    const todayFY = todayM >= 4 ? todayY : todayY - 1;
+    const startFYs = targetProps.filter(p => p.operationStart).map(p => { const [sy, sm] = p.operationStart.split('-').map(Number); return sm >= 4 ? sy : sy - 1; });
+    const firstFY = Math.min(todayFY, ...(fiscalYears.length > 0 ? [fiscalYears[0]] : []), ...startFYs);
+    let revenue = 0, profit = 0, firstMonth = null;
+    for (let fy = firstFY; fy <= todayFY; fy++) {
+      const stats = fy === currentAnnualYear ? monthlyStats : _calcFiscalYear(fy).monthlyStats;
+      stats.forEach(ms => {
+        if (!ms || ms.isFuture) return;
+        revenue += ms.revenue; profit += ms.profit;
+        if (!firstMonth) firstMonth = { year: ms.year, month: ms.month };
+      });
+    }
+    return { propCount: targetProps.length, initialTotal, revenue, profit, net: profit - initialTotal, firstMonth };
+  })();
+
   const sumMonths = validMonths.filter(v => !v.isFuture);
   const futureMonths = validMonths.filter(v => v.isFuture);
   const futureBookings = futureMonths.reduce((s, m) => s + m.bookings, 0);
@@ -5390,6 +5417,47 @@ function renderAnnual() {
       <span style="font-weight:800">来月以降の予約（確定分）</span>　${futureBookings}件・受取 <strong>${fmtShort(futureRevenue)}円</strong>
       <div style="font-size:10px;color:#8A93A6">上の数字には入れていません（来月以降は予約がそろっていないため、利益はまだ出しません）</div>
     </div>` : ''}
+    ${allTimeStats.initialTotal > 0 ? (() => {
+      const a = allTimeStats;
+      const pct = Math.round(a.profit / a.initialTotal * 100);
+      const done = a.net >= 0;
+      const margin = a.revenue > 0 ? Math.round(a.profit / a.revenue * 100) : null;
+      const profitPos = a.profit >= 0;
+      const period = a.firstMonth ? `${a.firstMonth.year}/${a.firstMonth.month}〜${todayY}/${todayM}（今月まで）` : '今月まで（まだ始まっていません）';
+      const tile = 'border-radius:10px;padding:10px 12px';
+      const lab = 'font-size:10px;font-weight:700;color:#B0ADA8;margin-bottom:4px';
+      const num = "font-family:'Inter',sans-serif;font-size:18px;font-weight:900;line-height:1.1";
+      const sub = 'font-size:10px;color:#C8C5C0;margin-top:2px';
+      return `<div style="margin-top:12px;padding-top:12px;border-top:1px solid #F2F1EE">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <div style="font-size:11px;font-weight:700;color:#B0ADA8;letter-spacing:.06em">開業からの通算・初期費用の回収</div>
+        <div style="font-size:10px;color:#C8C5C0">${period}</div>
+      </div>
+      <div class="kpi-grid-4" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
+        <div style="background:#F9F8F6;${tile}">
+          <div style="${lab}">初期費用の合計</div>
+          <div style="${num};color:#1C1C1E">${fmtShort(a.initialTotal)}円</div>
+          <div style="${sub}">${annualPropFilter === 'all' ? '全' + a.propCount + '物件' : 'この物件'}</div>
+        </div>
+        <div style="background:#F9F8F6;${tile}">
+          <div style="${lab}">通算の利益</div>
+          <div style="${num};color:${profitPos ? '#1C1C1E' : '#E53935'}">${profitPos ? '' : '▲'}${fmtShort(Math.abs(a.profit))}円</div>
+          <div style="${sub}">初期費用を引く前</div>
+        </div>
+        <div style="background:${done ? '#F0FBF5' : '#F9F8F6'};${tile}">
+          <div style="${lab}">初期費用の回収率</div>
+          <div style="${num};color:${done ? '#1C9A52' : (profitPos ? '#1C1C1E' : '#E53935')}">${pct < 0 ? '▲' : ''}${Math.abs(pct)}%</div>
+          <div style="${sub}">${done ? '回収済み ＋' + fmtShort(a.net) + '円' : 'あと ' + fmtShort(-a.net) + '円'}</div>
+        </div>
+        <div style="background:${profitPos ? '#F0FBF5' : '#FFF5F5'};${tile}">
+          <div style="${lab}">トータルの利益率</div>
+          <div style="${num};color:${profitPos ? '#1C9A52' : '#E53935'}">${margin === null ? '—' : (margin < 0 ? '▲' : '') + Math.abs(margin) + '%'}</div>
+          <div style="${sub}">通算の利益÷通算の受取</div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:#B0ADA8;line-height:1.6;margin-top:8px">受取の通算 ${fmtShort(a.revenue)}円。今月までの実績だけで出しています（下の「投資回収状況」は、年度末までの見込みを足した数字です）</div>
+    </div>`;
+    })() : ''}
   </div>`;
 
   // グラフ＋月別テーブルを1枚のカードに統合（上部に配置）
