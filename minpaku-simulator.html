@@ -1895,8 +1895,10 @@ function renderMonthly() {
       if (prop && !hasActualCosts(getBookingPropId(b), by, bm)) {
         totalVarCosts += getPerBookingTotal(b, prop);
       }
-      if (!isLongStayListing(b)) totalNights += b.nights;
     });
+    // 稼働の泊数：この月に実際に泊まった分（マンスリー込み・月またぎは泊まった月へ・2026-11-15〜）
+    totalNights = getStayMonthStats(getAllBookings().filter(b => b.checkin && b.revenue &&
+      (monthlyPropFilter === 'all' || getBookingPropId(b) === parseInt(monthlyPropFilter))), year, month).nights;
     // 実費保存済み物件の変動費を月単位で加算
     const monthPropsM = monthlyPropFilter === 'all'
       ? properties.filter(p => isPropertyOperating(p, year, month))
@@ -2276,19 +2278,23 @@ function renderCalendarTab() {
         : _calCards.map(c => c.html).join('')}
     </div>`;
 
-  // 月サマリー（実績タブと同じチェックイン月基準・28泊以上はADR/稼働から除外）
-  const _sumBooks = getAllBookings().filter(b => {
+  // 月サマリー（実績タブと同じ数え方：売上はチェックイン月・稼働とADRはこの月に実際に泊まった分。マンスリー込み・2026-11-15〜）
+  const _sumPropBooks = getAllBookings().filter(b => {
     if (!b.checkin || !b.revenue) return false;
-    if (calendarPropFilter !== 'all' && getBookingPropId(b) !== parseInt(calendarPropFilter)) return false;
+    return calendarPropFilter === 'all' || getBookingPropId(b) === parseInt(calendarPropFilter);
+  });
+  const _sumBooks = _sumPropBooks.filter(b => {
     const [by, bm] = b.checkin.split('/').map(Number);
     return by === y && bm === m;
   });
-  let _sumRev = 0, _sumNights = 0, _sumAdrRev = 0;
-  _sumBooks.forEach(b => { _sumRev += b.revenue; if (!isLongStayListing(b)) { _sumNights += b.nights; _sumAdrRev += b.revenue; } });
+  let _sumRev = 0;
+  _sumBooks.forEach(b => { _sumRev += b.revenue; });
+  const _sumStay = getStayMonthStats(_sumPropBooks, y, m);
+  const _sumNights = _sumStay.nights, _sumAdrRev = _sumStay.rev;
   const _sumPropCount = Math.max(calendarPropFilter === 'all' ? properties.filter(p => isPropertyOperating(p, y, m)).length : 1, 1);
   const _sumOcc = Math.min(Math.round(_sumNights / (daysInMonth * _sumPropCount) * 100), 100);
   const _sumAdr = _sumNights > 0 ? Math.round(_sumAdrRev / _sumNights) : 0;
-  const monthSummaryLine = _sumBooks.length > 0
+  const monthSummaryLine = (_sumBooks.length > 0 || _sumNights > 0)
     ? `<div style="font-size:10.5px;color:#888;margin-top:3px;font-weight:700">売上 ${fmtS(_sumRev)} ・ 稼働 ${_sumOcc}% ・ ADR ¥${fmt(_sumAdr)}</div>`
     : '';
 
@@ -3214,7 +3220,7 @@ function renderADRChart(monthlyStats) {
     + '<span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:12px;height:2px;background:#F07C3F"></span>受取ADR</span>'
     + '<span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:12px;height:2px;background:#B0ADA8;border-top:1px dashed #B0ADA8"></span>ゲスト支払ADR</span>'
     + '<span style="display:inline-flex;align-items:center;gap:4px"><span style="display:inline-block;width:12px;height:2px;background:#1C9A52"></span>RevPAR</span>'
-    + '<span style="color:#C8C5C0">（円/泊・28泊以上除く・数字は受取ADR）</span>'
+    + '<span style="color:#C8C5C0">（円/泊・マンスリー込み・泊まった日の月で集計・数字は受取ADR）</span>'
     + '</div>'
     + '<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="display:block">'
     + '<path d="'+guestL.d+'" fill="none" stroke="#B0ADA8" stroke-width="1.5" stroke-dasharray="4 3"/>'
@@ -4188,9 +4194,41 @@ function getBookingPropId(b) {
   if (b.propId != null) return b.propId;       // Booking.com: propIdを直接保持
   return listingMap[b.listing] || null;          // Airbnb: listingMapで解決
 }
-// 【28泊以上】リスティング or 28泊以上の予約 = 定期借家契約 → 稼働日数から除外（収益は実績に含める）
+// 【28泊以上】リスティング or 28泊以上の予約 = マンスリー（定期借家契約）
+// ★2026-11-15 オーナー決定「マンスリーで関係ないのは民泊新法の180日制限だけ」：
+//   外すのは180日のカウントだけ。稼働率・ADR・RevPAR・平均泊数・受取・利益にはふつうの予約と同じく入れる。
+//   この関数を稼働やADRの計算で使って除外し直さないこと（使ってよいのは180日カウントと「定期借家」の表示だけ）
 function isLongStayListing(b) {
   return (b.listing && b.listing.startsWith('【28泊以上】')) || (b.nights >= 28);
+}
+
+// 予約の泊のうち、y年m月に「実際に泊まった」泊数（2026-11-15 オーナー指示「月またぎも直して」）
+//   例：10/23チェックイン14泊 → 10月に9泊・11月に5泊。稼働ゲージ・ADR・RevPARはこの泊数で数える
+//   （受取・利益は今までどおりチェックインの月にまとめる）
+function nightsInMonth(b, y, m) {
+  const total = Number(b.nights) || 0;
+  if (!b.checkin || total <= 0) return 0;
+  const [cy, cm, cd] = b.checkin.split('/').map(Number);
+  const start = new Date(cy, cm - 1, cd);
+  const end = new Date(cy, cm - 1, cd + total);   // チェックアウトの日
+  const mStart = new Date(y, m - 1, 1), mEnd = new Date(y, m, 1);
+  const s = start > mStart ? start : mStart;
+  const e = end < mEnd ? end : mEnd;
+  return Math.max(0, Math.round((e - s) / 86400000));
+}
+
+// 予約の一覧から、y年m月に泊まった泊数と、その泊の分の受取（受取を泊数で割って月ごとに分けたもの）を出す
+//   ADR＝rev÷nights／RevPAR＝rev÷（月の日数×物件数）
+function getStayMonthStats(books, y, m) {
+  let nights = 0, rev = 0;
+  books.forEach(b => {
+    if (!b.revenue) return;
+    const n = nightsInMonth(b, y, m);
+    if (n <= 0) return;
+    nights += n;
+    rev += b.revenue * n / (Number(b.nights) || n);
+  });
+  return { nights, rev: Math.round(rev) };
 }
 
 // コインランドリーの初期値＝物件の「1組あたり変動費」のリネンの金額（未設定なら1,400円）
@@ -4393,8 +4431,9 @@ function renderDashboard() {
   const thisMonthRev = thisMonthBooks.reduce((s, b) => s + b.revenue, 0);
   const prevMonthRev = prevMonthBooks.reduce((s, b) => s + b.revenue, 0);
   const revDiff = thisMonthRev - prevMonthRev;
-  const thisMonthNights = thisMonthBooks.reduce((s, b) => s + (isLongStayListing(b) ? 0 : b.nights), 0);
-  const prevMonthNights = prevMonthBooks.reduce((s, b) => s + (isLongStayListing(b) ? 0 : b.nights), 0);
+  // 泊数：その月に実際に泊まった分（マンスリー込み・2026-11-15〜）
+  const thisMonthNights = getStayMonthStats(_allBooks.filter(b => b.checkin && b.revenue), thisYear, thisMonth).nights;
+  const prevMonthNights = getStayMonthStats(_allBooks.filter(b => b.checkin && b.revenue), prevYear, prevMonth).nights;
   const nightsDiff = thisMonthNights - prevMonthNights;
 
   // 今年度（4月開始3月終わり）の集計
@@ -4444,39 +4483,24 @@ function renderDashboard() {
   const fyMargin = fyRevenue > 0 ? Math.round(fyProfit / fyRevenue * 100) : null;
   const fyIsP = fyProfit >= 0;
 
-  // 稼働率：物件×月単位で集計。28泊以上長期予約がある月は短期稼働率の分母から除外（括弧書きで含めた数字も表示）
-  const monthsWithBookings = new Set();
-  fyBooks.forEach(b => {
-    const [by, bm] = b.checkin.split('/').map(Number);
-    monthsWithBookings.add(`${by}_${bm}`);
-  });
-  let occBookedShort = 0, occBookedAll = 0;
-  let occAvailShort = 0, occAvailAll = 0;
-  properties.forEach(p => {
-    monthsWithBookings.forEach(mk => {
-      const [yr, mo] = mk.split('_').map(Number);
+  // 稼働率（年度・今月まで）：物件×月ごとに、その月に実際に泊まった泊数÷その月の日数。
+  // ★2026-11-15 オーナー決定：マンスリー（28泊以上）も入れる（外すのは180日カウントだけ）・月またぎは泊まった月で数える。
+  // 泊まりが1泊もない物件×月（開業前の準備中など）は分母に入れない（今までと同じ）
+  const _occStayBooks = _allBooks.filter(b => b.checkin && b.revenue && b.revenue !== 0 && b.nights);
+  let occBooked = 0, occAvail = 0;
+  for (let i = 0; i < 12; i++) {
+    const mo = ((4 - 1 + i) % 12) + 1;
+    const yr = mo >= 4 ? fyStartYear : fyStartYear + 1;
+    if ((yr > _todayY) || (yr === _todayY && mo > _todayM)) continue; // 来月以降は入れない
+    properties.forEach(p => {
       if (!isPropertyOperating(p, yr, mo)) return;
-      const propMonthBooks = fyBooks.filter(b => {
-        const [by, bm] = b.checkin.split('/').map(Number);
-        return getBookingPropId(b) === p.id && by === yr && bm === mo;
-      });
-      if (propMonthBooks.length === 0) return; // この物件のこの月は予約なし → スキップ
-      const dim = getDaysInMonth(yr, mo);
-      const propAllNights = propMonthBooks.reduce((s,b) => s + b.nights, 0);
-      const propShortNights = propMonthBooks.filter(b => !isLongStayListing(b)).reduce((s,b) => s + b.nights, 0);
-      const hasLong = propMonthBooks.some(b => isLongStayListing(b));
-      // 含む長期：常にカウント
-      occAvailAll += dim;
-      occBookedAll += propAllNights;
-      // 短期のみ：長期予約のある物件×月は除外
-      if (!hasLong) {
-        occAvailShort += dim;
-        occBookedShort += propShortNights;
-      }
+      const n = getStayMonthStats(_occStayBooks.filter(b => getBookingPropId(b) === p.id), yr, mo).nights;
+      if (n === 0) return;
+      occAvail += getDaysInMonth(yr, mo);
+      occBooked += n;
     });
-  });
-  const occRateShort = occAvailShort > 0 ? Math.min(Math.round(occBookedShort / occAvailShort * 100), 100) : null;
-  const occRateAll = occAvailAll > 0 ? Math.min(Math.round(occBookedAll / occAvailAll * 100), 100) : null;
+  }
+  const occRateFY = occAvail > 0 ? Math.min(Math.round(occBooked / occAvail * 100), 100) : null;
 
   // ヘッダーカード（物件ごとの次の予約）
   const nextPerProp = properties.map(p => {
@@ -4506,7 +4530,7 @@ function renderDashboard() {
         <span style="font-size:10px;font-weight:700;color:#C8C5C0;white-space:nowrap">${fyStartYear}年度${fyFutureBooks.length > 0 ? `（${thisMonth}月まで）` : ''}</span>
         <span style="font-size:12px;color:#888;white-space:nowrap">受取 <strong style="color:#1C1C1E;font-size:14px">${fmtShort(fyRevenue)}円</strong></span>
         <span style="font-size:12px;color:#888;white-space:nowrap">利益 <strong style="color:${fyIsP?'#1C9A52':'#E53935'};font-size:14px">${fyIsP?'':'▲'}${fmtShort(Math.abs(fyProfit))}円</strong>${fyMargin!==null?` <span style="font-size:11px;font-weight:700;color:${fyIsP?'#1C9A52':'#E53935'}">(${fyIsP?'':'▲'}${Math.abs(fyMargin)}%)</span>`:''}</span>
-        <span style="font-size:12px;color:#888;white-space:nowrap">稼働 <strong style="color:#1C1C1E;font-size:14px">${occRateShort===null?'—':occRateShort+'%'}</strong></span>
+        <span style="font-size:12px;color:#888;white-space:nowrap">稼働 <strong style="color:#1C1C1E;font-size:14px">${occRateFY===null?'—':occRateFY+'%'}</strong></span>
         ${fyFutureBooks.length > 0 ? `<span style="flex-basis:100%;font-size:11px;color:#8A93A6">来月以降の予約 <strong style="color:#5B6478">${fyFutureBooks.length}件・受取${fmtShort(fyFutureRevenue)}円</strong>（上の数字とは別）</span>` : ''}
       </div>
       <span style="font-size:11px;font-weight:700;color:#F07C3F;white-space:nowrap;flex-shrink:0">年間の実績を見る ›</span>
@@ -4953,7 +4977,7 @@ function toggleCheckForDash(code, field) {
 function renderAnnual() {
   const content = document.getElementById('annual-content');
   const fmt = n => n.toLocaleString('ja-JP');
-  // ADR（1泊あたり単価）：長期予約(28泊以上)を除いた収入÷稼働日数。host=受取/泊, guest=ゲスト支払/泊
+  // ADR（1泊あたり単価）：その月に泊まった分の受取÷泊数（マンスリー込み・2026-11-15〜）。host=受取/泊, guest=ゲスト支払/泊
   const adrPair = (adrRev, nights) => ({
     host:  nights > 0 ? Math.round(adrRev / nights) : 0,
     guest: nights > 0 ? Math.round(getGuestPayment(adrRev) / nights) : 0,
@@ -5022,6 +5046,15 @@ function renderAnnual() {
     return (by === fy && bm >= 4) || (by === fy + 1 && bm <= 3);
   });
 
+  // 稼働ゲージ・ADR・RevPARは「実際に泊まった日の月」で数える（2026-11-15 オーナー指示）。
+  // 年度をまたぐ予約（3月末チェックイン→4月に泊まる）も拾うため、年度で絞らない一覧から割り振る
+  const stayBooks = _annualAllBooks.filter(b => {
+    if (!b.checkin || !b.revenue || b.revenue === 0 || !b.nights) return false;
+    if (annualPropFilter !== 'all') return getBookingPropId(b) === parseInt(annualPropFilter);
+    return true;
+  });
+  const stayBooksAllProps = _annualAllBooks.filter(b => b.checkin && b.revenue && b.revenue !== 0 && b.nights);
+
   // 月別統計を計算（会計年度順：4,5,...,12,1,2,3）
   const monthlyStats = fyMonthOrder.map(m => {
     const mYear = m >= 4 ? fy : fy + 1;
@@ -5031,10 +5064,11 @@ function renderAnnual() {
     });
     const isFuture = (mYear > todayY) || (mYear === todayY && m > todayM);
     // 未来の月を落とすかどうかは全物件基準で判定（物件フィルターの影響を受けない）
+    // チェックインがなくても、前の月からの泊まり（マンスリーなど）がある月は出す
     const anyPropHasBooks = yearBooksAllProps.some(b => {
       const [by, bm] = b.checkin.split('/').map(Number);
       return by === mYear && bm === m;
-    });
+    }) || stayBooksAllProps.some(b => nightsInMonth(b, mYear, m) > 0);
     if (isFuture && !anyPropHasBooks) return null;
 
     const operatingProps = annualPropFilter === 'all'
@@ -5047,8 +5081,9 @@ function renderAnnual() {
     const monthTaxableFixedCosts = operatingProps.reduce((s, p) => s + getPropMonthTaxableFixedCosts(p, mYear, m), 0);
     const isActual = operatingProps.some(p => hasActualCosts(p.id, mYear, m));
 
-    let rev = 0, varCosts = 0, nights = 0, adrRev = 0, adrBookings = 0, leadSum = 0, leadCnt = 0, leadSumL = 0, leadCntL = 0, revAirbnb = 0, revBooking = 0;
-    // 長期滞在（28泊以上＝定期借家）の集計。ADR・稼働の計算には入れず参考表示のみに使う
+    // ckNights＝この月にチェックインした予約の泊数の合計（平均泊数と、予約ごとの固定費の割り振りに使う）
+    let rev = 0, varCosts = 0, ckNights = 0, adrBookings = 0, leadSum = 0, leadCnt = 0, leadSumL = 0, leadCntL = 0, revAirbnb = 0, revBooking = 0;
+    // マンスリー（28泊以上）の集計。ADR・稼働にはふつうに入れたうえで、「うちマンスリー」の参考表示に使う
     let longNights = 0, longRev = 0, longBookings = 0;
     mBooks.forEach(b => {
       if (!b.revenue || b.revenue === 0) return; // ¥0予約はスキップ
@@ -5071,10 +5106,13 @@ function renderAnnual() {
       if (prop && !hasActualCosts(pid, mYear, m)) {
         varCosts += getPerBookingTotal(b, prop);
       }
-      // 【28泊以上】リスティング（定期借家契約）は稼働日数・ADRにカウントしない
-      if (!isLongStayListing(b)) { nights += b.nights; adrRev += b.revenue; adrBookings++; }
-      else { longNights += b.nights; longRev += b.revenue; longBookings++; }
+      // マンスリーも平均泊数に入れる（2026-11-15 オーナー決定・外すのは180日カウントだけ）
+      ckNights += b.nights; adrBookings++;
+      if (isLongStayListing(b)) { longNights += b.nights; longRev += b.revenue; longBookings++; }
     });
+    // 稼働の泊数とADR用の受取：この月に実際に泊まった分（前の月からの続きも含む・次の月へ続く分は次の月へ）
+    const _stay = getStayMonthStats(stayBooks, mYear, m);
+    const nights = _stay.nights, adrRev = _stay.rev;
     // 実費保存済み物件の変動費を月単位で加算
     operatingProps.forEach(p => { varCosts += getPropMonthActualVarCosts(p, mYear, m); });
     // スポット作業（清掃以外のスタッフ作業）。実費入力済みの月は実費側に含まれるので二重計上しない
@@ -5084,7 +5122,7 @@ function renderAnnual() {
     const dim = getDaysInMonth(mYear, m);
     const activePropCount = Math.max(operatingProps.length, 1);
     const maxNights = dim * activePropCount;
-    return { isFuture, month: m, year: mYear, revenue: rev, profit, nights, adrRev, adrBookings, leadSum, leadCnt, leadSumL, leadCntL, revAirbnb, revBooking, bookings: mBooks.length, daysInMonth: dim, maxNights, occRate: Math.min(Math.round(nights / maxNights * 100), 100), monthFixedCosts, monthTaxableFixedCosts, varCosts, isActual, operatingProps, longNights, longRev, longBookings };
+    return { isFuture, month: m, year: mYear, revenue: rev, profit, nights, ckNights, adrRev, adrBookings, leadSum, leadCnt, leadSumL, leadCntL, revAirbnb, revBooking, bookings: mBooks.length, daysInMonth: dim, maxNights, occRate: Math.min(Math.round(nights / maxNights * 100), 100), monthFixedCosts, monthTaxableFixedCosts, varCosts, isActual, operatingProps, longNights, longRev, longBookings };
   });
   return { yearBooks, yearBooksAllProps, monthlyStats };
   };
@@ -5161,7 +5199,7 @@ function renderAnnual() {
           <span>変動費 ${fmtShort(ms.varCosts)}円</span>
           ${(() => { const a = adrPair(ms.adrRev, ms.nights); return a.host>0 ? `<span>ADR 受取¥${fmt(a.host)} / ゲスト¥${fmt(a.guest)}（/泊）</span>` : ''; })()}
           ${ms.maxNights>0&&ms.adrRev>0 ? `<span>RevPAR ¥${fmt(Math.round(ms.adrRev/ms.maxNights))}</span>` : ''}
-          ${ms.adrBookings>0 ? `<span>平均滞在 ${(ms.nights/ms.adrBookings).toFixed(1)}泊</span>` : ''}
+          ${ms.adrBookings>0 ? `<span>平均滞在 ${(ms.ckNights/ms.adrBookings).toFixed(1)}泊</span>` : ''}
           ${(ms.leadCnt>0||ms.leadCntL>0) ? `<span>リードタイム ${ms.leadCnt>0?'短期'+Math.round(ms.leadSum/ms.leadCnt)+'日':''}${ms.leadCnt>0&&ms.leadCntL>0?' / ':''}${ms.leadCntL>0?'長期'+Math.round(ms.leadSumL/ms.leadCntL)+'日':''}</span>` : ''}
           ${(ms.revAirbnb+ms.revBooking)>0 ? `<span>Airbnb ${Math.round(ms.revAirbnb/(ms.revAirbnb+ms.revBooking)*100)}% / B.com ${100-Math.round(ms.revAirbnb/(ms.revAirbnb+ms.revBooking)*100)}%</span>` : ''}
         </div>
@@ -5181,8 +5219,8 @@ function renderAnnual() {
           const bColor = getPropColor(pid);
           const coStr = getCheckout(b);
           const bVarCost = (b.revenue > 0 && prop && !hasActualCosts(pid, sY, sM)) ? getPerBookingTotal(b, prop) : 0;
-          // 固定費按分（月の固定費 ÷ 月の合計宿泊日数 × この予約の宿泊日数）
-          const allocatedFixed = (ms && ms.nights > 0) ? Math.round(ms.monthFixedCosts / ms.nights * b.nights) : 0;
+          // 固定費按分（月の固定費 ÷ この月にチェックインした予約の泊数の合計 × この予約の宿泊日数）
+          const allocatedFixed = (ms && ms.ckNights > 0) ? Math.round(ms.monthFixedCosts / ms.ckNights * b.nights) : 0;
           const bProfit = b.revenue - allocatedFixed - bVarCost;
           const bIsP = bProfit >= 0;
           // 変動費内訳（カレンダーの実費入力 or スタッフ料金 or デフォルト）
@@ -5280,7 +5318,7 @@ function renderAnnual() {
   const totalBookings = sumMonths.reduce((s, m) => s + m.bookings, 0);
   const totalAdrRev = sumMonths.reduce((s, m) => s + (m.adrRev || 0), 0);
   const totalADR = adrPair(totalAdrRev, totalNights);
-  // 長期滞在（28泊以上）の年間合計。参考表示のみでADR・稼働・RevPARには含めない
+  // マンスリー（28泊以上）の年間合計。ADR・稼働・RevPARにはふつうに入っている。「うちマンスリー」の参考表示用
   const totalLongNights = sumMonths.reduce((s, m) => s + (m.longNights || 0), 0);
   const totalLongRev    = sumMonths.reduce((s, m) => s + (m.longRev || 0), 0);
   const avgPerNight = totalNights > 0 ? Math.round(totalRevenue / totalNights) : 0;
@@ -5288,7 +5326,8 @@ function renderAnnual() {
   const totalMaxNights = sumMonths.reduce((s, m) => s + (m.maxNights || 0), 0);
   const totalRevPAR = totalMaxNights > 0 ? Math.round(totalAdrRev / totalMaxNights) : 0;
   const totalAdrBookings = sumMonths.reduce((s, m) => s + (m.adrBookings || 0), 0);
-  const totalLOS = totalAdrBookings > 0 ? (totalNights / totalAdrBookings) : 0;
+  const totalCkNights = sumMonths.reduce((s, m) => s + (m.ckNights || 0), 0);
+  const totalLOS = totalAdrBookings > 0 ? (totalCkNights / totalAdrBookings) : 0;
   const totalLeadSum = sumMonths.reduce((s, m) => s + (m.leadSum || 0), 0);
   const totalLeadCnt = sumMonths.reduce((s, m) => s + (m.leadCnt || 0), 0);
   const avgLead = totalLeadCnt > 0 ? Math.round(totalLeadSum / totalLeadCnt) : null;
@@ -5485,7 +5524,7 @@ function renderAnnual() {
       <div style="height:1px;background:#f0f0f0;margin:14px 0 12px"></div>
       <div class="month-table-wrap">
       <table class="month-table" style="min-width:0">
-        <thead><tr><th>月</th><th>件<br><span style="font-size:9px;font-weight:400;color:#C8C5C0">稼働</span></th><th>受取<br><span style="font-size:9px;font-weight:400;color:#C8C5C0">ゲスト</span></th><th>ADR<br><span style="font-size:9px;font-weight:400;color:#C8C5C0">受取/ゲスト</span><br><span style="font-size:8.5px;font-weight:400;color:#4a7fc1">長=長期(計算外)</span></th><th>RevPAR</th><th>利益<br><span style="font-size:9px;font-weight:400;color:#C8C5C0">利益率</span></th></tr></thead>
+        <thead><tr><th>月</th><th>件<br><span style="font-size:9px;font-weight:400;color:#C8C5C0">稼働</span></th><th>受取<br><span style="font-size:9px;font-weight:400;color:#C8C5C0">ゲスト</span></th><th>ADR<br><span style="font-size:9px;font-weight:400;color:#C8C5C0">受取/ゲスト</span><br><span style="font-size:8.5px;font-weight:400;color:#4a7fc1">マ=うちマンスリー</span></th><th>RevPAR</th><th>利益<br><span style="font-size:9px;font-weight:400;color:#C8C5C0">利益率</span></th></tr></thead>
         <tbody>
           ${monthlyStats.map((ms, i) => {
             const mo = fyMonthOrder[i];
@@ -5494,10 +5533,10 @@ function renderAnnual() {
             const gp = getGuestPayment(ms.revenue);
             const mMargin = ms.revenue > 0 ? Math.round(ms.profit/ms.revenue*100) : null;
             const adr = adrPair(ms.adrRev, ms.nights);
-            // 長期滞在（28泊以上）のADRは計算に入れず、参考値として青字で併記する
+            // マンスリー（28泊以上）だけの1泊あたりを、参考値として青字で併記する（上のADRにはマンスリーも入っている）
             const longAdr = ms.longNights > 0 ? Math.round(ms.longRev / ms.longNights) : 0;
             const longCell = longAdr > 0
-              ? `<br><span style="font-size:9.5px;color:#4a7fc1;font-weight:700" title="長期滞在${ms.longNights}泊（定期借家扱い・ADR/稼働の計算には含めていません）">長 ${fmtShort(longAdr)}</span>`
+              ? `<br><span style="font-size:9.5px;color:#4a7fc1;font-weight:700" title="うちマンスリー${ms.longNights}泊の1泊あたり（ADR・稼働にはマンスリーも入っています）">マ ${fmtShort(longAdr)}</span>`
               : '';
             return `<tr style="cursor:pointer" onclick="document.getElementById('mcard-${ms.month}').scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>{var body=document.getElementById('mcard-${ms.month}').querySelector('.month-detail-body');if(!body.classList.contains('open')){body.classList.add('open');var ch=document.getElementById('mcard-${ms.month}').querySelector('.mchev');if(ch)ch.style.transform='rotate(180deg)';}},300)">
               <td>${ms.month}月${ms.isFuture ? '<br><span style="font-size:10px;font-weight:700;color:#8A93A6;white-space:nowrap">予約途中</span>' : ''}</td>
@@ -5511,7 +5550,7 @@ function renderAnnual() {
           <tr class="total-row">
             <td>合計${(futureMonths.length > 0 && lastSumMonth) ? `<br><span style="font-size:10px;font-weight:400;color:#999;white-space:nowrap">${lastSumMonth.month}月まで</span>` : ''}</td><td>${totalBookings}件</td>
             <td>${fmtShort(totalRevenue)}<br><span style="font-size:10px;font-weight:400;color:#C8C5C0">${fmtShort(totalGuestPayment)}</span></td>
-            <td style="font-size:11px">${totalADR.host>0?fmtShort(totalADR.host):'—'}<br><span style="font-size:10px;color:#C8C5C0">${totalADR.guest>0?fmtShort(totalADR.guest):''}</span>${totalLongNights>0?`<br><span style="font-size:9.5px;color:#4a7fc1;font-weight:700" title="長期滞在の合計${totalLongNights}泊（ADR/稼働の計算には含めていません）">長 ${fmtShort(Math.round(totalLongRev/totalLongNights))}</span>`:''}</td>
+            <td style="font-size:11px">${totalADR.host>0?fmtShort(totalADR.host):'—'}<br><span style="font-size:10px;color:#C8C5C0">${totalADR.guest>0?fmtShort(totalADR.guest):''}</span>${totalLongNights>0?`<br><span style="font-size:9.5px;color:#4a7fc1;font-weight:700" title="うちマンスリーの合計${totalLongNights}泊の1泊あたり（ADR・稼働にはマンスリーも入っています）">マ ${fmtShort(Math.round(totalLongRev/totalLongNights))}</span>`:''}</td>
             <td style="font-size:11px">${totalRevPAR>0?fmtShort(totalRevPAR):'—'}</td>
             <td class="td-profit ${isAP?'profit':'loss'}">${isAP?'':'▲'}${fmtShort(Math.abs(totalProfit))}<br><span style="font-size:10px">${totalRevenue>0?(isAP?'':'▲')+Math.abs(Math.round(totalProfit/totalRevenue*100))+'%':'—'}</span></td>
           </tr>
@@ -5605,7 +5644,7 @@ function renderAnnual() {
             ${!isFutureMonth ? (ms.isActual
               ? `<span style="font-size:10px;font-weight:700;color:#1C9A52;background:#F0FBF5;border-radius:6px;padding:2px 7px">✅ 実費</span>`
               : `<span style="font-size:10px;font-weight:600;color:#B0ADA8;background:#F2F1EE;border-radius:6px;padding:2px 7px">〜 概算</span>`) : `<span style="font-size:10px;font-weight:700;color:#6B7A99;background:#EEF1F8;border-radius:6px;padding:2px 7px">予約途中</span>`}
-            <div style="font-size:11px;color:#aaa">${ms.bookings}件・${ms.nights}泊${ms.adrBookings>0?'・平均'+(ms.nights/ms.adrBookings).toFixed(1)+'泊':''}${ms.leadCnt>0?'・リード'+Math.round(ms.leadSum/ms.leadCnt)+'日':''}${ms.leadCntL>0?'・長期リード'+Math.round(ms.leadSumL/ms.leadCntL)+'日':''}</div>
+            <div style="font-size:11px;color:#aaa">${ms.bookings}件${ms.adrBookings>0?'・平均'+(ms.ckNights/ms.adrBookings).toFixed(1)+'泊':''}${ms.leadCnt>0?'・リード'+Math.round(ms.leadSum/ms.leadCnt)+'日':''}${ms.leadCntL>0?'・長期リード'+Math.round(ms.leadSumL/ms.leadCntL)+'日':''}</div>
           </div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:3px">
             <div style="flex:1;max-width:80px;height:4px;background:#E8ECF8;border-radius:2px"><div style="width:${ms.occRate}%;height:100%;background:#F07C3F;border-radius:2px"></div></div>
@@ -5631,8 +5670,8 @@ function renderAnnual() {
               const bColor = getPropColor(pid);
               const coStr = getCheckout(b);
               const fmtD = s => { if (!s) return '?'; const p = s.split('/'); return `${parseInt(p[1])}/${parseInt(p[2])}`; };
-              // 利益 = 受取 - 固定費按分(泊数÷月総泊数) - 変動費
-              const allocatedFixed = ms.nights > 0 ? Math.round(ms.monthFixedCosts / ms.nights * b.nights) : 0;
+              // 利益 = 受取 - 固定費按分(泊数÷この月にチェックインした予約の泊数の合計) - 変動費
+              const allocatedFixed = ms.ckNights > 0 ? Math.round(ms.monthFixedCosts / ms.ckNights * b.nights) : 0;
               const bVarCost = (prop && !hasActualCosts(pid, ms.year, ms.month)) ? getPerBookingTotal(b, prop) : 0;
               const bProfit = b.revenue - allocatedFixed - bVarCost;
               const bIsP = bProfit >= 0;
