@@ -5986,8 +5986,8 @@ function showCleaningReminderForm(code) {
       </div>
       ` : ''}
 
-      <!-- メッセージカード（ECRUはカードをセットしないので出さない） -->
-      ${_isEcruProp(prop) ? '' : `
+      <!-- メッセージカード（ECRUとATTビル302はカード・折り鶴をセットしないので出さない＝302は2026-11-18 オーナー） -->
+      ${(_isEcruProp(prop) || String(propId) === '1790994662269') ? '' : `
       <div style="margin-bottom:14px">
         <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px">💌 メッセージカードの種類</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -6173,8 +6173,11 @@ function generateCleaningReminderMsg(code) {
     lines.push(`🗑️ ゴミ袋：${st.trash === 'biz' ? '事業用' : '透明'}`);
     // キーボックス
     if (keybox) lines.push(`🔐 キーボックス：${keybox}`);
-    lines.push(`💌 メッセージカード：${st.card === 'en' ? '英語' : '日本語'}`);
+    // ATTビル302は折り鶴・メッセージカードを置かない／シングル用のリネンは敷布団セットと同じ収納袋（2026-11-18 オーナー）
+    const _isAtt302 = String(propId) === '1790994662269';
+    if (!_isAtt302) lines.push(`💌 メッセージカード：${st.card === 'en' ? '英語' : '日本語'}`);
     lines.push(`🛏️ リネン：${st.linen === '3' ? '3人分' : '2人分'}セット`);
+    if (_isAtt302 && st.linen === '3') lines.push('　→ シングル用のシーツ・布団カバーは、敷布団セットと同じ収納袋に入っています');
     lines.push('');
     lines.push('よろしくお願いします！🙌');
   }
