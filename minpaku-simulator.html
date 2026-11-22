@@ -1163,6 +1163,21 @@ function saveBookingComData() { fbSave(KEYS.bookingCom, bookingComBookings); }
 // Airbnb + Booking.com 統合配列
 function getAllBookings() { return [...airbnbBookings, ...bookingComBookings]; }
 function findBookingByCode(code) { return getAllBookings().find(x => x.code === code) || findPendingRequest(code); }
+// どのサイトの予約か：'airbnb' | 'booking' | ''（分からない）。
+// 2026-11-20 オーナー「メッセージも返信アプリもbooking.comかAirbnbかきちんと判断できるようにして」
+//   正本は Beds24 の channel（Worker が source・channel に入れる）。分からないときは Airbnb と決めつけない。
+//   ⛔「10桁の数字＝Booking.com」では見分けない（Airbnbの承認前リクエストも10桁の数字の番号）
+function getBookingChannel(b) {
+  if (!b) return '';
+  const s = String(b.source || b.channel || '').toLowerCase();
+  if (s === 'booking') return 'booking';
+  if (s === 'airbnb') return 'airbnb';
+  if (bookingComBookings.includes(b)) return 'booking';
+  if (/^HM[A-Z0-9]{8}$/.test(String(b.code || '').trim())) return 'airbnb'; // Airbnbの予約番号の形
+  if (!s && airbnbBookings.includes(b)) return 'airbnb';                    // AirbnbのCSVから読み込んだ予約（sourceが無い）
+  return '';
+}
+function channelDisplayName(ch) { return ch === 'booking' ? 'Booking.com' : ch === 'airbnb' ? 'Airbnb' : ''; }
 // 承認前リクエストを予約と同じ形で返す（メッセージ画面で選んだときだけ使われる）。
 // getAllBookings には入れないので、売上・180日・稼働率・要対応・カレンダーには出ない
 function findPendingRequest(code) {
@@ -1171,7 +1186,7 @@ function findPendingRequest(code) {
   return {
     code: String(r.code), guestName: r.guestName || '', checkin: r.checkin, checkout: r.checkout,
     nights: r.nights, propId: r.propId, adults: r.adults, children: r.children || 0, infants: 0,
-    listing: '', source: r.channel || 'airbnb', revenue: 0, isRequest: true,
+    listing: '', source: r.channel || '', revenue: 0, isRequest: true, // サイトが分からないときは空（Airbnbと決めつけない）
   };
 }
 
@@ -5502,19 +5517,24 @@ function renderAnnual() {
   // グラフ＋月別テーブルを1枚のカードに統合（上部に配置）
   {
     const targetPropsForChart = annualPropFilter === 'all' ? properties : properties.filter(p => String(p.id) === String(annualPropFilter));
-    const initOf = list => list.reduce((s, p) => s + (p.initialCosts || []).reduce((ss, c) => ss + (c.amount || 0), 0), 0);
+    // 目標＝初期費用をいつまでに回収するか（月あたりの利益）。ふつうは1年（12か月）、ECRUは開業時の目標どおり2年（24か月）
+    // 2026-11-22 オーナー「ECRUに関しては元々2年回収目標だったと思うから修正して」（開業準備メモ：回収 約21〜24ヶ月）
+    const paybackMonthsOf = p => _isEcruProp(p) ? 24 : 12;
+    const initOfOne = p => (p.initialCosts || []).reduce((ss, c) => ss + (c.amount || 0), 0);
+    const monthlyTargetOf = list => Math.round(list.reduce((s, p) => s + initOfOne(p) / paybackMonthsOf(p), 0));
+    const ecruNote = targetPropsForChart.some(p => _isEcruProp(p)) ? '・ECRUは2年' : '';
     // 年度開始(4月)時点で営業していた物件＝既存 / 年度途中に開業した物件＝新規
     // 新規物件の初期投資は目標を大きく押し上げるため、既存だけのラインも併記して比べられるようにする
     const existingProps = targetPropsForChart.filter(p => isPropertyOperating(p, currentAnnualYear, 4));
     const newProps = targetPropsForChart.filter(p => !isPropertyOperating(p, currentAnnualYear, 4));
-    const totalInitialForChart = initOf(targetPropsForChart);
-    const monthlyTargetAll = totalInitialForChart > 0 ? Math.round(totalInitialForChart / 12) : 0;
+    const monthlyTargetAll = monthlyTargetOf(targetPropsForChart);
+    const existingNote = existingProps.some(p => _isEcruProp(p)) ? '・ECRUは2年' : '';
     const monthlyTarget = (existingProps.length > 0 && newProps.length > 0)
       ? [
-          { value: Math.round(initOf(existingProps) / 12), label: '（'+newProps.map(p => p.name).join('・')+' 除く）', color: '#9e9e9e' },
-          { value: monthlyTargetAll, label: '（全'+targetPropsForChart.length+'件）', color: '#ff9800' },
+          { value: monthlyTargetOf(existingProps), label: '（'+newProps.map(p => p.name).join('・')+' 除く'+existingNote+'）', color: '#9e9e9e' },
+          { value: monthlyTargetAll, label: '（全'+targetPropsForChart.length+'件'+ecruNote+'）', color: '#ff9800' },
         ]
-      : monthlyTargetAll;
+      : [{ value: monthlyTargetAll, label: ecruNote ? '（2年で回収）' : '', color: '#ff9800' }];
     html += `<div class="card" style="margin-bottom:12px">
       <div class="card-title" style="margin-bottom:10px">月別利益（緑＝黒字 / 赤＝赤字）</div>
       ${renderProfitChart(monthlyStats, monthlyTarget)}
@@ -7005,6 +7025,14 @@ function renderMessageTab() {
         <label style="font-size:11px;font-weight:700;color:#B0ADA8;display:block;margin-bottom:4px">ゲスト名</label>
         <input type="text" id="msg-guest-name" placeholder="例：Tanaka Tatsuki" style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:10px 12px;font-size:14px;font-weight:600;background:#FAFAF9;box-sizing:border-box">
       </div>
+      <div style="margin-bottom:10px">
+        <label style="font-size:11px;font-weight:700;color:#B0ADA8;display:block;margin-bottom:4px">予約サイト（予約選択で自動・頼む文の書き方が変わります）</label>
+        <select id="msg-channel" style="width:100%;border:1.5px solid #E8E6E1;border-radius:10px;padding:10px 12px;font-size:14px;font-weight:700;background:#FAFAF9;box-sizing:border-box">
+          <option value="">不明（サイト特有の機能には触れない）</option>
+          <option value="airbnb">🅐 Airbnb</option>
+          <option value="booking">📘 Booking.com</option>
+        </select>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
         <div>
           <label style="font-size:11px;font-weight:700;color:#B0ADA8;display:block;margin-bottom:4px">チェックイン</label>
@@ -7052,7 +7080,7 @@ function renderMessageTab() {
     </div>
     <div class="card">
       <div class="card-title">💬 WhatsApp会話メモ <span style="font-size:10px;font-weight:400;color:#25D366">（予約ごとに記憶・返信生成時に参照）</span></div>
-      <div style="font-size:11px;color:#aaa;margin-bottom:8px;line-height:1.6">WhatsAppでやり取りしたゲストは、ここに会話を貼っておくと保存され、次回も覚えています。Airbnbの履歴と合わせて返信案を考えます。</div>
+      <div style="font-size:11px;color:#aaa;margin-bottom:8px;line-height:1.6">WhatsAppでやり取りしたゲストは、ここに会話を貼っておくと保存され、次回も覚えています。Airbnb／Booking.comの履歴と合わせて返信案を考えます。</div>
       <textarea id="msg-whatsapp" oninput="onWhatsappInput()" placeholder="WhatsAppの会話をコピペ（例：&#10;ゲスト: Can we check in early?&#10;私: Sure, from 13:00 is possible 😊）" style="width:100%;border:1.5px solid #25D366;border-radius:10px;padding:12px;font-size:14px;line-height:1.7;resize:vertical;min-height:90px;background:#F6FFF9;font-family:inherit;box-sizing:border-box"></textarea>
       <div id="msg-whatsapp-saved" style="font-size:10px;color:#1C9A52;margin-top:4px;text-align:right;min-height:13px"></div>
     </div>
@@ -7097,9 +7125,12 @@ function buildMsgBookingOptions() {
     const prop = properties.find(p => p.id === getBookingPropId(b));
     const propLabel = prop ? prop.name : '?';
     const usageLabel = getMsgUsageLabel(b.code);
+    // どのサイトの予約かを宿名の横に出す（2026-11-20 オーナー「booking.comかAirbnbかきちんと判断」）
+    const chName = channelDisplayName(getBookingChannel(b));
+    const propWithCh = chName ? `${propLabel}・${chName === 'Booking.com' ? 'B.com' : chName}` : propLabel;
     // 検索は今までどおり「2026/11/10」の形でも当たるよう、元の文字も持っておく
-    const search = `${b.guestName || ''} / ${b.checkin} / ${getCheckout(b)} / ${propLabel}`;
-    return `<option value="${escHtml(b.code)}" data-search="${escHtml(search)}">${fmtOptDate(x.cin)}→${fmtOptDate(x.cout)}｜${escHtml(propLabel)}｜${escHtml(b.guestName || '?')}　${usageLabel}</option>`;
+    const search = `${b.guestName || ''} / ${b.checkin} / ${getCheckout(b)} / ${propLabel} / ${chName}`;
+    return `<option value="${escHtml(b.code)}" data-search="${escHtml(search)}">${fmtOptDate(x.cin)}→${fmtOptDate(x.cout)}｜${escHtml(propWithCh)}｜${escHtml(b.guestName || '?')}　${usageLabel}</option>`;
   };
   const activeOptions = active.map(optOf).join('');
   const doneOptions = done.map(optOf).join('');
@@ -7108,7 +7139,8 @@ function buildMsgBookingOptions() {
   const reqs = (pendingRequests || []).filter(r => r && r.code && !getAllBookings().some(b => b.code === String(r.code)));
   const requestOptions = reqs.map(r => {
     const prop = properties.find(p => p.id === r.propId);
-    const propLabel = prop ? prop.name : '?';
+    const _rCh = channelDisplayName(String(r.channel || '').toLowerCase());
+    const propLabel = (prop ? prop.name : '?') + (_rCh ? '・' + (_rCh === 'Booking.com' ? 'B.com' : _rCh) : '');
     const people = `大人${Number(r.adults) || 0}${Number(r.children) ? '・子ども' + Number(r.children) : ''}`;
     const nights = Number(r.nights) || 0;
     const rawCin = String(r.checkin || '');
@@ -7168,6 +7200,7 @@ function onMsgBookingSelect() {
     if (info) info.innerHTML = `📍 ${escHtml(b.guestName || 'ゲスト')}／${prop ? escHtml(prop.name) : '?'}（${escHtml(area.label)}）`;
   } else if (msgMode !== 'welcome') {
     document.getElementById('msg-guest-name').value = b.guestName || '';
+    { const chEl = document.getElementById('msg-channel'); if (chEl) chEl.value = getBookingChannel(b); }
     document.getElementById('msg-checkin').value    = b.checkin   || '';
     document.getElementById('msg-checkout').value   = getCheckout(b) || '';
     document.getElementById('msg-prop-name').value  = prop ? prop.name : '';
@@ -8604,6 +8637,22 @@ function generateMsgPrompt() {
   const language   = document.getElementById('msg-language').value.trim();
   const guestText  = document.getElementById('msg-guest-text').value.trim();
   const notes      = document.getElementById('msg-notes').value.trim();
+  // どのサイトの予約か（予約選択で自動・手で直せる）。2026-11-20 まで「Airbnb」と決め打ちで、B.comのゲストにもAirbnbとして書かせていた
+  //   欄が空のときは選んだ予約のサイトで補う（欄を描き直したあとなどに「不明」へ戻ってAirbnbのレビューにならないように）
+  const channel    = String(document.getElementById('msg-channel')?.value || (code ? getBookingChannel(findBookingByCode(code)) : '') || '').toLowerCase();
+  const chName     = channelDisplayName(channel);   // 'Airbnb' | 'Booking.com' | ''
+  const isBcom     = channel === 'booking';
+  const siteName   = chName || '予約サイト';
+  const channelLine = `- 予約経路：${chName || '不明（Airbnb か Booking.com か分からない。どちらかのサイトにしかない機能・画面の名前は書かないこと）'}\n`;
+  const channelRules = isBcom ? `
+## この予約は Booking.com です（Airbnbではありません）
+- Airbnbの名前・画面・機能（ハートのリアクション・特別オファー・予約リクエスト・Airbnbのアプリなど）を書かない・案内しないこと。案内するときは「Booking.comのメッセージ」「Booking.comの予約画面」と書く
+- Booking.comにはハートのリアクションがありません。お礼・了解だけで返事が要らないときは「返信なしで大丈夫です」と判断し、ハートには触れないこと
+- Booking.comでは、ゲストのメッセージが日本語に翻訳されて表示されることがあります。ゲスト名や国籍から日本の方ではなさそうなのに日本語で表示されているときは、翻訳表示とみなし、その方の言葉で書くこと（台湾・香港＝中国語（繁体字）、中国＝中国語（簡体字）、韓国＝韓国語。分からなければ英語）
+` : channel === 'airbnb' ? `
+## この予約は Airbnb です（Booking.comではありません）
+- Booking.comの名前・画面・機能を書かない・案内しないこと
+` : '';
 
   // 承認前のリクエストなら、AIに「まだ予約は確定していない」ことが伝わるように段階の頭に付ける
   const isRequest  = !!code && !getAllBookings().some(b => b.code === code) && !!findPendingRequest(code);
@@ -8619,14 +8668,69 @@ function generateMsgPrompt() {
     ? (isJP ? '日本語のみで作成してください。' : `**日本語と${language}の両方**で作成してください（日本語→${language}の順）。`)
     : `**日本語と、ゲストが使っている言語の両方**で作成してください（日本語→ゲストの言語の順）。
 - ゲストの言語は、この依頼文の「会話履歴」と「今回ゲストから届いた未返信メッセージ」の文面から判断すること
-- ゲストが日本語でやり取りしている場合は、日本語のみで作成すること
+- ゲストが日本語でやり取りしている場合は、日本語のみで作成すること${isBcom ? `
+- ただし Booking.com は、ゲストの文が日本語に翻訳されて表示されることがある。文面が日本語でも、ゲスト名・国籍から日本の方ではなさそうなら翻訳表示とみなし、その方の言葉も入れること` : ''}
 - 判断できる材料がない場合は、日本語と英語で作成すること
 - 回答の一番最初に「ゲストの言語：○○と判断」と1行だけ書くこと`;
 
   let prompt;
 
-  if (msgMode === 'review') {
-    // ===== レビュー作成モード =====
+  if (msgMode === 'review' && isBcom) {
+    // ===== レビュー作成モード（Booking.com）=====
+    // Booking.comには宿がゲストを評価するレビューが無い（Airbnbと違って相互レビューなし）。
+    // Airbnbの形のまま作ると「最高評価でレビューを書きました」という事実と違う文になるため、お礼のメッセージだけを作る（2026-11-20）
+    const b = findBookingByCode(code);
+    const nights = b ? b.nights : '';
+    prompt = `# Booking.comゲストへのお礼メッセージ作成依頼
+
+## あなたの役割
+あなたは経験豊富な民泊ホストです（この予約は Booking.com です）。以下の情報とこのプロジェクトの会話履歴をもとに、**チェックアウト後に Booking.com のメッセージで送るお礼の文面**を作成してください。
+
+## 大事な前提（Booking.com）
+- Booking.comには、宿がゲストを評価するレビュー（Airbnbのホストレビュー・非公開メッセージ欄）はありません。公開レビューやレビュー画面用の文面は作らないこと
+- 「レビューを書きました」「最高評価を付けました」とは書かないこと（事実と違うため）
+- ゲストにレビューを書くよう頼む言葉も入れないこと（催促はしない）
+- Airbnbの名前・画面・機能を書かないこと
+
+---
+
+## 予約情報
+- 物件名：${propName}
+- ゲスト名：${guestName}
+${channelLine}- チェックイン：${checkin || '不明'}
+- チェックアウト：${checkout || '不明'}
+- 宿泊日数：${nights ? nights + '泊' : '不明'}
+- 宿泊人数：${guestsText}
+`;
+    if (language) prompt += `- 国籍・言語：${language}\n`;
+    if (guestText) prompt += `\n## 今回の滞在メモ\n${guestText}\n`;
+    if (notes)     prompt += `\n## 特記事項\n${notes}\n`;
+    { const _conv = formatConversationForPrompt(code);
+      if (_conv) prompt += `\n## 会話履歴（Booking.com/Beds24・古い順）\n\`\`\`\n${_conv}\n\`\`\`\n`;
+      const _wa = (whatsappNotes[code] || '').trim();
+      if (_wa) prompt += `\n## WhatsAppでのやり取り\n\`\`\`\n${_wa}\n\`\`\`\n`; }
+    prompt += `
+---
+
+## Step 2 の言語
+${langRule}
+
+## 以下の手順で作成してください
+
+### Step 1: 滞在を振り返る
+このプロジェクトの会話履歴と滞在メモを確認し、以下を箇条書きで整理すること：
+- ゲストとのやり取りの印象（対応の速さ・丁寧さなど）
+- 文面に使える具体的なエピソード（良かった点・印象に残ったこと）
+
+### Step 2: お礼のメッセージ（Booking.comのメッセージで送る）
+- 滞在のお礼＋Step 1の具体的なエピソードを1つ＋またのお越しを待っている気持ち
+- 2〜4文程度
+- レビューのこと（書いた・書いてほしい・評価）には一切触れない
+
+Step 1の整理 → Step 2 の順で回答してください。Step 2は、そのままコピーして貼れるように見出しで分けること。`;
+
+  } else if (msgMode === 'review') {
+    // ===== レビュー作成モード（Airbnb）=====
     const b = findBookingByCode(code);
     const nights = b ? b.nights : '';
     prompt = `# Airbnbゲストへのホストレビュー作成依頼
@@ -8639,7 +8743,7 @@ function generateMsgPrompt() {
 ## 予約情報
 - 物件名：${propName}
 - ゲスト名：${guestName}
-- チェックイン：${checkin || '不明'}
+${chName ? channelLine : '- 予約経路：不明（Airbnbの予約として作成）\n'}- チェックイン：${checkin || '不明'}
 - チェックアウト：${checkout || '不明'}
 - 宿泊日数：${nights ? nights + '泊' : '不明'}
 - 宿泊人数：${guestsText}
@@ -8648,7 +8752,7 @@ function generateMsgPrompt() {
     if (guestText) prompt += `\n## 今回の滞在メモ\n${guestText}\n`;
     if (notes)     prompt += `\n## 特記事項\n${notes}\n`;
     { const _conv = formatConversationForPrompt(code);
-      if (_conv) prompt += `\n## 会話履歴（Airbnb/Beds24・古い順）\n\`\`\`\n${_conv}\n\`\`\`\n`;
+      if (_conv) prompt += `\n## 会話履歴（${siteName}/Beds24・古い順）\n\`\`\`\n${_conv}\n\`\`\`\n`;
       const _wa = (whatsappNotes[code] || '').trim();
       if (_wa) prompt += `\n## WhatsAppでのやり取り\n\`\`\`\n${_wa}\n\`\`\`\n`; }
     prompt += `
@@ -8687,10 +8791,10 @@ Step 1の整理 → Step 2 → Step 3 → Step 4 の順で回答してくださ�
 
   } else {
     // ===== メッセージ送信モード =====
-    prompt = `# Airbnbゲストへのメッセージ作成依頼
+    prompt = `# ${chName ? chName + 'ゲスト' : 'ゲスト'}へのメッセージ作成依頼
 
 ## あなたの役割
-あなたは経験豊富なAirbnbホストです。以下の状況を把握した上で、**今このタイミングで送るべき最適なメッセージを自分で判断して作成**してください。状況から判断できない場合は補足質問をしてください。
+あなたは${chName ? chName + 'で予約を受けている、' : ''}経験豊富な民泊ホストです。以下の状況を把握した上で、**今このタイミングで送るべき最適なメッセージを自分で判断して作成**してください。状況から判断できない場合は補足質問をしてください。
 
 ---
 
@@ -8705,26 +8809,27 @@ Step 1の整理 → Step 2 → Step 3 → Step 4 の順で回答してくださ�
     prompt += `
 ## 予約情報
 - ゲスト名：${guestName}
-- チェックイン：${checkin || '不明'}（15:00〜）
+${channelLine}- チェックイン：${checkin || '不明'}（15:00〜）
 - チェックアウト：${checkout || '不明'}（10:00まで）
 - 宿泊人数：${guestsText}
 `;
     if (language) prompt += `- 国籍・言語：${language}\n`;
     if (season)   prompt += `- チェックイン時期：${season}\n`;
+    prompt += channelRules;
     prompt += `
 ## 言語指定
 ${langRule}
 `;
     const convText = formatConversationForPrompt(code);
     if (convText) {
-      prompt += `\n## これまでの会話履歴（Airbnb/Beds24から自動取得・古い順）\n\`\`\`\n${convText}\n\`\`\`\n`;
+      prompt += `\n## これまでの会話履歴（${siteName}/Beds24から自動取得・古い順）\n\`\`\`\n${convText}\n\`\`\`\n`;
     }
     const waText = (whatsappNotes[code] || '').trim();
     if (waText) {
       prompt += `\n## WhatsAppでのやり取り（別チャネル・このゲストとの会話）\n\`\`\`\n${waText}\n\`\`\`\n`;
     }
     if (convText && waText) {
-      prompt += `\n※ このゲストとはAirbnb（上記会話履歴）とWhatsApp（上記）の両方でやり取りしています。**両方の内容を踏まえて**、矛盾なく返信を考えてください。\n`;
+      prompt += `\n※ このゲストとは${siteName}（上記会話履歴）とWhatsApp（上記）の両方でやり取りしています。**両方の内容を踏まえて**、矛盾なく返信を考えてください。\n`;
     }
     if (guestText) {
       prompt += `\n## 今回ゲストから届いた未返信メッセージ（原文）\n\`\`\`\n${guestText}\n\`\`\`\n`;
@@ -8788,7 +8893,7 @@ ${langRule}
 - 丁寧かつ温かみのある口調（フォーマルすぎず、フレンドリーすぎず）
 - ゲスト名はファーストネームで
 - 絵文字は適度に（1メッセージあたり2〜4個程度）
-- Airbnbとして自然な文体・長さに
+- ${chName ? chName + 'のメッセージ' : '予約サイトのメッセージ'}として自然な文体・長さに
 - 不要な長さは避けシンプルにまとめる
 - 言語指定に従うこと
 
@@ -8811,7 +8916,9 @@ Step 1の整理 → Step 2の判断 → （必要なら）Step 3の作成、の�
   ta.style.height = Math.min(ta.scrollHeight, 600) + 'px';
   document.getElementById('msg-output-card').style.display = 'block';
   document.getElementById('msg-output-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  showToast('プロンプトを生成しました！', 'success');
+  if (msgMode === 'review' && isBcom) showToast('Booking.comにはゲストのレビューが無いので、お礼のメッセージの頼む文にしました', 'success');
+  else if (msgMode === 'review' && !chName) showToast('予約サイトが不明なので、Airbnbのレビューとして作りました（B.comなら「予約サイト」を選び直してください）', 'error');
+  else showToast('プロンプトを生成しました！', 'success');
 }
 
 function copyMsgPrompt() {
