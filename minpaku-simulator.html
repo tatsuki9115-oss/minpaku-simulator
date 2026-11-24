@@ -7218,21 +7218,12 @@ function onMsgBookingSelect() {
     if (areaInfoEl) areaInfoEl.innerHTML = `📍 エリア判定：<strong>${area.label}</strong>（気象庁 ${area.areaName} の予報を使用）`;
     const fetchBtn = document.getElementById('welcome-fetch-btn');
     if (fetchBtn) { fetchBtn.disabled = false; fetchBtn.style.opacity = '1'; }
-    // イベントカード：横浜エリアのみ表示
+    // イベントカード：全物件で出さない（2026-11-25 オーナー指示）
+    //   イベント欄はクロコが毎回最初から作るので、自動取得の候補は使っていなかった。
+    //   ECRUと同じく、シミュは「天気予報を取得」だけにそろえる
     const eventCard = document.getElementById('welcome-event-card');
-    const eventBtn  = document.getElementById('welcome-event-btn');
-    const eventAreaInfo = document.getElementById('welcome-event-area-info');
-    if (eventCard) {
-      if (area.eventBaseUrl || area.eventApiUrl) {
-        eventCard.style.display = 'block';
-        const checkin  = b.checkin || '';
-        const checkout = getCheckout(b) || '';
-        if (eventAreaInfo) eventAreaInfo.textContent = `📅 取得期間：${checkin} 〜 ${checkout}（${area.eventSiteName || ''}）`;
-        if (eventBtn) { eventBtn.disabled = false; eventBtn.style.opacity = '1'; }
-      } else {
-        eventCard.style.display = 'none';
-      }
-    }
+    if (eventCard) eventCard.style.display = 'none';
+    welcomeEventData = null;
   }
 
   if (wrap) wrap.style.display = 'block';
@@ -8443,8 +8434,9 @@ function generateWelcomeMsg() {
     `・人数：${people}`,
     `・天気：気象庁 ${reportDatetime ? fmtJmaReport(reportDatetime) : '?'}発表のデータで作成済み`,
   ];
-  if (!oneNight) {
-    reqLines.push('', '【自動取得したイベント候補（参考・未確認）】', candidateLines || '（なし）');
+  // 候補の自動取得は2026-11-25に全物件でやめた（候補があるときだけ添える）
+  if (!oneNight && candidateLines) {
+    reqLines.push('', '【自動取得したイベント候補（参考・未確認）】', candidateLines);
   }
   reqLines.push('', '----- 文面ここから -----', msg, '----- 文面ここまで -----');
   const ta = document.getElementById('msg-prompt-area');
