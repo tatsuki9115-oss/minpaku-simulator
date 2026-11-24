@@ -1887,13 +1887,17 @@ function renderMonthly() {
   </div>`;
 
   // この月のデータを先に抽出してモードを決定（Airbnb+Booking.com統合）
-  const csvBooks = getAllBookings().filter(b => {
+  // この月に泊まりがある予約（前の月からの続きも含む）。金額は日割り（泊まった月に振り分け・2026-11-25 オーナー）
+  const _mPropBooks = getAllBookings().filter(b => {
     if (!b.checkin) return false;
-    const parts = b.checkin.split('/');
-    if (parseInt(parts[0]) !== year || parseInt(parts[1]) !== month) return false;
     if (monthlyPropFilter !== 'all') return getBookingPropId(b) === parseInt(monthlyPropFilter);
     return true;
   });
+  const _mProrated = getMonthProrated(_mPropBooks, year, month);
+  const csvBooks = _mProrated.items.map(it => it.b);
+  const _mShareOf = b => (_mProrated.items.find(it => it.b === b) || {}).share;
+  // 予約数は「この月にチェックインした件数」（年間タブと同じ数え方）
+  const _mCkCount = csvBooks.filter(b => { const p = b.checkin.split('/').map(Number); return p[0] === year && p[1] === month; }).length;
   const hasCsvThisMonth = csvBooks.length > 0;
 
   if (hasCsvThisMonth) {
@@ -1901,16 +1905,8 @@ function renderMonthly() {
     const addBtn = document.querySelector('.btn-add-booking');
     if (addBtn) addBtn.style.display = 'none';
 
-    let totalRevenue = 0, totalVarCosts = 0, totalNights = 0;
-    csvBooks.forEach(b => {
-      totalRevenue += b.revenue;
-      const prop = properties.find(p => p.id === getBookingPropId(b));
-      const [by, bm] = b.checkin.split('/').map(Number);
-      // 実費保存済みの月は per-booking 変動費を加算しない（後で実費変動費を加算）
-      if (prop && !hasActualCosts(getBookingPropId(b), by, bm)) {
-        totalVarCosts += getPerBookingTotal(b, prop);
-      }
-    });
+    // 受取・見込みの変動費＝日割り（見込みはチェックイン月に実費がない予約だけ・今までどおり）
+    let totalRevenue = _mProrated.rev, totalVarCosts = _mProrated.varCost, totalNights = 0;
     // 稼働の泊数：この月に実際に泊まった分（マンスリー込み・月またぎは泊まった月へ・2026-11-15〜）
     totalNights = getStayMonthStats(getAllBookings().filter(b => b.checkin && b.revenue &&
       (monthlyPropFilter === 'all' || getBookingPropId(b) === parseInt(monthlyPropFilter))), year, month).nights;
@@ -1939,17 +1935,18 @@ function renderMonthly() {
           const pf = calcAirbnbProfit(b);
           const bIsP = pf !== null && pf >= 0;
           const bColor = getPropColor(pid);
+          const _s = _mShareOf(b);
           const _bcBadge = b.source === 'booking'
             ? `<span style="font-size:10px;font-weight:800;background:#003580;color:white;padding:1px 4px;border-radius:3px;margin-left:4px">📘</span>`
             : `<span style="font-size:10px;font-weight:800;background:#FF5A5F;color:white;padding:1px 4px;border-radius:3px;margin-left:4px">🅐</span>`;
           return `<div class="booking-row" style="--prop-color:${bColor}">
             <div class="booking-info">
               <div class="booking-prop">${prop ? prop.name : '⚠️ 物件未設定'}</div>
-              <div class="booking-guest">${escHtml(b.guestName||'')}${_bcBadge} · ${b.nights}泊 · ${b.checkin}</div>
+              <div class="booking-guest">${escHtml(b.guestName||'')}${_bcBadge} · ${b.nights}泊 · ${b.checkin}${shareTagHtml(b, _s)}</div>
             </div>
             <div class="booking-amounts">
-              <div class="booking-rev">${fmt(b.revenue)}円</div>
-              ${pf !== null ? `<div class="booking-profit" style="color:${bIsP?'#1C9A52':'#E53935'}">${bIsP?'':'▲'}${fmt(Math.abs(pf))}円<span style="font-size:10px;font-weight:400;color:#C8C5C0;margin-left:2px">概算</span></div>` : '<div style="font-size:11px;color:#ccc">-</div>'}
+              <div class="booking-rev">${fmt(_s ? _s.rev : b.revenue)}円</div>${_s && _s.n < b.nights ? `<div style="font-size:10px;color:#C8C5C0">予約全体 ${fmt(b.revenue)}円</div>` : ''}
+              ${pf !== null ? `<div class="booking-profit" style="color:${bIsP?'#1C9A52':'#E53935'}">${bIsP?'':'▲'}${fmt(Math.abs(pf))}円<span style="font-size:10px;font-weight:400;color:#C8C5C0;margin-left:2px">${_s && _s.n < b.nights ? '予約全体の概算' : '概算'}</span></div>` : '<div style="font-size:11px;color:#ccc">-</div>'}
             </div>
           </div>`;
         }).join('');
@@ -1959,7 +1956,7 @@ function renderMonthly() {
       <div class="month-stats">
         <div class="month-stat">
           <div class="month-stat-label">予約数</div>
-          <div class="month-stat-value">${csvBooks.length}件</div>
+          <div class="month-stat-value">${_mCkCount}件</div>
         </div>
         <div class="month-stat">
           <div class="month-stat-label">稼働率</div>
@@ -2293,7 +2290,7 @@ function renderCalendarTab() {
         : _calCards.map(c => c.html).join('')}
     </div>`;
 
-  // 月サマリー（実績タブと同じ数え方：売上はチェックイン月・稼働とADRはこの月に実際に泊まった分。マンスリー込み・2026-11-15〜）
+  // 月サマリー（実績タブと同じ数え方：売上は日割りで泊まった月へ（2026-11-25〜）・稼働とADRはこの月に実際に泊まった分。マンスリー込み・2026-11-15〜）
   const _sumPropBooks = getAllBookings().filter(b => {
     if (!b.checkin || !b.revenue) return false;
     return calendarPropFilter === 'all' || getBookingPropId(b) === parseInt(calendarPropFilter);
@@ -2302,8 +2299,7 @@ function renderCalendarTab() {
     const [by, bm] = b.checkin.split('/').map(Number);
     return by === y && bm === m;
   });
-  let _sumRev = 0;
-  _sumBooks.forEach(b => { _sumRev += b.revenue; });
+  const _sumRev = getMonthProrated(_sumPropBooks, y, m).rev;
   const _sumStay = getStayMonthStats(_sumPropBooks, y, m);
   const _sumNights = _sumStay.nights, _sumAdrRev = _sumStay.rev;
   const _sumPropCount = Math.max(calendarPropFilter === 'all' ? properties.filter(p => isPropertyOperating(p, y, m)).length : 1, 1);
@@ -3379,20 +3375,21 @@ function calcInvestmentRecoveryStats() {
         futureBookedMonths.add(`${by}-${bm}`);
       }
     });
+    // 売上・見込みの変動費は日割り（泊まった月に振り分け・2026-11-25 オーナー）。月の範囲も泊まる月まで広げる
+    const _recRevBooks = books.filter(b => b.checkin && b.revenue);
     // 最後の確定予約月まで固定費を計算するための上限
     let maxBookYear = nowY, maxBookMonth = nowM;
-    books.forEach(b => {
-      const [by, bm] = b.checkin.split('/').map(Number);
-      if (by > maxBookYear || (by === maxBookYear && bm > maxBookMonth)) {
-        maxBookYear = by; maxBookMonth = bm;
-      }
-    });
-
     // ===== 統一ロジック：予約あり=実績 / 未来空き月=PriceLabs予測 / 過去空き月=損失 =====
     const bookedMonthKeys = new Set();
     books.forEach(b => {
       const [by, bm] = b.checkin.split('/').map(Number);
       bookedMonthKeys.add(`${by}_${bm}`);
+      if (by > maxBookYear || (by === maxBookYear && bm > maxBookMonth)) { maxBookYear = by; maxBookMonth = bm; }
+      if (!b.revenue) return;
+      getBookingMonthShares(b).forEach(sh => {
+        bookedMonthKeys.add(`${sh.y}_${sh.m}`);
+        if (sh.y > maxBookYear || (sh.y === maxBookYear && sh.m > maxBookMonth)) { maxBookYear = sh.y; maxBookMonth = sh.m; }
+      });
     });
     let fyEndY = nowM >= 4 ? nowY + 1 : nowY;
     let endY = fyEndY, endM = 3;
@@ -3416,21 +3413,17 @@ function calcInvestmentRecoveryStats() {
       let _cy = _sy, _cm = _sm;
       while (_cy < endY || (_cy === endY && _cm <= endM)) {
         const monthKey = `${_cy}_${_cm}`;
-        const monthBooks = books.filter(b => {
-          const [by, bm] = b.checkin.split('/').map(Number);
-          return by === _cy && bm === _cm;
-        });
+        const _recPr = getMonthProrated(_recRevBooks, _cy, _cm);
         const isFuture = _cy > nowY || (_cy === nowY && _cm > nowM);
         const hasBooking = bookedMonthKeys.has(monthKey);
         const monthFixed = getPropMonthFixedCosts(p, _cy, _cm);
         totalFixedCosts += monthFixed;
         totalTaxableFixedCosts += getPropMonthTaxableFixedCosts(p, _cy, _cm);
         // 予約ベースの売上・変動費
-        const bookedRev = monthBooks.reduce((s,b)=>s+b.revenue,0);
+        const bookedRev = _recPr.rev;
+        // 実費の月は実費の変動費＋（前の月から続く予約の）見込みの日割り分。見込みはチェックイン月に実費がない予約だけ
         const bookedVar = hasBooking
-          ? (hasActualCosts(p.id, _cy, _cm)
-              ? getPropMonthActualVarCosts(p, _cy, _cm)
-              : monthBooks.reduce((s,b)=>s+getPerBookingTotal(b,p),0))
+          ? (hasActualCosts(p.id, _cy, _cm) ? getPropMonthActualVarCosts(p, _cy, _cm) : 0) + _recPr.varCost
           : 0;
         let monthRev = 0, monthVar = 0;
         if (!isFuture) {
@@ -3474,14 +3467,14 @@ function calcInvestmentRecoveryStats() {
     const yearEndPct = initialTotal > 0 ? Math.round(yearEndProfit / initialTotal * 100) : 0;
 
     // 月別の純利益（直近3ヶ月平均 → 回収予想）
+    // 日割り（泊まった月に振り分け・2026-11-25）
     const monthRevMap = {}, monthVarMap = {};
-    books.forEach(b => {
-      const [y, mo] = b.checkin.split('/').map(Number);
-      const key = `${y}-${String(mo).padStart(2,'0')}`;
-      monthRevMap[key] = (monthRevMap[key] || 0) + b.revenue;
-      if (!hasActualCosts(p.id, y, mo)) {
-        monthVarMap[key] = (monthVarMap[key] || 0) + getPerBookingTotal(b, p);
-      }
+    _recRevBooks.forEach(b => {
+      getBookingMonthShares(b).forEach(sh => {
+        const key = `${sh.y}-${String(sh.m).padStart(2,'0')}`;
+        monthRevMap[key] = (monthRevMap[key] || 0) + sh.rev;
+        monthVarMap[key] = (monthVarMap[key] || 0) + sh.varCost;
+      });
     });
     // 実費保存済み月の変動費を月単位で加算（重複防止）
     { const _doneM2 = new Set();
@@ -3491,6 +3484,15 @@ function calcInvestmentRecoveryStats() {
         if (hasActualCosts(p.id, y, mo) && !_doneM2.has(_mk)) {
           _doneM2.add(_mk);
           const mkey = `${y}-${String(mo).padStart(2,'0')}`;
+          monthVarMap[mkey] = (monthVarMap[mkey] || 0) + getPropMonthActualVarCosts(p, y, mo);
+        }
+      });
+      // 前の月からの泊まりだけがある月も、実費の変動費を入れる（日割りで売上が入るようになったため・2026-11-25）
+      Object.keys(monthRevMap).forEach(mkey => {
+        const [y, mo] = mkey.split('-').map(Number);
+        const _mk = `${y}_${mo}`;
+        if (hasActualCosts(p.id, y, mo) && !_doneM2.has(_mk)) {
+          _doneM2.add(_mk);
           monthVarMap[mkey] = (monthVarMap[mkey] || 0) + getPropMonthActualVarCosts(p, y, mo);
         }
       });
@@ -4246,6 +4248,59 @@ function getStayMonthStats(books, y, m) {
   return { nights, rev: Math.round(rev) };
 }
 
+// ===== 売上・利益の日割り（2026-11-25 オーナー「直して」）=====
+// 1つの予約の受取を泊数で割って、泊まった月に振り分ける（例：10/31から6泊なら10月に1泊分・11月に5泊分）。
+// 端数は最後の月に寄せる＝月ごとの分を足すと元の受取とぴったり同じ（年間・通算の合計は変わらない）。
+// 見込みの変動費（清掃・リネンなど）も同じ割合で振り分ける。ただし見込みを足すかどうかは今までどおり
+// 「チェックインした月に実費が入っていない予約だけ」（実費が入った月の予約の清掃などは、実費のほうに入っているため）。
+// 実費（固定費・変動費とも）は、入力した月のまま動かさない。
+function getBookingMonthShares(b) {
+  if (!b || !b.checkin) return [];
+  const [cy, cm] = b.checkin.split('/').map(Number);
+  const pid = getBookingPropId(b);
+  const prop = properties.find(p => p.id === pid);
+  const rev = Number(b.revenue) || 0;
+  const estVar = (prop && !hasActualCosts(pid, cy, cm)) ? getPerBookingTotal(b, prop) : 0;
+  const total = Number(b.nights) || 0;
+  if (total <= 0) return [{ y: cy, m: cm, n: 0, rev, varCost: estVar }];
+  const out = [];
+  let y = cy, m = cm, left = total, revLeft = rev, varLeft = estVar;
+  for (let guard = 0; left > 0 && guard < 120; guard++) {
+    const n = Math.min(nightsInMonth(b, y, m), left);
+    if (n > 0) {
+      const last = n >= left;
+      const r = last ? revLeft : Math.round(rev * n / total);
+      const v = last ? varLeft : Math.round(estVar * n / total);
+      out.push({ y, m, n, rev: r, varCost: v });
+      revLeft -= r; varLeft -= v; left -= n;
+    }
+    m++; if (m > 12) { m = 1; y++; }
+  }
+  return out;
+}
+function getBookingMonthShare(b, y, m) {
+  return getBookingMonthShares(b).find(s => s.y === y && s.m === m) || null;
+}
+// 予約の一覧から、y年m月に入る分（日割り）の受取・見込みの変動費の合計と、その月に泊まりがある予約の一覧
+function getMonthProrated(books, y, m) {
+  let rev = 0, varCost = 0, revAirbnb = 0, revBooking = 0;
+  const items = [];
+  books.forEach(b => {
+    if (!b.revenue) return;
+    const s = getBookingMonthShare(b, y, m);
+    if (!s) return;
+    rev += s.rev; varCost += s.varCost;
+    if (b.source === 'booking') revBooking += s.rev; else revAirbnb += s.rev;
+    items.push({ b, share: s });
+  });
+  return { rev, varCost, revAirbnb, revBooking, items };
+}
+// 予約の行に付ける「6泊中5泊分」の印（その月に全部の泊が入る予約は空）
+function shareTagHtml(b, s) {
+  if (!s || !b.nights || s.n >= b.nights) return '';
+  return `<span style="font-size:10px;font-weight:700;color:#6B7A99;background:#EEF1F8;border-radius:4px;padding:1px 5px;margin-left:4px;white-space:nowrap">${b.nights}泊中${s.n}泊分</span>`;
+}
+
 // コインランドリーの初期値＝物件の「1組あたり変動費」のリネンの金額（未設定なら1,400円）
 // ★以前は全物件共通で1,400円をコードに直書きしており、ECRU（3,500円）が反映されなかった（2026-09-19）
 // ウェルカムボードの更新はECRU国領だけの作業。
@@ -4443,8 +4498,10 @@ function renderDashboard() {
     const p = b.checkin.split('/').map(Number);
     return p[0] === prevYear && p[1] === prevMonth;
   });
-  const thisMonthRev = thisMonthBooks.reduce((s, b) => s + b.revenue, 0);
-  const prevMonthRev = prevMonthBooks.reduce((s, b) => s + b.revenue, 0);
+  // 受取は日割り（泊まった月に振り分け・2026-11-25 オーナー）
+  const _homeRevBooks = _allBooks.filter(b => b.checkin && b.revenue);
+  const thisMonthRev = getMonthProrated(_homeRevBooks, thisYear, thisMonth).rev;
+  const prevMonthRev = getMonthProrated(_homeRevBooks, prevYear, prevMonth).rev;
   const revDiff = thisMonthRev - prevMonthRev;
   // 泊数：その月に実際に泊まった分（マンスリー込み・2026-11-15〜）
   const thisMonthNights = getStayMonthStats(_allBooks.filter(b => b.checkin && b.revenue), thisYear, thisMonth).nights;
@@ -4464,8 +4521,21 @@ function renderDashboard() {
   const _isAfterThisMonth = b => { const [by, bm] = b.checkin.split('/').map(Number); return by > thisYear || (by === thisYear && bm > thisMonth); };
   const fyBooks = fyBooksAll.filter(b => !_isAfterThisMonth(b));
   const fyFutureBooks = fyBooksAll.filter(_isAfterThisMonth);
-  const fyFutureRevenue = fyFutureBooks.reduce((s, b) => s + b.revenue, 0);
-  const fyRevenue = fyBooks.reduce((s, b) => s + b.revenue, 0);
+  // 受取は日割り：年度の4月〜今月に泊まった分＝上の数字／来月〜3月に泊まる分＝「来月以降」の行（2026-11-25 オーナー）
+  // 年度で絞らない一覧から拾う＝今月に入って来月に続く予約は、今月の分だけ上の数字に入る
+  let fyRevenue = 0, fyFutureRevenue = 0;
+  const _fyFutureSet = new Set();
+  for (let i = 0; i < 12; i++) {
+    const mo = ((4 - 1 + i) % 12) + 1;
+    const yr = mo >= 4 ? fyStartYear : fyStartYear + 1;
+    const _pr = getMonthProrated(_homeRevBooks, yr, mo);
+    if ((yr > thisYear) || (yr === thisYear && mo > thisMonth)) {
+      fyFutureRevenue += _pr.rev;
+      _pr.items.forEach(it => _fyFutureSet.add(it.b));
+    } else {
+      fyRevenue += _pr.rev;
+    }
+  }
   const fyGuestPayment = getGuestPayment(fyRevenue);
   // 固定費＋変動費（実績タブと同じ：来月以降の月は入れない）
   const _todayY = now.getFullYear();
@@ -4474,10 +4544,6 @@ function renderDashboard() {
   for (let i = 0; i < 12; i++) {
     const mo = ((4 - 1 + i) % 12) + 1;
     const yr = mo >= 4 ? fyStartYear : fyStartYear + 1;
-    const monthBooks = fyBooks.filter(b => {
-      const [by, bm] = b.checkin.split('/').map(Number);
-      return by === yr && bm === mo;
-    });
     const isFutureMonth = (yr > _todayY) || (yr === _todayY && mo > _todayM);
     if (isFutureMonth) continue;
     properties.forEach(p => {
@@ -4486,13 +4552,8 @@ function renderDashboard() {
         fyVar += getPropMonthActualVarCosts(p, yr, mo);
       }
     });
-    monthBooks.forEach(b => {
-      const pid = getBookingPropId(b);
-      const prop = properties.find(p => p.id === pid);
-      if (prop && !hasActualCosts(pid, yr, mo)) {
-        fyVar += getPerBookingTotal(b, prop);
-      }
-    });
+    // 見込みの変動費も日割り（チェックイン月に実費がない予約だけ・2026-11-25）
+    fyVar += getMonthProrated(_homeRevBooks, yr, mo).varCost;
   }
   const fyProfit = fyRevenue - fyFixed - fyVar;
   const fyMargin = fyRevenue > 0 ? Math.round(fyProfit / fyRevenue * 100) : null;
@@ -4542,11 +4603,11 @@ function renderDashboard() {
     ${fyBooksAll.length > 0 ? `
     <div onclick="showTab('annual')" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding:10px 12px;border-top:1px solid #F2F1EE;background:#F9F8F6;border-radius:10px;cursor:pointer">
       <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:baseline;min-width:0">
-        <span style="font-size:10px;font-weight:700;color:#C8C5C0;white-space:nowrap">${fyStartYear}年度${fyFutureBooks.length > 0 ? `（${thisMonth}月まで）` : ''}</span>
+        <span style="font-size:10px;font-weight:700;color:#C8C5C0;white-space:nowrap">${fyStartYear}年度${_fyFutureSet.size > 0 ? `（${thisMonth}月まで）` : ''}</span>
         <span style="font-size:12px;color:#888;white-space:nowrap">受取 <strong style="color:#1C1C1E;font-size:14px">${fmtShort(fyRevenue)}円</strong></span>
         <span style="font-size:12px;color:#888;white-space:nowrap">利益 <strong style="color:${fyIsP?'#1C9A52':'#E53935'};font-size:14px">${fyIsP?'':'▲'}${fmtShort(Math.abs(fyProfit))}円</strong>${fyMargin!==null?` <span style="font-size:11px;font-weight:700;color:${fyIsP?'#1C9A52':'#E53935'}">(${fyIsP?'':'▲'}${Math.abs(fyMargin)}%)</span>`:''}</span>
         <span style="font-size:12px;color:#888;white-space:nowrap">稼働 <strong style="color:#1C1C1E;font-size:14px">${occRateFY===null?'—':occRateFY+'%'}</strong></span>
-        ${fyFutureBooks.length > 0 ? `<span style="flex-basis:100%;font-size:11px;color:#8A93A6">来月以降の予約 <strong style="color:#5B6478">${fyFutureBooks.length}件・受取${fmtShort(fyFutureRevenue)}円</strong>（上の数字とは別）</span>` : ''}
+        ${_fyFutureSet.size > 0 ? `<span style="flex-basis:100%;font-size:11px;color:#8A93A6">来月以降に泊まる分 <strong style="color:#5B6478">${_fyFutureSet.size}件・受取${fmtShort(fyFutureRevenue)}円</strong>（上の数字とは別・日割り）</span>` : ''}
       </div>
       <span style="font-size:11px;font-weight:700;color:#F07C3F;white-space:nowrap;flex-shrink:0">年間の実績を見る ›</span>
     </div>` : ''}
@@ -5069,6 +5130,12 @@ function renderAnnual() {
     return true;
   });
   const stayBooksAllProps = _annualAllBooks.filter(b => b.checkin && b.revenue && b.revenue !== 0 && b.nights);
+  // 売上・利益の日割り用（泊数0の予約もチェックインの月に入れるため、stayBooks と分ける）
+  const revBooks = _annualAllBooks.filter(b => {
+    if (!b.checkin || !b.revenue || b.revenue === 0) return false;
+    if (annualPropFilter !== 'all') return getBookingPropId(b) === parseInt(annualPropFilter);
+    return true;
+  });
 
   // 月別統計を計算（会計年度順：4,5,...,12,1,2,3）
   const monthlyStats = fyMonthOrder.map(m => {
@@ -5100,11 +5167,13 @@ function renderAnnual() {
     let rev = 0, varCosts = 0, ckNights = 0, adrBookings = 0, leadSum = 0, leadCnt = 0, leadSumL = 0, leadCntL = 0, revAirbnb = 0, revBooking = 0;
     // マンスリー（28泊以上）の集計。ADR・稼働にはふつうに入れたうえで、「うちマンスリー」の参考表示に使う
     let longNights = 0, longRev = 0, longBookings = 0;
+    // 受取・チャネル別・見込みの変動費は日割り（泊まった月に振り分け・2026-11-25 オーナー）。
+    // 年度で絞らない一覧（revBooks）から拾う＝3月末に入って4月に泊まる分も4月へ入る
+    { const _pr = getMonthProrated(revBooks, mYear, m);
+      rev = _pr.rev; revAirbnb = _pr.revAirbnb; revBooking = _pr.revBooking; varCosts = _pr.varCost; }
+    // 件数・平均泊数・リードタイムは「その月にチェックインした予約」で数える（今までどおり）
     mBooks.forEach(b => {
       if (!b.revenue || b.revenue === 0) return; // ¥0予約はスキップ
-      rev += b.revenue;
-      // チャネル別売上
-      if (b.source === 'booking') revBooking += b.revenue; else revAirbnb += b.revenue;
       // リードタイム（予約日→チェックインの日数）：短期と長期(28泊以上)で分けて集計
       if (b.bookingTime) {
         const bt = new Date(String(b.bookingTime).split('T')[0]);
@@ -5114,12 +5183,6 @@ function renderAnnual() {
           if (isLongStayListing(b)) { leadSumL += ld; leadCntL++; }
           else { leadSum += ld; leadCnt++; }
         }
-      }
-      const pid = getBookingPropId(b);
-      const prop = properties.find(p => p.id === pid);
-      // 実費保存済みの月は per-booking 変動費を加算しない（後で実費変動費を加算）
-      if (prop && !hasActualCosts(pid, mYear, m)) {
-        varCosts += getPerBookingTotal(b, prop);
       }
       // マンスリーも平均泊数に入れる（2026-11-15 オーナー決定・外すのは180日カウントだけ）
       ckNights += b.nights; adrBookings++;
@@ -5144,6 +5207,12 @@ function renderAnnual() {
   const { yearBooks, yearBooksAllProps, monthlyStats } = _calcFiscalYear(currentAnnualYear);
 
   const validMonths = monthlyStats.filter(Boolean);
+  // 月の予約一覧は「その月に泊まりがある予約」を日割りの金額で出す（月の合計と行の合計をそろえる・2026-11-25）
+  const _revBooksView = _annualAllBooks.filter(b => {
+    if (!b.checkin || !b.revenue || b.revenue === 0) return false;
+    if (annualPropFilter !== 'all') return getBookingPropId(b) === parseInt(annualPropFilter);
+    return true;
+  });
 
   // 月別ビューモード
   if (annualSelectedMonth) {
@@ -5222,21 +5291,24 @@ function renderAnnual() {
     }
 
     // 予約リスト
-    if (mBooks.length === 0) {
+    const _mItems = getMonthProrated(_revBooksView, sY, sM).items;
+    if (_mItems.length === 0) {
       mhtml += `<div class="empty-state">この月の予約データなし</div>`;
     } else {
       const fmtD = s => { if (!s) return '?'; const p = s.split('/'); return `${parseInt(p[1])}/${parseInt(p[2])}`; };
       mhtml += `<div class="card" style="padding:0;overflow:hidden">
-        <div style="padding:12px 16px 8px;font-size:12px;font-weight:700;color:#B0ADA8;letter-spacing:.06em">予約一覧 (${mBooks.length}件)</div>
-        ${mBooks.map(b => {
+        <div style="padding:12px 16px 8px;font-size:12px;font-weight:700;color:#B0ADA8;letter-spacing:.06em">予約一覧 (${_mItems.length}件)</div>
+        ${_mItems.map(({ b, share: _s }) => {
           const pid = getBookingPropId(b);
           const prop = properties.find(p => p.id === pid);
           const bColor = getPropColor(pid);
           const coStr = getCheckout(b);
-          const bVarCost = (b.revenue > 0 && prop && !hasActualCosts(pid, sY, sM)) ? getPerBookingTotal(b, prop) : 0;
-          // 固定費按分（月の固定費 ÷ この月にチェックインした予約の泊数の合計 × この予約の宿泊日数）
-          const allocatedFixed = (ms && ms.ckNights > 0) ? Math.round(ms.monthFixedCosts / ms.ckNights * b.nights) : 0;
-          const bProfit = b.revenue - allocatedFixed - bVarCost;
+          // 金額はこの月に入る分（日割り）。見込みの変動費も日割り（チェックイン月に実費が入っていれば0）
+          const _bRev = _s.rev;
+          const bVarCost = _s.varCost;
+          // 固定費按分（月の固定費 ÷ この月に泊まった泊数の合計 × この予約のこの月の泊数）
+          const allocatedFixed = (ms && ms.nights > 0) ? Math.round(ms.monthFixedCosts / ms.nights * _s.n) : 0;
+          const bProfit = _bRev - allocatedFixed - bVarCost;
           const bIsP = bProfit >= 0;
           // 変動費内訳（カレンダーの実費入力 or スタッフ料金 or デフォルト）
           const _bChk = b.code ? (bookingChecks[b.code] || {}) : {};
@@ -5247,19 +5319,21 @@ function renderAnnual() {
           const _bCleanFee = _bChk.cleaningFee != null ? (parseInt(_bChk.cleaningFee) || 0) : _bDefClean;
           const _bLaundry  = _bChk.laundryFee  != null ? (parseInt(_bChk.laundryFee)  || 0) : getDefaultLaundry(prop);
           const _bSupplies = _bChk.suppliesFee  != null ? (parseInt(_bChk.suppliesFee) || 0) : 0;
-          const varBreakdown = bVarCost > 0
+          const varBreakdown = bVarCost > 0 && shareTagHtml(b, _s)
+            ? `見込みの費用 ¥${fmt(bVarCost)}（日割り）`
+            : bVarCost > 0
             ? [_bCleanFee>0?`🧹¥${fmt(_bCleanFee)}`:'', _bLaundry>0?`🌀¥${fmt(_bLaundry)}`:'', _bSupplies>0?`🛒¥${fmt(_bSupplies)}`:''].filter(Boolean).join(' + ')
             : '';
           return `<div class="booking-row" style="--prop-color:${bColor}">
             <div class="booking-info">
               <div class="booking-prop">${prop?prop.name:'⚠️ 未設定'}${b.source==='pricelabs'?'<span style="font-size:10px;font-weight:700;background:#fff0eb;color:#e05a2b;padding:1px 5px;border-radius:3px;margin-left:5px">PL</span>':b.source==='booking'?'<span style="font-size:10px;font-weight:800;background:#003580;color:white;padding:1px 4px;border-radius:3px;margin-left:4px">📘 B.com</span>':'<span style="font-size:10px;font-weight:800;background:#FF5A5F;color:white;padding:1px 4px;border-radius:3px;margin-left:4px">🅐 Airbnb</span>'}</div>
               <div class="booking-guest">${escHtml(b.guestName||(b.source==='pricelabs'?'PriceLabs予約':''))}</div>
-              <div style="font-size:11px;color:#C8C5C0;margin-top:2px">${fmtD(b.checkin)} → ${fmtD(coStr)} · ${b.nights}泊</div>
+              <div style="font-size:11px;color:#C8C5C0;margin-top:2px">${fmtD(b.checkin)} → ${fmtD(coStr)} · ${b.nights}泊${shareTagHtml(b, _s)}</div>
             </div>
             <div class="booking-amounts" style="text-align:right;min-width:90px">
-              <div style="font-size:10px;color:#C8C5C0">ゲスト <span style="font-weight:700;color:#aaa">¥${fmt(getGuestPayment(b.revenue))}</span></div>
-              <div style="font-size:13px;font-weight:800;color:#1C1C1E;margin-top:1px">¥${fmt(b.revenue)}</div>
-              <div style="font-size:11px;font-weight:700;color:${bIsP?'#1C9A52':'#E53935'};margin-top:2px">${bIsP?'':'▲'}¥${fmt(Math.abs(bProfit))}<span style="font-size:10px;font-weight:400;color:#C8C5C0;margin-left:2px">費用差引後</span>${b.revenue>0?'<span style="font-size:10px;font-weight:800;margin-left:4px;color:'+(bIsP?'#1C9A52':'#E53935')+'">('+(bIsP?'':'▲')+Math.abs(Math.round(bProfit/b.revenue*100))+'%)</span>':''}</div>
+              <div style="font-size:10px;color:#C8C5C0">ゲスト <span style="font-weight:700;color:#aaa">¥${fmt(getGuestPayment(_bRev))}</span></div>
+              <div style="font-size:13px;font-weight:800;color:#1C1C1E;margin-top:1px">¥${fmt(_bRev)}</div>
+              <div style="font-size:11px;font-weight:700;color:${bIsP?'#1C9A52':'#E53935'};margin-top:2px">${bIsP?'':'▲'}¥${fmt(Math.abs(bProfit))}<span style="font-size:10px;font-weight:400;color:#C8C5C0;margin-left:2px">費用差引後</span>${_bRev>0?'<span style="font-size:10px;font-weight:800;margin-left:4px;color:'+(bIsP?'#1C9A52':'#E53935')+'">('+(bIsP?'':'▲')+Math.abs(Math.round(bProfit/_bRev*100))+'%)</span>':''}</div>
               ${varBreakdown ? `<div style="font-size:10px;color:#C8C5C0;margin-top:1px">${varBreakdown}</div>` : ''}
             </div>
           </div>`;
@@ -5366,7 +5440,7 @@ function renderAnnual() {
   html += `<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:11px 14px;gap:8px">
     <div style="flex:1;min-width:0">
       <div style="font-size:13px;font-weight:700;color:#555">${airbnbBookings.length}件（Airbnb）+ ${bookingComBookings.length}件（B.com）読み込み済み</div>
-      <div style="font-size:10px;color:#aaa;margin-top:1px">チェックイン日基準　${currentAnnualYear}年度（${currentAnnualYear}/4〜${currentAnnualYear+1}/3）</div>
+      <div style="font-size:10px;color:#aaa;margin-top:1px">売上・利益は泊まった月に日割り（件数・平均泊数はチェックインの月）　${currentAnnualYear}年度（${currentAnnualYear}/4〜${currentAnnualYear+1}/3）</div>
     </div>
     <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
       <div style="display:flex;flex-direction:column;align-items:center;gap:1px">
@@ -5682,32 +5756,32 @@ function renderAnnual() {
       </div>
       <div class="month-detail-body">
         <div style="padding:0 14px 4px;font-size:10px;color:#bbb">固定費 ${fmt(ms.monthFixedCosts)}円${ms.isActual?' <span style="color:#1C9A52;font-weight:700">[実費]</span>':' <span style="color:#bbb">[概算]</span>'} / 変動費 ${fmt(ms.varCosts)}円</div>
-        ${mBooks.length === 0
+        ${(() => { const _it = getMonthProrated(_revBooksView, ms.year, ms.month).items; return _it.length === 0
           ? `<div style="padding:12px 14px;font-size:12px;color:#ccc;text-align:center">この月の予約なし（固定費のみ発生）</div>`
-          : mBooks.map(b => {
+          : _it.map(({ b, share: _s }) => {
               const pid = getBookingPropId(b);
               const prop = properties.find(p => p.id === pid);
               const bColor = getPropColor(pid);
               const coStr = getCheckout(b);
               const fmtD = s => { if (!s) return '?'; const p = s.split('/'); return `${parseInt(p[1])}/${parseInt(p[2])}`; };
-              // 利益 = 受取 - 固定費按分(泊数÷この月にチェックインした予約の泊数の合計) - 変動費
-              const allocatedFixed = ms.ckNights > 0 ? Math.round(ms.monthFixedCosts / ms.ckNights * b.nights) : 0;
-              const bVarCost = (prop && !hasActualCosts(pid, ms.year, ms.month)) ? getPerBookingTotal(b, prop) : 0;
-              const bProfit = b.revenue - allocatedFixed - bVarCost;
+              // 利益 = この月に入る受取（日割り） - 固定費按分(この月の泊数÷この月に泊まった泊数の合計) - 見込みの変動費（日割り）
+              const allocatedFixed = ms.nights > 0 ? Math.round(ms.monthFixedCosts / ms.nights * _s.n) : 0;
+              const bVarCost = _s.varCost;
+              const bProfit = _s.rev - allocatedFixed - bVarCost;
               const bIsP = bProfit >= 0;
               return `<div class="booking-row" style="--prop-color:${bColor}">
                 <div class="booking-info">
                   <div class="booking-prop">${prop ? prop.name : '⚠️ 未設定'}${b.source==='pricelabs'?'<span style="font-size:11px;font-weight:700;background:#fff0eb;color:#e05a2b;padding:1px 5px;border-radius:3px;margin-left:5px">PL</span>':''}</div>
                   <div class="booking-guest">${b.guestName || (b.source==='pricelabs' ? 'PriceLabs予約' : '')}</div>
-                  <div style="font-size:11px;color:#bbb;margin-top:2px">${fmtD(b.checkin)} → ${fmtD(coStr)} · ${b.nights}泊</div>
+                  <div style="font-size:11px;color:#bbb;margin-top:2px">${fmtD(b.checkin)} → ${fmtD(coStr)} · ${b.nights}泊${shareTagHtml(b, _s)}</div>
                 </div>
                 <div class="booking-amounts" style="text-align:right;min-width:86px">
-                  <div style="font-size:10px;color:#C8C5C0">ゲスト <span style="font-weight:700;color:#aaa">${fmt(getGuestPayment(b.revenue))}円</span></div>
-                  <div class="booking-rev" style="margin-top:1px">${fmt(b.revenue)}円</div>
+                  <div style="font-size:10px;color:#C8C5C0">ゲスト <span style="font-weight:700;color:#aaa">${fmt(getGuestPayment(_s.rev))}円</span></div>
+                  <div class="booking-rev" style="margin-top:1px">${fmt(_s.rev)}円</div>
                   <div style="font-size:11px;font-weight:700;color:${bIsP?'#1C9A52':'#E53935'};margin-top:2px">${bIsP?'':'▲'}${fmt(Math.abs(bProfit))}円</div>
                 </div>
               </div>`;
-            }).join('')}
+            }).join(''); })()}
       </div>
     </div>`;
   }
